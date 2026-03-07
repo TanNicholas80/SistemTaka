@@ -1,10 +1,11 @@
 # Stage 1: Build assets
-FROM debian:bookworm-slim AS builder
+FROM debian AS builder
 
 # Install Node.js and build tools
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
-    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    nodejs \
+    npm \
     && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # Set working directory
