@@ -19,14 +19,16 @@ rm -rf /var/www/storage-init
 # -----------------------------------------------------------
 # Ensure the database schema is up to date.
 # -----------------------------------------------------------
-php artisan migrate --force
+if [ "${RUN_MIGRATIONS:-false}" = "true" ]; then
+  php artisan migrate --force
 
 # Clear and cache configurations
 # -----------------------------------------------------------
 # Improves performance by caching config and routes.
 # -----------------------------------------------------------
-php artisan config:cache
-php artisan route:cache
+  php artisan config:cache
+  php artisan route:cache
+fi
 
 # Run the default command
 exec "$@"
