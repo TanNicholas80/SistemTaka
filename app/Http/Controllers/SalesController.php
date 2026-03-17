@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ApprovalStock;
+use App\Models\Barcode;
 use App\Models\Branch;
 use App\Models\DetailItemPenjualan;
 use App\Models\KasirPenjualan;
@@ -383,13 +383,13 @@ class SalesController extends Controller
             return $subtotal;
         };
 
-        // Merge data berdasarkan nama yang sama dari ApprovalStock
+        // Merge data berdasarkan nama yang sama dari Barcode
         $mergedItems = [];
         $detailBarcodeMappings = []; // Untuk show detail per barcode
 
         foreach ($kasirPenjualan->detailItems as $detailItem) {
-            // Cari data ApprovalStock berdasarkan barcode dan kode_customer
-            $approvalStock = ApprovalStock::where('barcode', $detailItem->barcode)
+            // Cari data Barcode berdasarkan barcode dan kode_customer
+            $approvalStock = Barcode::where('barcode', $detailItem->barcode)
                 ->where('kode_customer', $branch->customer_id)
                 ->first();
 
@@ -441,7 +441,7 @@ class SalesController extends Controller
                     ];
                 }
             } else {
-                // Jika ApprovalStock tidak ditemukan, tetap tampilkan data dari DetailItemPenjualan
+                // Jika Barcode tidak ditemukan, tetap tampilkan data dari DetailItemPenjualan
                 $itemName = 'Item dengan barcode: ' . $detailItem->barcode;
 
                 $detailBarcodeMappings[] = [
@@ -866,8 +866,8 @@ class SalesController extends Controller
                 ], 400);
             }
 
-            // Cari data berdasarkan barcode di model ApprovalStock berdasarkan kode_customer
-            $approvalStock = ApprovalStock::where('barcode', $barcode)
+            // Cari data Barcode (status uploaded = siap jual)
+            $approvalStock = Barcode::where('barcode', $barcode)
                 ->where('kode_customer', $branch->customer_id)
                 ->where('status', 'uploaded')
                 ->first();
@@ -1265,14 +1265,14 @@ class SalesController extends Controller
                 $barcode = $item['barcode'];
                 $kuantitas = (float) $item['kuantitas'];
 
-                // Temukan stok berdasarkan barcode dan kode_customer, lalu kurangi
-                $stockToUpdate = ApprovalStock::where('barcode', $barcode)
+                // Temukan Barcode berdasarkan barcode dan kode_customer, lalu kurangi panjang_mlc
+                $stockToUpdate = Barcode::where('barcode', $barcode)
                     ->where('kode_customer', $branch->customer_id)
                     ->first();
 
-                // Pastikan stok ditemukan (ini sudah divalidasi di awal, tapi baik untuk safety check)
                 if ($stockToUpdate) {
-                    $stockToUpdate->decrement('panjang', $kuantitas);
+                    $currentPanjang = (float) ($stockToUpdate->panjang_mlc ?? 0);
+                    $stockToUpdate->update(['panjang_mlc' => max(0, $currentPanjang - $kuantitas)]);
                 }
             }
 

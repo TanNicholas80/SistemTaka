@@ -56,10 +56,16 @@
                                             <th>No. Packing List</th>
                                             <th>No. Billing</th>
                                             <th>Kode Barang</th>
+                                            <th>Status</th>
+                                            <th>Item Flag</th>
                                             <th>Keterangan</th>
                                             <th>Nomor Seri</th>
                                             <th>Pcs</th>
                                             <th>Berat (KG)</th>
+                                            <th>Length</th>
+                                            <th>UOM</th>
+                                            <th>Material Code</th>
+                                            <th>Kode Warna</th>
                                             <th>Panjang (MLC)</th>
                                             <th>Warna</th>
                                             <th>Bale</th>
@@ -81,11 +87,28 @@
                                                 <td>{{ $barcode->no_packing_list }}</td>
                                                 <td>{{ $barcode->no_billing }}</td>
                                                 <td>{{ $barcode->kode_barang }}</td>
+                                                <td>
+                                                    @php
+                                                        $statusClass = match($barcode->status ?? 'temporary') {
+                                                            'approved' => 'badge-success',
+                                                            'uploaded' => 'badge-info',
+                                                            default => 'badge-warning',
+                                                        };
+                                                    @endphp
+                                                    <span class="badge {{ $statusClass }}">{{ strtoupper($barcode->status ?? 'temporary') }}</span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge badge-secondary">{{ ucfirst(str_replace('_', ' ', $barcode->item_flag ?? 'pembelian')) }}</span>
+                                                </td>
                                                 <td>{{ $barcode->keterangan }}</td>
                                                 <td>{{ $barcode->nomor_seri }}</td>
                                                 <td>{{ $barcode->pcs }}</td>
-                                                <td>{{ number_format($barcode->berat_kg, 2) }}
-                                                <td>{{ number_format($barcode->panjang_mlc, 2) }}
+                                                <td>{{ $barcode->berat_kg ? number_format($barcode->berat_kg, 2) : '-' }}</td>
+                                                <td>{{ $barcode->length ? $barcode->length : '-' }}</td>
+                                                <td>{{ $barcode->uom ? $barcode->uom : '-' }}</td>
+                                                <td>{{ $barcode->material_code ? $barcode->material_code : '-' }}</td>
+                                                <td>{{ $barcode->kode_warna ? $barcode->kode_warna : '-' }}</td>
+                                                <td>{{ $barcode->panjang_mlc ? number_format($barcode->panjang_mlc, 2) : '-' }}</td>
                                                 <td>{{ $barcode->warna }}</td>
                                                 <td>{{ $barcode->bale }}</td>
                                                 <td>{{ 'Rp. ' . number_format($barcode->harga_ppn, 0, ',', '.') }}</td>

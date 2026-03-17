@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ApprovalStock;
+use App\Models\Barcode;
 use App\Models\Branch;
 use App\Models\HasilStockOpname;
 use App\Models\HasilStockOpnameBarcode;
@@ -472,13 +472,13 @@ class HasilStockOpnameController extends Controller
                         'formatted' => $namaBarangFormatted
                     ]);
 
-                    // Validasi apakah approval dengan nama barang tersebut ada (exact match) berdasarkan kode_customer
-                    $approvalByName = ApprovalStock::where('nama', $namaBarangFormatted)
-                        ->where('kode_customer', $branch->customer_id ?? '')
-                        ->first();
+                    // Validasi apakah Barcode dengan nama barang tersebut ada (exact match) berdasarkan kode_customer
+                    $approvalByName = Barcode::where('kode_customer', $branch->customer_id ?? '')
+                        ->get()
+                        ->first(fn ($b) => $b->nama === $namaBarangFormatted);
 
                     if (!$approvalByName) {
-                        $errorMessage = "Approval tidak ditemukan untuk barang '{$namaBarangFormatted}'.";
+                        $errorMessage = "Barcode/barang tidak ditemukan untuk '{$namaBarangFormatted}'.";
                     } else {
                         // Ambil NOP dari detail hasil stock opname
                         $nopFromDetail = $detailData['d']['number'] ?? null;
@@ -497,11 +497,12 @@ class HasilStockOpnameController extends Controller
                             if (empty($localBarcodes)) {
                                 $errorMessage = "Tidak ada barcode yang ditemukan untuk NOP '{$nopFromDetail}'.";
                             } else {
-                                // Cari approval berdasarkan barcode yang cocok DAN nama barang yang valid (EXACT MATCH) dan kode_customer
-                                $approvalsByBarcode = ApprovalStock::where('nama', $namaBarangFormatted)
-                                    ->where('kode_customer', $branch->customer_id ?? '')
+                                // Cari Barcode yang cocok (barcode + nama) untuk kode_customer
+                                $approvalsByBarcode = Barcode::where('kode_customer', $branch->customer_id ?? '')
                                     ->whereIn('barcode', $localBarcodes)
-                                    ->get();
+                                    ->get()
+                                    ->filter(fn ($b) => $b->nama === $namaBarangFormatted)
+                                    ->values();
 
                                 Log::info('Approvals found by barcode and name:', [
                                     'barcode_count' => count($localBarcodes),
@@ -1539,7 +1540,7 @@ class HasilStockOpnameController extends Controller
             $chunkSize = 1000;
             $approvals = collect();
             foreach (array_chunk($uniqueBarcodes, $chunkSize) as $chunk) {
-                $chunkResult = ApprovalStock::where('kode_customer', $branch->customer_id ?? '')
+                $chunkResult = Barcode::where('kode_customer', $branch->customer_id ?? '')
                     ->whereIn('barcode', $chunk)
                     ->get();
                 $approvals = $approvals->concat($chunkResult);
@@ -1655,7 +1656,7 @@ class HasilStockOpnameController extends Controller
             // Query berdasarkan kode_customer dari branch
             $activeBranchId = session('active_branch');
             $branch = Branch::find($activeBranchId);
-            $approvals = ApprovalStock::where('kode_customer', $branch->customer_id ?? '')
+            $approvals = Barcode::where('kode_customer', $branch->customer_id ?? '')
                 ->whereIn('barcode', $barcodes)
                 ->get();
 
@@ -1674,7 +1675,7 @@ class HasilStockOpnameController extends Controller
                 if ($approval) {
                     $barcodeData[] = [
                         'barcode' => $barcode,
-                        'total_panjang' => $approval->panjang, // Data individual, bukan akumulasi
+                        'total_panjang' => $approval->panjang_mlc ?? $approval->panjang, // Data individual
                     ];
                 } else {
                     $barcodeData[] = [
@@ -1744,9 +1745,8 @@ class HasilStockOpnameController extends Controller
             $chunkSize = 1000;
             $results = collect();
             foreach (array_chunk($uniqueBarcodes, $chunkSize) as $chunk) {
-                $chunkResults = ApprovalStock::where('kode_customer', $branch->customer_id ?? '')
+                $chunkResults = Barcode::where('kode_customer', $branch->customer_id ?? '')
                     ->whereIn('barcode', $chunk)
-                    ->select('barcode', 'panjang', 'nama')
                     ->get();
                 $results = $results->concat($chunkResults);
             }
@@ -1763,7 +1763,7 @@ class HasilStockOpnameController extends Controller
                 if ($approval) {
                     $responseData[] = [
                         'barcode' => $barcode,
-                        'total_panjang' => $approval->panjang,
+                        'total_panjang' => $approval->panjang_mlc ?? $approval->panjang,
                         'nama' => $approval->nama,
                         'exists' => true,
                     ];

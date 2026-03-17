@@ -63,6 +63,30 @@
                             class="border border-gray-300 rounded px-2 py-1 w-full max-w-[300px] bg-[#f3f4f6]"
                             required readonly />
 
+                        <!-- Form No Terima -->
+                        <label for="no_terima" class="text-gray-800 font-medium flex items-center">
+                            No Terima <span class="text-red-600 ml-1">*</span>
+                        </label>
+                        <input
+                            id="no_terima"
+                            name="no_terima"
+                            type="text"
+                            value="{{ $noTerima }}"
+                            class="border border-gray-300 rounded px-2 py-1 w-full max-w-[300px] bg-[#f3f4f6]"
+                            required readonly />
+
+                        <!-- Form Kode Customer -->
+                        <label for="kode_customer" class="text-gray-800 font-medium flex items-center">
+                            Kode Customer <span class="text-red-600 ml-1">*</span>
+                        </label>
+                        <input
+                            id="kode_customer"
+                            name="kode_customer"
+                            type="text"
+                            value="{{ $kodeCustomer ?? '' }}"
+                            class="border border-gray-300 rounded px-2 py-1 w-full max-w-[300px] bg-[#f3f4f6]"
+                            required readonly />
+
                         <!-- Form Pemasok -->
                         <label for="vendor" class="text-gray-800 font-medium flex items-center">
                             Terima dari <span class="text-red-600 ml-1">*</span>
@@ -84,30 +108,37 @@
                             id="tanggal"
                             name="tanggal"
                             type="date"
-                            value="{{ date('d-m-Y') }}"
+                            value="{{ date('Y-m-d') }}"
                             class="border border-gray-300 rounded px-2 py-1 max-w-[300px] w-full"
                             required />
 
-                        <!-- Form No Terima -->
-                        <label for="no_terima" class="text-gray-800 font-medium flex items-center">
-                            No Terima # <span class="text-red-600 ml-1">*</span>
+                        <!-- Form Packing List (Multiple) -->
+                        <label class="text-gray-800 font-medium flex items-center">
+                            Packing List <span class="text-red-600 ml-1">*</span>
                             <span class="ml-1"
                                 data-toggle="tooltip"
                                 data-placement="top"
-                                title="Silakan isi nomor terima dengan nomor invoice yang tertera di faktur pembelian"
+                                title="Pilih packing list yang sudah berstatus approved"
                                 style="cursor: help;">
                                 <i class="fas fa-info-circle"></i>
                             </span>
                         </label>
-                        <!-- Input + Button Save -->
-                        <div class="flex justify-between items-center gap-2 max-w-full">
-                            <input
-                                id="no_terima"
-                                name="no_terima"
-                                type="text"
-                                class="border border-gray-300 rounded px-2 py-1 w-full max-w-[300px]"
-                                required />
+                        <div class="max-w-md border border-gray-300 rounded px-2 py-2 bg-white max-h-40 overflow-y-auto">
+                            @php $plList = $packingLists ?? collect(); @endphp
+                            @forelse($plList as $pl)
+                                <label class="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                                    <input type="checkbox" name="packing_list_ids[]" value="{{ $pl->id }}" class="packing-list-cb rounded">
+                                    <span>{{ $pl->npl }}</span>
+                                    <span class="text-xs text-gray-500">({{ \Carbon\Carbon::parse($pl->tanggal)->format('d-m-Y') }})</span>
+                                </label>
+                            @empty
+                                <p class="text-gray-500 text-sm py-2">Tidak ada packing list dengan status approved.</p>
+                            @endforelse
+                        </div>
 
+                        <!-- Buttons -->
+                        <label class="text-gray-800 font-medium"></label>
+                        <div class="flex items-center gap-2">
                             <button
                                 type="button"
                                 id="lanjut-btn"
@@ -115,7 +146,6 @@
                                 class="bg-blue-600 text-white px-4 py-1.5 rounded hover:bg-blue-700 text-sm">
                                 Lanjut
                             </button>
-
                             <button
                                 type="button"
                                 id="save-btn"
@@ -150,59 +180,19 @@
                         <table class="w-full border-collapse border border-gray-400 text-xs text-center">
                             <thead class="bg-[#607d8b] text-white">
                                 <tr>
-                                    <th class="border border-gray-400 w-6">
-                                        <i class="fas fa-sort">
-                                        </i>
-                                    </th>
-                                    <th class="border border-gray-400 px-2 py-1 text-left">
-                                        Nama Barang
-                                    </th>
-                                    <th class="border border-gray-400 px-2 py-1">
-                                        Kode #
-                                    </th>
-                                    <th class="border border-gray-400 px-2 py-1">
-                                        Kuantitas
-                                    </th>
-                                    <th class="border border-gray-400 px-2 py-1">
-                                        Satuan
-                                    </th>
+                                    <th class="border border-gray-400 w-8 px-1 py-1">No</th>
+                                    <th class="border border-gray-400 px-2 py-1 text-left">Nama Barang</th>
+                                    <th class="border border-gray-400 px-2 py-1">Kode Barang</th>
+                                    <th class="border border-gray-400 px-2 py-1">Barcode</th>
+                                    <th class="border border-gray-400 px-2 py-1">Kuantitas</th>
                                 </tr>
                             </thead>
                             <tbody id="table-barang-body" class="bg-white">
-                                @if (isset($barang) && count($barang) > 0)
-                                @php
-                                    // Sort data by nama_barang ascending (A-Z)
-                                    $sortedBarang = collect($barang)->sortBy('nama_barang')->values()->all();
-                                @endphp
-                                @foreach ($sortedBarang as $item)
                                 <tr>
-                                    <td class="border border-gray-400 px-2 py-3 text-left align-top">
-                                        ≡
-                                    </td>
-                                    <td class="border border-gray-400 px-2 py-3 text-left align-top">
-                                        {{ $item['nama_barang'] }}
-                                    </td>
-                                    <td class="border border-gray-400 px-2 py-3 align-top">
-                                        {{ $item['kode_barang'] }}
-                                    </td>
-                                    <td class="border border-gray-400 px-2 py-3 align-top">
-                                        {{ $item['availableToSell'] }}
-                                    </td>
-                                    <td class="border border-gray-400 px-2 py-3 align-top">
-                                        {{ $item['unit'] }}
-                                    </td>
-                                </tr>
-                                @endforeach
-                                @else
-                                <tr>
-                                    <td class="border border-gray-400 px-2 py-3 text-left align-top">
-                                        ≡
-                                    </td>
-                                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="4">
+                                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="5">
                                         Belum ada data
                                     </td>
                                 </tr>
-                                @endif
                             </tbody>
                         </table>
                     </div>
@@ -221,9 +211,10 @@
     let formData = {
         no_po: '',
         npb: '',
+        no_terima: '',
         vendor: '',
         tanggal: '',
-        no_terima: ''
+        packing_list_ids: []
     };
 
     // Flag untuk mencegah form submit tidak diinginkan
@@ -237,23 +228,27 @@
 
         const noPOInput = document.getElementById('no_po');
         const npbInput = document.getElementById('npb');
+        const noTerimaInput = document.getElementById('no_terima');
         const vendorInput = document.getElementById('vendor');
         const tanggalInput = document.getElementById('tanggal');
-        const noTerimaInput = document.getElementById('no_terima');
+        const packingListCheckboxes = document.querySelectorAll('.packing-list-cb:checked');
+
+        const packingListIds = Array.from(packingListCheckboxes).map(cb => cb.value);
 
         console.log('Lanjut button clicked');
         console.log('No PO:', noPOInput.value);
         console.log('NPB:', npbInput.value);
+        console.log('No Terima:', noTerimaInput?.value);
         console.log('Vendor:', vendorInput.value);
         console.log('Tanggal:', tanggalInput.value);
-        console.log('No Terima:', noTerimaInput.value);
+        console.log('Packing List IDs:', packingListIds);
 
         // Validasi form
-        if (!noPOInput.value.trim() || !npbInput.value.trim() || !tanggalInput.value.trim() || !noTerimaInput.value.trim()) {
+        if (!noPOInput.value.trim() || !npbInput.value.trim() || !tanggalInput.value.trim() || packingListIds.length === 0) {
             Swal.fire({
                 icon: 'warning',
                 title: 'Field Tidak Lengkap',
-                text: 'Harap lengkapi semua field yang wajib diisi!',
+                text: 'Harap lengkapi No PO, Tanggal, dan pilih minimal satu packing list!',
                 timer: 3000,
                 timerProgressBar: true,
                 showConfirmButton: false,
@@ -266,9 +261,10 @@
         // Simpan data form sementara
         formData.no_po = noPOInput.value;
         formData.npb = npbInput.value;
+        formData.no_terima = noTerimaInput.value;
         formData.vendor = vendorInput.value;
         formData.tanggal = tanggalInput.value;
-        formData.no_terima = noTerimaInput.value;
+        formData.packing_list_ids = packingListIds;
 
         console.log('Form data saved temporarily:', formData);
 
@@ -283,7 +279,7 @@
         isFormLocked = true;
 
         // Panggil function untuk mengambil detail PO
-        fetchDetailPO(formData.no_po, formData.npb, formData.no_terima)
+        fetchDetailPO(formData.no_po, formData.npb, formData.packing_list_ids)
             .then(() => {
                 console.log('Detail PO berhasil dimuat');
                 // Setelah berhasil, tombol Save akan ditampilkan di setFormReadonly(true)
@@ -300,8 +296,8 @@
         return false;
     }
 
-    // Function untuk mengambil detail PO dengan AJAX
-    function fetchDetailPO(noPO, npb, noTerima) {
+    // Function untuk mengambil detail PO dari packing list dengan AJAX
+    function fetchDetailPO(noPO, npb, packingListIds) {
         return new Promise((resolve, reject) => {
             // Tampilkan loading indicator
             const tableBody = document.getElementById('table-barang-body');
@@ -311,7 +307,7 @@
             const data = new FormData();
             data.append('no_po', noPO);
             data.append('npb', npb);
-            data.append('no_terima', noTerima);
+            packingListIds.forEach(id => data.append('packing_list_ids[]', id));
 
             // Tambahkan CSRF token
             data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
@@ -380,51 +376,47 @@
         });
     }
 
-    // Function untuk update tabel barang
+    // Function untuk update tabel barang (per barcode)
     function updateBarangTable(items) {
         const tableBody = document.getElementById('table-barang-body');
         tableBody.innerHTML = '';
 
         if (items && items.length > 0) {
-            // Sort items by nama_barang ascending (A-Z)
             const sortedItems = items.sort((a, b) => {
                 const namaA = (a.nama_barang || '').toLowerCase();
                 const namaB = (b.nama_barang || '').toLowerCase();
                 return namaA.localeCompare(namaB);
             });
 
-            sortedItems.forEach(item => {
+            sortedItems.forEach((item, index) => {
                 const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
 
-                // Kolom handle
-                const handleCell = document.createElement('td');
-                handleCell.className = 'border border-gray-400 px-2 py-3 text-left align-top';
-                handleCell.textContent = '≡';
-                row.appendChild(handleCell);
+                const noCell = document.createElement('td');
+                noCell.className = 'border border-gray-400 px-1 py-3 text-center align-top';
+                noCell.textContent = index + 1;
+                row.appendChild(noCell);
 
-                // Kolom nama barang
                 const namaCell = document.createElement('td');
                 namaCell.className = 'border border-gray-400 px-2 py-3 text-left align-top';
                 namaCell.textContent = item.nama_barang || '-';
                 row.appendChild(namaCell);
 
-                // Kolom kode barang
                 const kodeCell = document.createElement('td');
                 kodeCell.className = 'border border-gray-400 px-2 py-3 align-top';
                 kodeCell.textContent = item.kode_barang || '-';
                 row.appendChild(kodeCell);
 
-                // Kolom kuantitas
-                const qtyCell = document.createElement('td');
-                qtyCell.className = 'border border-gray-400 px-2 py-3 align-top';
-                qtyCell.textContent = item.panjang_total || item.availableToSell || '0';
-                row.appendChild(qtyCell);
+                const barcodeCell = document.createElement('td');
+                barcodeCell.className = 'border border-gray-400 px-2 py-3 align-top font-mono';
+                barcodeCell.textContent = item.barcode || '-';
+                row.appendChild(barcodeCell);
 
-                // Kolom satuan
-                const unitCell = document.createElement('td');
-                unitCell.className = 'border border-gray-400 px-2 py-3 align-top';
-                unitCell.textContent = item.unit || '-';
-                row.appendChild(unitCell);
+                const qtyCell = document.createElement('td');
+                qtyCell.className = 'border border-gray-400 px-2 py-3 align-top font-semibold text-right';
+                const qty = parseFloat(item.kuantitas) || 0;
+                qtyCell.textContent = qty % 1 === 0 ? qty.toFixed(0) : qty.toFixed(2);
+                row.appendChild(qtyCell);
 
                 tableBody.appendChild(row);
             });
@@ -433,7 +425,7 @@
             const cell = document.createElement('td');
             cell.className = 'border border-gray-400 px-2 py-3 text-center align-top';
             cell.colSpan = 5;
-            cell.innerHTML = '<i class="fas fa-info-circle mr-2"></i>Tidak ada data barang yang cocok';
+            cell.innerHTML = '<i class="fas fa-info-circle mr-2"></i>Tidak ada data barang dari packing list yang dipilih';
             row.appendChild(cell);
             tableBody.appendChild(row);
         }
@@ -482,15 +474,25 @@
                 // Pastikan semua input memiliki nilai yang benar sebelum submit
                 document.getElementById('no_po').value = formData.no_po;
                 document.getElementById('npb').value = formData.npb;
+                document.getElementById('no_terima').value = formData.no_terima;
                 document.getElementById('vendor').value = formData.vendor;
                 document.getElementById('tanggal').value = formData.tanggal;
-                document.getElementById('no_terima').value = formData.no_terima;
+
+                const form = document.getElementById('penerimaanForm');
+                if (form) {
+                    // Hapus packing_list_ids hidden lama (jika ada), tambahkan yang terpilih
+                    form.querySelectorAll('input[name="packing_list_ids[]"][type="hidden"]').forEach(el => el.remove());
+                    formData.packing_list_ids.forEach(id => {
+                        const inp = document.createElement('input');
+                        inp.type = 'hidden';
+                        inp.name = 'packing_list_ids[]';
+                        inp.value = id;
+                        form.appendChild(inp);
+                    });
+                }
 
                 // Set hidden input untuk menandai bahwa form sudah siap disubmit
                 document.getElementById('form_submitted').value = '1';
-
-                // Ambil form element
-                const form = document.getElementById('penerimaanForm');
 
                 if (form) {
                     // Unlock form untuk submit
@@ -598,7 +600,7 @@
         const noPOInput = document.getElementById('no_po');
         const vendorInput = document.getElementById('vendor');
         const tanggalInput = document.getElementById('tanggal');
-        const noTerimaInput = document.getElementById('no_terima');
+        const packingListCbs = document.querySelectorAll('.packing-list-cb');
         const dropdownNoPO = document.getElementById('dropdown-no-po');
         const searchBtnNoPO = document.getElementById('no-po-search-btn');
         const lanjutBtn = document.getElementById('lanjut-btn');
@@ -607,7 +609,6 @@
         console.log('Setting readonly:', readonly);
 
         if (readonly) {
-            // Set readonly
             noPOInput.setAttribute('readonly', 'readonly');
             noPOInput.readOnly = true;
 
@@ -617,35 +618,26 @@
             tanggalInput.setAttribute('readonly', 'readonly');
             tanggalInput.readOnly = true;
 
-            noTerimaInput.setAttribute('readonly', 'readonly');
-            noTerimaInput.readOnly = true;
+            packingListCbs.forEach(cb => { cb.disabled = true; });
 
-            // Sembunyikan dropdown dan disable search untuk PO
-            dropdownNoPO.classList.add('hidden');
+            if (dropdownNoPO) dropdownNoPO.classList.add('hidden');
             if (searchBtnNoPO) searchBtnNoPO.style.display = 'none';
 
-            // Ubah style input menjadi readonly appearance
             noPOInput.style.backgroundColor = '#f3f4f6';
             noPOInput.style.cursor = 'not-allowed';
             vendorInput.style.backgroundColor = '#f3f4f6';
             vendorInput.style.cursor = 'not-allowed';
             tanggalInput.style.backgroundColor = '#f3f4f6';
             tanggalInput.style.cursor = 'not-allowed';
-            noTerimaInput.style.backgroundColor = '#f3f4f6';
-            noTerimaInput.style.cursor = 'not-allowed';
 
-            // Sembunyikan button Lanjut setelah diklik
             if (lanjutBtn) lanjutBtn.style.display = 'none';
             if (saveBtn) saveBtn.classList.remove('hidden');
 
             isDetailFormReady = true;
-
-            // Set hidden input
             document.getElementById('form_submitted').value = '1';
 
             console.log('Form set to readonly');
         } else {
-            // Remove readonly
             noPOInput.removeAttribute('readonly');
             noPOInput.readOnly = false;
 
@@ -655,29 +647,21 @@
             tanggalInput.removeAttribute('readonly');
             tanggalInput.readOnly = false;
 
-            noTerimaInput.removeAttribute('readonly');
-            noTerimaInput.readOnly = false;
+            packingListCbs.forEach(cb => { cb.disabled = false; });
 
-            // Enable search untuk PO
             if (searchBtnNoPO) searchBtnNoPO.style.display = 'block';
 
-            // Remove readonly styling
             noPOInput.style.backgroundColor = '';
             noPOInput.style.cursor = '';
             vendorInput.style.backgroundColor = '';
             vendorInput.style.cursor = '';
             tanggalInput.style.backgroundColor = '';
             tanggalInput.style.cursor = '';
-            noTerimaInput.style.backgroundColor = '';
-            noTerimaInput.style.cursor = '';
 
-            // Show button Lanjut
             if (lanjutBtn) lanjutBtn.style.display = 'inline-block';
             if (saveBtn) saveBtn.classList.add('hidden');
 
             isDetailFormReady = false;
-
-            // Set hidden input
             document.getElementById('form_submitted').value = '0';
 
             console.log('Form set to editable');
@@ -765,24 +749,24 @@
         // Check if form was previously submitted (after page refresh or reload)
         const noPofromServer = '{{ request("no_po") }}';
         const npbFromServer = '{{ request("npb") }}';
+        const noTerimaFromServer = '{{ request("no_terima") }}';
         const vendorFromServer = '{{ request("vendor") }}';
         const tanggalFromServer = '{{ request("tanggal") }}';
-        const noTerimaFromServer = '{{ request("no_terima") }}';
         const formSubmittedFromServer = '{{ request("form_submitted") }}';
 
-        if (formSubmittedFromServer === '1' && noPofromServer && npbFromServer && vendorFromServer && tanggalFromServer && noTerimaFromServer) {
-            // Restore form data
+        if (formSubmittedFromServer === '1' && noPofromServer && npbFromServer && noTerimaFromServer && vendorFromServer && tanggalFromServer) {
+            // Restore form data (packing_list_ids dari session/old input jika perlu)
             formData.no_po = noPofromServer;
             formData.npb = npbFromServer;
+            formData.no_terima = noTerimaFromServer;
             formData.vendor = vendorFromServer;
             formData.tanggal = tanggalFromServer;
-            formData.no_terima = noTerimaFromServer;
 
             // Set form values
             if (document.getElementById('npb')) document.getElementById('npb').value = npbFromServer;
+            if (document.getElementById('no_terima')) document.getElementById('no_terima').value = noTerimaFromServer;
             if (vendorInput) vendorInput.value = vendorFromServer;
             if (tanggalInput) tanggalInput.value = tanggalFromServer;
-            if (document.getElementById('no_terima')) document.getElementById('no_terima').value = noTerimaFromServer;
             if (noPOInput) noPOInput.value = noPofromServer;
 
             // Set form to readonly

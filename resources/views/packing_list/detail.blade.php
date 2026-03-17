@@ -29,7 +29,15 @@
                                 <h4><strong><u>PACKING LIST</u></strong></h4>
                                 <p class="mb-1">
                                     <strong>No. : {{ $data->npl }} / Tgl. :
-                                        {{ \Carbon\Carbon::parse($barcodes->first()->tanggal)->format('d-m-Y') }}</strong>
+                                        {{ $barcodes->isNotEmpty() ? \Carbon\Carbon::parse($barcodes->first()->tanggal)->format('d-m-Y') : \Carbon\Carbon::parse($data->tanggal)->format('d-m-Y') }}</strong>
+                                    @php
+                                        $statusClass = match($data->status ?? 'pending') {
+                                            'approved' => 'badge-success',
+                                            'used' => 'badge-info',
+                                            default => 'badge-warning',
+                                        };
+                                    @endphp
+                                    <span class="badge {{ $statusClass }} ml-2">{{ strtoupper($data->status ?? 'pending') }}</span>
                                 </p>
                             </div>
                             <br>
@@ -75,8 +83,8 @@
                                     <td>{{ $barcode->keterangan }}</td>
                                     <td>{{ $barcode->nomor_seri }}</td>
                                     <td>{{ $barcode->pcs }}</td>
-                                    <td>{{ number_format($barcode->berat_kg, 2) }}
-                                    <td>{{ number_format($barcode->panjang_mlc, 2) }}
+                                    <td>{{ $barcode->berat_kg ? number_format($barcode->berat_kg, 2) : '-' }}</td>
+                                    <td>{{ $barcode->panjang_mlc ? number_format($barcode->panjang_mlc, 2) : '-' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

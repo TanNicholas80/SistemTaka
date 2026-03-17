@@ -13,8 +13,13 @@ class Barcode extends Model
 {
     use HasFactory, LogsActivity;
 
+    const STATUS_TEMPORARY = 'temporary';
+    const STATUS_APPROVED = 'approved';
+    const STATUS_UPLOADED = 'uploaded';
+
     protected $fillable = [
         'barcode',
+        'status',
         'no_packing_list',
         'no_billing',
         'kode_barang',
@@ -23,7 +28,11 @@ class Barcode extends Model
         'pcs',
         'berat_kg',
         'panjang_mlc',
+        'length',
+        'uom',
         'warna',
+        'material_code',
+        'kode_warna',
         'bale',
         'harga_ppn',
         'harga_jual',
@@ -69,6 +78,38 @@ class Barcode extends Model
         }
 
         return $query->whereRaw('1=0');
+    }
+
+    /**
+     * Alias panjang_mlc untuk kompatibilitas dengan ApprovalStock->panjang.
+     */
+    public function getPanjangAttribute()
+    {
+        return $this->panjang_mlc;
+    }
+
+    /**
+     * Alias harga_jual untuk kompatibilitas dengan ApprovalStock->harga_unit.
+     */
+    public function getHargaUnitAttribute()
+    {
+        return $this->harga_jual;
+    }
+
+    /**
+     * Alias no_billing untuk kompatibilitas dengan ApprovalStock->no_invoice.
+     */
+    public function getNoInvoiceAttribute()
+    {
+        return $this->no_billing;
+    }
+
+    /**
+     * Alias no_packing_list untuk kompatibilitas dengan ApprovalStock->npl.
+     */
+    public function getNplAttribute()
+    {
+        return $this->no_packing_list;
     }
 
         /**

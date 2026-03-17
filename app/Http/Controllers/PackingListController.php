@@ -51,6 +51,7 @@ class PackingListController extends Controller
         if ($branch) {
             $validated['kode_customer'] = $branch->customer_id;
         }
+        $validated['status'] = PackingList::STATUS_PENDING; // Status di-set sistem, default pending
 
         PackingList::create($validated);
 
@@ -78,6 +79,7 @@ class PackingListController extends Controller
             'npl.regex' => 'No. Packing List harus terdiri dari 10 digit angka.',
         ]);
 
+        // Status tidak bisa diubah user, hanya terupdate oleh sistem (matching barcode)
         $packingList->update($validated);
 
         return redirect()->route('packing-list.index')->with('success', 'Packing List berhasil diperbarui');

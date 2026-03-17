@@ -930,7 +930,7 @@ class PengirimanPesananController extends Controller
                 Log::info("Searching KasirPenjualan with NPJ:", ['npj' => $pengirimanPesanan->penjualan_id]);
 
                 $kasirPenjualan = KasirPenjualan::with(['detailItems' => function ($query) {
-                    $query->with('approvalStock'); // Eager load approval stock untuk mengurangi N+1 query
+                    $query->with('barcode'); // Eager load approval stock untuk mengurangi N+1 query
                 }])
                     ->where('npj', $pengirimanPesanan->penjualan_id)
                     ->where('kode_customer', $branch->customer_id)

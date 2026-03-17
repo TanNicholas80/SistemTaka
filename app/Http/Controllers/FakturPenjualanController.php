@@ -922,7 +922,7 @@ class FakturPenjualanController extends Controller
 
             // 6. Ambil data kasir penjualan filtered by kode_customer
             $kasirPenjualan = KasirPenjualan::with(['detailItems' => function ($query) {
-                $query->with('approvalStock');
+                $query->with('barcode');
             }])
                 ->where('npj', $pengirimanPesanan->penjualan_id ?? null)
                 ->where('kode_customer', $branch->customer_id)

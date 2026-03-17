@@ -58,7 +58,7 @@
                                 <thead>
                                     <tr>
                                         <th>Nomor #</th>
-                                        <th>No Terima #</th>
+                                        <th>Packing List</th>
                                         <th>Tanggal</th>
                                         <th>Pemasok</th>
                                         <th>Keterangan</th>
@@ -70,7 +70,7 @@
                                     <tr>
                                         <td><a
                                                 href="{{ route('penerimaan-barang.show', $item->npb) }}">{{ $item->npb }}</a></td>
-                                        <td>{{ $item->no_terima }}</td>
+                                        <td>{{ $item->packingLists->pluck('npl')->join(', ') ?: '-' }}</td>
                                         <td>{{ \Carbon\Carbon::parse($item->tanggal)->format('d-m-Y') }}</td>
                                         <td>{{ $detailPOs[$item->no_po]['vendor_name'] ?? '-' }}</td>
                                         <td>{{ $detailPOs[$item->no_po]['description'] ?? '-' }}</td>
