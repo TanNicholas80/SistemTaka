@@ -87,7 +87,7 @@
                 </div>
 
                 <div class="col-12 col-sm-6 col-md-6">
-                    <a href="{{ route('approval_stock.index')}}">
+                    <a href="{{ route('barcode.index')}}">
                         <div class="info-box">
                             <span class="info-box-icon elevation-1"><i class="fas fa-warehouse"></i></span>
                             <div class="info-box-content">

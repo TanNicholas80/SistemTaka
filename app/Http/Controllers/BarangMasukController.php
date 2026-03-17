@@ -3,9 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Models\BarangMasuk;
+use App\Models\Barcode;
 use App\Models\Branch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class BarangMasukController extends Controller
 {
@@ -55,14 +57,21 @@ class BarangMasukController extends Controller
         // Ambil hanya 10 karakter pertama dari barcode
         if ($request->filled('nbrg')) {
             $barcode = explode(';', $request->input('nbrg'))[0];
-            $request->merge(['nbrg' => substr($barcode, 0, 10)]);
+            $request->merge(['nbrg' => substr(trim($barcode), 0, 10)]);
         }
 
         $validated = $request->validate([
             'tanggal' => 'required|date',
-            'nbrg' => 'required|string|max:20|unique:barang_masuk,nbrg',
+            'nbrg' => [
+                'required',
+                'string',
+                'max:20',
+                'unique:barang_masuk,nbrg',
+                Rule::exists('barcodes', 'barcode')->where('kode_customer', $branch->customer_id),
+            ],
         ], [
             'nbrg.unique' => 'No. Barang tersebut sudah terinput.',
+            'nbrg.exists' => 'No. Barang tidak ditemukan di data Barcode untuk cabang ini.',
         ]);
 
         // Simpan data dengan kode_customer cabang aktif
@@ -83,10 +92,28 @@ class BarangMasukController extends Controller
     public function update(Request $request, $id)
     {
         $barangMasuk = BarangMasuk::findOrFail($id);
+        $branch = Branch::find(session('active_branch'));
+        if (!$branch) {
+            return back()->with('error', 'Cabang tidak valid.');
+        }
+
+        if ($request->filled('nbrg')) {
+            $barcode = explode(';', $request->input('nbrg'))[0];
+            $request->merge(['nbrg' => substr(trim($barcode), 0, 10)]);
+        }
 
         $validated = $request->validate([
             'tanggal' => 'required|date',
-            'nbrg' => 'required|string|max:20',
+            'nbrg' => [
+                'required',
+                'string',
+                'max:20',
+                Rule::unique('barang_masuk', 'nbrg')->ignore($barangMasuk->id),
+                Rule::exists('barcodes', 'barcode')->where('kode_customer', $branch->customer_id),
+            ],
+        ], [
+            'nbrg.unique' => 'No. Barang tersebut sudah terinput.',
+            'nbrg.exists' => 'No. Barang tidak ditemukan di data Barcode untuk cabang ini.',
         ]);
 
         $barangMasuk->update($validated);

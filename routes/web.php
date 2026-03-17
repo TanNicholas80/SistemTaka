@@ -4,7 +4,6 @@ use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\BarangAccurateController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\ApprovalStockController;
 use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\BarangMasukController;
 use App\Http\Controllers\BranchController;
@@ -110,9 +109,6 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware(['role:toko,super_admin'])->group(function () {
         Route::resource('barcode', BarcodeController::class);
         Route::post('/barcode/update-from-csv', [BarcodeController::class, 'updateFromCSV'])->name('barcode.updateFromCSV');
-
-        Route::get('/approval-stock', [ApprovalStockController::class, 'index'])->name('approval_stock.index');
-        Route::get('/approval-stock/update', [ApprovalStockController::class, 'updateFromBarcodes'])->name('approval-stock.update');
 
         Route::resource('barang-masuk', BarangMasukController::class);
         Route::get('/barang-masuk/detail/{id}', [BarangMasukController::class, 'show'])->name('barang_masuk_detail');

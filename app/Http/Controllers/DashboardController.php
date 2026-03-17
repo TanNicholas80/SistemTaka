@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\ApprovalStock;
+use App\Models\Barcode;
 use App\Models\BarangMasuk;
 use App\Models\Branch;
 use App\Models\KasirPenjualan;
@@ -84,9 +84,9 @@ class DashboardController extends Controller
 
         // Hitung statistik dasar (data lokal - cepat) filtered by kode_customer
         $totalPenjualan = KasirPenjualan::where('kode_customer', $branch->customer_id)->count();
-        $barangSiapJual = ApprovalStock::where('status', 'uploaded')
-            ->whereNotNull('panjang')
-            ->where('panjang', '>', 0)
+        $barangSiapJual = Barcode::where('status', 'uploaded')
+            ->whereNotNull('panjang_mlc')
+            ->where('panjang_mlc', '>', 0)
             ->where('kode_customer', $branch->customer_id)
             ->count();
         $totalPackingList = PackingList::where('kode_customer', $branch->customer_id)->count();

@@ -24,8 +24,22 @@ class PenerimaanBarang extends Model
         'kode_customer',
     ];
 
-    public function approvalStock() {
-        return $this->hasMany(ApprovalStock::class, 'no_invoice', 'no_terima');
+    /**
+     * Packing list yang terhubung (many-to-many).
+     */
+    public function packingLists()
+    {
+        return $this->belongsToMany(\App\Models\PackingList::class, 'penerimaan_barang_packing_list')
+            ->withTimestamps();
+    }
+
+    /**
+     * Barcode dari packing list yang terhubung (untuk kompatibilitas showApproval dll).
+     */
+    public function barcodes()
+    {
+        $npls = $this->packingLists()->pluck('npl');
+        return \App\Models\Barcode::whereIn('no_packing_list', $npls)->get();
     }
 
     /**
@@ -81,8 +95,8 @@ class PenerimaanBarang extends Model
             'created_data' => [
                 'no_po' => $this->no_po,
                 'vendor' => $this->vendor,
-                'kode_customer' => $this->kode_customer,
                 'no_terima' => $this->no_terima,
+                'kode_customer' => $this->kode_customer,
                 'npb' => $this->npb,
                 'tanggal' => $this->tanggal,
                 'created_at' => $this->created_at->format('Y-m-d H:i:s')
@@ -100,10 +114,55 @@ class PenerimaanBarang extends Model
             if (empty($model->npb)) {
                 $model->npb = self::generateNpb($model->kode_customer ?? null);
             }
+            if (empty($model->no_terima)) {
+                $model->no_terima = self::generateNoTerima($model->kode_customer ?? null);
+            }
         });
     }
 
-    protected static function generateNpb($kodeCustomer = null)
+    /**
+     * Generate No Terima otomatis dengan format NTB.YYYY.MM.DD.001 (running number 3 digit per hari).
+     */
+    public static function generateNoTerima($kodeCustomer = null)
+    {
+        $now = Carbon::now();
+        $prefix = 'NTB.' . $now->format('Y.m.d') . '.';
+
+        try {
+            $activeBranchId = session('active_branch');
+            $branch = $activeBranchId ? Branch::find($activeBranchId) : null;
+            $customerId = $kodeCustomer ?? ($branch->customer_id ?? null);
+
+            $query = self::where('no_terima', 'like', $prefix . '%');
+            if ($customerId) {
+                $query->where('kode_customer', $customerId);
+            }
+
+            $lastEntry = $query->orderBy('no_terima', 'desc')->first();
+
+            if ($lastEntry && !empty($lastEntry->no_terima)) {
+                $lastNumber = (int) substr($lastEntry->no_terima, strrpos($lastEntry->no_terima, '.') + 1);
+                $newNumber = $lastNumber + 1;
+            } else {
+                $newNumber = 1;
+            }
+
+            $formatted = $prefix . str_pad($newNumber, 3, '0', STR_PAD_LEFT);
+
+            Log::info('Generated no_terima', [
+                'no_terima' => $formatted,
+                'kode_customer' => $customerId,
+            ]);
+
+            return $formatted;
+        } catch (\Exception $e) {
+            Log::error('Exception saat generate no_terima: ' . $e->getMessage());
+        }
+
+        return $prefix . '001';
+    }
+
+    public static function generateNpb($kodeCustomer = null)
     {
         $now = Carbon::now();
         $year = $now->format('Y');

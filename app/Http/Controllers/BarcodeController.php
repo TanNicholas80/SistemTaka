@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\BarangMasuk;
 use App\Models\Barcode;
 use App\Models\Branch;
+use App\Models\PackingList;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 class BarcodeController extends Controller
@@ -38,7 +41,7 @@ class BarcodeController extends Controller
 
     public function updateFromCSV()
     {
-        $path = storage_path('app/sftp-uploads/EXPORT_BARCODE_TAKA.txt');
+        $path = public_path('EXPORT_BARCODE_TAKA_NEW.txt');
 
         if (!file_exists($path)) {
             return redirect()->route('barcode.index')->with('error', 'File TXT tidak ditemukan.');
@@ -79,22 +82,28 @@ class BarcodeController extends Controller
                 return $idx !== false && isset($data[$idx]) ? trim($data[$idx]) : null;
             };
 
-            $kodeCustomer = $get('KODE_CUSTOMER');
+            // Header TXT: "KODE CUSTOMER" (spasi), fallback "KODE_CUSTOMER" (underscore)
+            $kodeCustomer = $get('KODE CUSTOMER') ?? $get('KODE_CUSTOMER');
 
-            if ($kodeCustomer !== $branch->customer_id) {
+            if (!$kodeCustomer || $kodeCustomer !== $branch->customer_id) {
                 continue;
             }
 
             $barcodeData = [
                 'barcode'         => $get('BARCODE'),
+                'status'          => Barcode::STATUS_TEMPORARY,
                 'no_packing_list' => $get('NO_PACKING_LIST'),
                 'no_billing'      => $get('BILLING'),
                 'kode_barang'     => $get('SALESTEXT') . '*#' . $get('WARNA') . ' PL:' . $get('NO_PACKING_LIST'),
                 'keterangan'      => $get('SALESTEXT') . ' ' . $get('JOBORDER') . '/*#' . $get('WARNA'),
                 'nomor_seri'      => $get('BATCHNO'),
+                'length'          => $get('LENGTH'),
+                'uom'             => $get('BASE_UOM'),
+                'material_code'   => $get('MATERIALCODE'),
                 'pcs'             => (int) $get('PCS'),
                 'berat_kg'        => (float) str_replace(',', '.', $get('WEIGHT')),
                 'panjang_mlc'     => round((float) str_replace(',', '.', $get('LENGTH')) * 0.9, 3),
+                'kode_warna'      => $get('KODE_WARNA'),
                 'warna'           => $get('WARNA'),
                 'bale'            => round((float) str_replace(',', '.', $get('WEIGHT')) / 181.44, 3),
                 'harga_ppn'       => (int) str_replace('.', '', explode(',', $get('HARGA_PPN'))[0] ?? 0),
@@ -122,10 +131,76 @@ class BarcodeController extends Controller
             }
         }
 
+        // Jalankan matching packing list vs barang masuk setelah load TXT
+        $matchingResult = $this->runPackingListMatching($branch);
+
+        $message = "Load TXT selesai.";
         if ($totalUpdated > 0) {
-            return redirect()->route('barcode.index')->with('success', "$totalUpdated data berhasil diperbarui.");
-        } else {
-            return redirect()->route('barcode.index')->with('info', 'Tidak ada data yang diperbarui.');
+            $message .= " $totalUpdated data barcode baru diperbarui.";
         }
+        $message .= " Matching: {$matchingResult['approved']} packing list lolos, {$matchingResult['rejected']} packing list dihapus.";
+
+        return redirect()->route('barcode.index')
+            ->with('success', $message);
+    }
+
+    /**
+     * Matching Packing List vs Barang Masuk setelah update barcode dari TXT.
+     * Per packing list: jika semua barcode punya BarangMasuk yang sesuai → status approved.
+     * Jika ada yang tidak sesuai → hapus PackingList, BarangMasuk terkait, dan Barcode terkait.
+     */
+    protected function runPackingListMatching(Branch $branch): array
+    {
+        $approved = 0;
+        $rejected = 0;
+        $kodeCustomer = $branch->customer_id;
+
+        $packingLists = PackingList::where('kode_customer', $kodeCustomer)->get();
+
+        foreach ($packingLists as $pl) {
+            $barcodesInPL = Barcode::where('no_packing_list', $pl->npl)
+                ->where('kode_customer', $kodeCustomer)
+                ->get();
+
+            if ($barcodesInPL->isEmpty()) {
+                continue;
+            }
+
+            $barcodeValues = $barcodesInPL->pluck('barcode')->toArray();
+            $barangMasuks = BarangMasuk::whereIn('nbrg', $barcodeValues)
+                ->where('kode_customer', $kodeCustomer)
+                ->get();
+
+            // Cek: setiap barcode harus punya tepat 1 BarangMasuk, jumlah harus sama
+            $barangMasukByNbrg = $barangMasuks->groupBy('nbrg');
+            $allMatch = $barangMasuks->count() === count($barcodeValues);
+
+            if ($allMatch) {
+                foreach ($barcodeValues as $bc) {
+                    if (!isset($barangMasukByNbrg[$bc]) || $barangMasukByNbrg[$bc]->count() !== 1) {
+                        $allMatch = false;
+                        break;
+                    }
+                }
+            }
+
+            if ($allMatch) {
+                Barcode::whereIn('id', $barcodesInPL->pluck('id'))
+                    ->update(['status' => Barcode::STATUS_APPROVED]);
+                $pl->update(['status' => PackingList::STATUS_APPROVED]);
+                $approved++;
+            } else {
+                DB::transaction(function () use ($barcodeValues, $kodeCustomer, $barcodesInPL, $pl) {
+                    BarangMasuk::whereIn('nbrg', $barcodeValues)
+                        ->where('kode_customer', $kodeCustomer)
+                        ->delete();
+                    Barcode::whereIn('id', $barcodesInPL->pluck('id'))->delete();
+                    $pl->delete();
+                });
+                $rejected++;
+            }
+        }
+
+        return ['approved' => $approved, 'rejected' => $rejected];
     }
 }

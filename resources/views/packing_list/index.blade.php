@@ -44,6 +44,7 @@
                                         <tr>
                                             <th>Tanggal</th>
                                             <th>No Packing List</th>
+                                            <th>Status</th>
                                             <th>Action</th>
                                         </tr>
                                     </thead>
@@ -52,6 +53,16 @@
                                             <tr>
                                                 <td>{{ \Carbon\Carbon::parse($pl->tanggal)->format('d-m-Y') }}</td>
                                                 <td><a href="{{ route('packing-list.show', $pl->id) }}">{{ $pl->npl }}</a></td>
+                                                <td>
+                                                    @php
+                                                        $statusClass = match($pl->status ?? 'pending') {
+                                                            'approved' => 'badge-success',
+                                                            'used' => 'badge-info',
+                                                            default => 'badge-warning',
+                                                        };
+                                                    @endphp
+                                                    <span class="badge {{ $statusClass }}">{{ strtoupper($pl->status ?? 'pending') }}</span>
+                                                </td>
                                                 <td>
                                                     <a href="{{ route('packing-list.edit', $pl->id) }}"
                                                         class="btn-sm btn-warning"><i class="fas fa-pen"></i>

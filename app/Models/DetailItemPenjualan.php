@@ -91,10 +91,18 @@ class DetailItemPenjualan extends Model
     }
     
     /**
-     * Relasi dengan model ApprovalStock berdasarkan barcode
+     * Relasi dengan model Barcode berdasarkan barcode
+     */
+    public function barcode()
+    {
+        return $this->belongsTo(Barcode::class, 'barcode', 'barcode');
+    }
+
+    /**
+     * @deprecated Gunakan barcode(). Dipertahankan untuk backward compatibility.
      */
     public function approvalStock()
     {
-        return $this->belongsTo(ApprovalStock::class, 'barcode', 'barcode');
+        return $this->barcode();
     }
 }

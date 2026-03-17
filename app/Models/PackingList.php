@@ -12,17 +12,32 @@ class PackingList extends Model
 {
     use HasFactory, LogsActivity;
 
+    const STATUS_PENDING = 'pending';
+    const STATUS_APPROVED = 'approved';
+    const STATUS_USED = 'used';
+    const STATUS_CLOSED = 'closed';
+
     protected $table = 'packing_list';
 
     protected $fillable = [
         'tanggal',
         'npl',
+        'status',
         'kode_customer',
     ];
 
     public function barcodes()
     {
         return $this->hasMany(Barcode::class, 'no_packing_list', 'npl');
+    }
+
+    /**
+     * Penerimaan barang yang menggunakan packing list ini (many-to-many).
+     */
+    public function penerimaanBarangs()
+    {
+        return $this->belongsToMany(\App\Models\PenerimaanBarang::class, 'penerimaan_barang_packing_list')
+            ->withTimestamps();
     }
 
 
@@ -43,7 +58,7 @@ class PackingList extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['tanggal', 'npl']) // Log field yang ada di PackingList
+            ->logOnly(['tanggal', 'npl', 'status', 'kode_customer']) // Log field yang ada di PackingList
             ->logOnlyDirty() // Hanya log perubahan yang benar-benar terjadi
             ->dontSubmitEmptyLogs() // Jangan submit log kosong
             ->useLogName('Manajemen Packing List') // Set log name sesuai permintaan
@@ -88,7 +103,8 @@ class PackingList extends Model
                         'npl' => $this->npl,
                         'tanggal' => $this->tanggal,
                         'created_at' => $this->created_at->format('Y-m-d H:i:s'),
-                        'kode_customer' => $this->kode_customer
+                        'kode_customer' => $this->kode_customer,
+                        'status' => $this->status
                     ],
                     'causer_info' => $causerInfo,
                     'timestamp_info' => $timestampInfo
@@ -108,7 +124,8 @@ class PackingList extends Model
                     'updated_fields' => array_keys($changes),
                     'causer_info' => $causerInfo,
                     'timestamp_info' => $timestampInfo,
-                    'kode_customer' => $this->kode_customer
+                    'kode_customer' => $this->kode_customer,
+                    'status' => $this->status
                 ]);
                 break;
 
@@ -124,7 +141,8 @@ class PackingList extends Model
                     ],
                     'causer_info' => $causerInfo,
                     'timestamp_info' => $timestampInfo,
-                    'kode_customer' => $this->kode_customer
+                    'kode_customer' => $this->kode_customer,
+                    'status' => $this->status
                 ]);
                 break;
         }

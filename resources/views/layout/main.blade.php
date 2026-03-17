@@ -249,39 +249,30 @@
 
                         @if (Auth::user()->role !== 'owner')
                         <li
-                            class="nav-item {{ Request::routeIs('approval_stock.*') || Request::routeIs('barcode.*') ? 'menu-open' : '' }}">
-                            <a href="#"
-                                class="nav-link {{ Request::routeIs('approval_stock.*') || Request::routeIs('barcode.*') ? 'active' : '' }}">
+                            class="nav-item {{ Request::routeIs('barcode.*') ? 'menu-open' : '' }}">
+                            <a href="{{ route('barcode.index') }}"
+                                class="nav-link {{ Request::routeIs('barcode.*') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-database"></i>
-                                <p>Data Master <i class="right fas fa-angle-left"></i></p>
+                                <p>Barcode</p>
                             </a>
-                            <ul class="nav nav-treeview">
-                                <li class="nav-item">
-                                    <a href="{{ route('barcode.index') }}"
-                                        class="nav-link {{ Request::is('barcode*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Barcode</p>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('approval_stock.index') }}"
-                                        class="nav-link {{ Request::routeIs('approval_stock.*') || Request::is('approval-stock*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Approval Stock</p>
-                                    </a>
-                                </li>
-                            </ul>
                         </li>
 
 
                         <li
-                            class="nav-item {{ Request::routeIs('packing-list.*') || Request::routeIs('barang-masuk.*') || Request::routeIs('faktur.*') || Request::routeIs('surat_jalan.*') ? 'menu-open' : '' }}">
+                            class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('packing-list.*') || Request::routeIs('barang-masuk.*') || Request::routeIs('penerimaan-barang.*') ? 'menu-open' : '' }}">
                             <a href="#"
-                                class="nav-link {{ Request::routeIs('packing-list.*') || Request::routeIs('barang-masuk.*') || Request::routeIs('faktur.*') || Request::routeIs('surat_jalan.*') ? 'active' : '' }}">
+                                class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('packing-list.*') || Request::routeIs('barang-masuk.*') || Request::routeIs('penerimaan-barang.*') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-warehouse"></i>
                                 <p>Penerimaan <i class="right fas fa-angle-left"></i></p>
                             </a>
                             <ul class="nav nav-treeview">
+                                <li class="nav-item">
+                                    <a href="{{ route('pesanan_pembelian.index') }}"
+                                        class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
+                                        <i class="far fa-circle nav-icon"></i>
+                                        <p>Pesanan Pembelian</p>
+                                    </a>
+                                </li>
                                 <li class="nav-item">
                                     <a href="{{ route('packing-list.index') }}"
                                         class="nav-link {{ Request::is('packing-list*') ? 'active' : '' }}">
@@ -293,21 +284,14 @@
                                     <a href="{{ route('barang-masuk.index') }}"
                                         class="nav-link {{ Request::is('barang-masuk*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
-                                        <p>Barang Masuk</p>
+                                        <p>Scan Barang</p>
                                     </a>
                                 </li>
                                 <li class="nav-item">
-                                    <a href="{{ route('faktur.index') }}"
-                                        class="nav-link {{ Request::is('faktur*') ? 'active' : '' }}">
+                                    <a href="{{ route('penerimaan-barang.index') }}"
+                                        class="nav-link {{ Request::is('penerimaan-barang*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
-                                        <p>Faktur</p>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('surat_jalan.index') }}"
-                                        class="nav-link {{ Request::is('surat-jalan*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Surat Jalan</p>
+                                        <p>Penerimaan Barang</p>
                                     </a>
                                 </li>
                             </ul>
@@ -354,27 +338,13 @@
                         </li>
 
                         <li
-                            class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('pemasok.*') || Request::routeIs('retur_pembelian.*') ? 'menu-open' : '' }}">
+                            class="nav-item {{ Request::routeIs('pemasok.*') || Request::routeIs('retur_pembelian.*') ? 'menu-open' : '' }}">
                             <a href="#"
-                                class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('pemasok.*') || Request::routeIs('retur_pembelian.*')? 'active' : '' }}">
+                                class="nav-link {{ Request::routeIs('pemasok.*') || Request::routeIs('retur_pembelian.*')? 'active' : '' }}">
                                 <i class="nav-icon fa-solid fa-cart-shopping"></i>
                                 <p>Pembelian <i class="right fas fa-angle-left"></i></p>
                             </a>
                             <ul class="nav nav-treeview">
-                                <li class="nav-item">
-                                    <a href="{{ route('pesanan_pembelian.index') }}"
-                                        class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Pesanan Pembelian</p>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('penerimaan-barang.index') }}"
-                                        class="nav-link {{ Request::is('penerimaan-barang*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Penerimaan Barang</p>
-                                    </a>
-                                </li>
                                 <li class="nav-item">
                                     <a href="{{ route('retur_pembelian.index') }}"
                                         class="nav-link {{ Request::is('retur-pembelian*') ? 'active' : '' }}">
@@ -562,7 +532,6 @@
                 '#pengiriman_pesanan',
                 '#faktur_penjualan',
                 '#pesanan_pembelian',
-                '#approval_stock',
                 '#penerimaan_barang',
                 '#retur_pembelian',
                 '#retur_penjualan'
