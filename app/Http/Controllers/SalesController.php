@@ -59,14 +59,13 @@ class SalesController extends Controller
         }
 
         // Cache key yang unik per cabang
-        $cacheKey = 'accurate_sales_order_details_' . $activeBranchId;
-        // Tetapkan waktu cache (dalam menit)
+        $cacheKey = 'accurate_sales_order_list_' . $activeBranchId;
         $cacheDuration = 10; // 10 menit
 
         // Jika ada parameter force_refresh, bypass cache
         if ($request->has('force_refresh')) {
             Cache::forget($cacheKey);
-            Log::info('Cache sales order dihapus karena force_refresh');
+            Log::info('Cache sales order list dihapus karena force_refresh');
         }
 
         $errorMessage = null;
@@ -74,79 +73,144 @@ class SalesController extends Controller
         // Periksa apakah cache sudah ada
         if (Cache::has($cacheKey) && !$request->has('force_refresh')) {
             $cachedData = Cache::get($cacheKey);
-            $kasirPenjualan = $cachedData['kasirPenjualan'] ?? [];
-            $detailPP = $cachedData['detailPP'] ?? [];
+            $salesOrders = $cachedData['salesOrders'] ?? [];
             $errorMessage = $cachedData['errorMessage'] ?? null;
             Log::info('Data sales order diambil dari cache');
-            return view('sales_cashier.index', compact('detailPP', 'kasirPenjualan', 'errorMessage'));
+            return view('sales_cashier.index', compact('salesOrders', 'errorMessage'));
         }
 
-        // Filter kasir penjualan berdasarkan kode_customer dari cabang aktif
-        $kasirPenjualan = KasirPenjualan::where('kode_customer', $branch->customer_id)->get();
-        $detailPP = [];
-        $apiSuccess = false;
+        $salesOrders = [];
+        $allSalesOrders = [];
         $hasApiError = false;
 
-        // Jika ada data kasir penjualan, ambil detail dari API
-        if (!empty($kasirPenjualan) && $kasirPenjualan->count() > 0) {
-            // Ambil kredensial Accurate dari branch
+        try {
             $apiToken = $branch->accurate_api_token;
             $signatureSecret = $branch->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
-            try {
-                // Selalu coba ambil data dari API terlebih dahulu
-                $detailsResult = $this->fetchSalesOrderDetailsInBatches($kasirPenjualan, $branch, $apiToken, $signature, $timestamp);
-                $detailPP = $detailsResult['details']; // Data final
+            $listApiUrl = $this->buildApiUrl($branch, 'sales-order/list.do');
 
-                // Cek jika ada error dari proses fetch detail
-                if ($detailsResult['has_error']) {
-                    $hasApiError = true;
+            // Fetch halaman pertama
+            $firstPageResponse = Http::withoutVerifying()->withHeaders([
+                'Authorization'  => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($listApiUrl, ['sp.page' => 1, 'sp.pageSize' => 20]);
+
+            Log::info('Accurate SO list first page response:', [
+                'status' => $firstPageResponse->status(),
+                'body'   => $firstPageResponse->json(),
+            ]);
+
+            if ($firstPageResponse->successful()) {
+                $responseData = $firstPageResponse->json();
+
+                if (isset($responseData['d']) && is_array($responseData['d'])) {
+                    $allSalesOrderIds = $responseData['d']; // hanya berisi [{id: X}, ...]
+
+                    $totalItems = $responseData['sp']['rowCount'] ?? 0;
+                    $totalPages = ceil($totalItems / 20);
+
+                    // Fetch halaman ID berikutnya secara paralel jika lebih dari 1 halaman
+                    if ($totalPages > 1) {
+                        $promises = [];
+                        $client = new \GuzzleHttp\Client(['verify' => false]);
+
+                        for ($page = 2; $page <= $totalPages; $page++) {
+                            $promises[$page] = $client->getAsync($listApiUrl, [
+                                'headers' => [
+                                    'Authorization'  => 'Bearer ' . $apiToken,
+                                    'X-Api-Signature' => $signature,
+                                    'X-Api-Timestamp' => $timestamp,
+                                ],
+                                'query' => ['sp.page' => $page, 'sp.pageSize' => 20]
+                            ]);
+                        }
+
+                        $results = Utils::settle($promises)->wait();
+
+                        foreach ($results as $page => $result) {
+                            if ($result['state'] === 'fulfilled') {
+                                $pageResponse = json_decode($result['value']->getBody(), true);
+                                if (isset($pageResponse['d']) && is_array($pageResponse['d'])) {
+                                    $allSalesOrderIds = array_merge($allSalesOrderIds, $pageResponse['d']);
+                                }
+                            } else {
+                                Log::error("Failed to fetch SO list page {$page}: " . $result['reason']);
+                                $hasApiError = true;
+                            }
+                        }
+                    }
+
+                    // Fetch detail masing-masing SO secara paralel berdasarkan ID
+                    if (!empty($allSalesOrderIds)) {
+                        $detailClient = new \GuzzleHttp\Client(['verify' => false]);
+                        $detailApiUrl = $this->buildApiUrl($branch, 'sales-order/detail.do');
+                        $detailPromises = [];
+
+                        foreach ($allSalesOrderIds as $soItem) {
+                            $soId = $soItem['id'] ?? null;
+                            if (!$soId) continue;
+
+                            $detailPromises[$soId] = $detailClient->getAsync($detailApiUrl, [
+                                'headers' => [
+                                    'Authorization'  => 'Bearer ' . $apiToken,
+                                    'X-Api-Signature' => $signature,
+                                    'X-Api-Timestamp' => $timestamp,
+                                ],
+                                'query' => ['id' => $soId]
+                            ]);
+                        }
+
+                        $detailResults = Utils::settle($detailPromises)->wait();
+
+                        foreach ($detailResults as $soId => $result) {
+                            if ($result['state'] === 'fulfilled') {
+                                $detailData = json_decode($result['value']->getBody(), true);
+                                if (isset($detailData['d'])) {
+                                    $salesOrders[] = $detailData['d'];
+                                }
+                            } else {
+                                Log::error("Failed to fetch SO detail for id {$soId}: " . $result['reason']);
+                                $hasApiError = true;
+                            }
+                        }
+                    }
+
+                    Log::info('Data sales order dari API berhasil diambil, total: ' . count($salesOrders));
                 }
-
-                $apiSuccess = true;
-                Log::info('Data sales order dari API berhasil diambil');
-            } catch (\Exception $e) {
-                // Log error
-                Log::error('Exception saat mengambil data sales order dari API: ' . $e->getMessage());
+            } else {
+                Log::error('Gagal fetch SO list dari Accurate', ['status' => $firstPageResponse->status(), 'body' => $firstPageResponse->body()]);
                 $hasApiError = true;
             }
-        } else {
-            $apiSuccess = true; // Tidak ada data untuk diproses, anggap sukses
+        } catch (\Exception $e) {
+            Log::error('Exception saat mengambil SO list dari API: ' . $e->getMessage());
+            $hasApiError = true;
         }
 
-        // Set error message berdasarkan kondisi
         if ($hasApiError) {
-            $errorMessage = 'Gagal memuat detail data dari server Accurate. Data yang ditampilkan mungkin tidak lengkap. Silakan coba lagi dengan menekan tombol "Refresh Data".';
-        }
+            $errorMessage = 'Gagal memuat data dari server Accurate. Silakan coba lagi dengan menekan tombol "Refresh Data".';
 
-        // Jika API gagal dan tidak ada data, coba gunakan cache sebagai fallback
-        if (!$apiSuccess && empty($detailPP)) {
+            // Fallback ke cache lama jika ada
             if (Cache::has($cacheKey)) {
                 $cachedData = Cache::get($cacheKey);
-                $kasirPenjualan = $cachedData['kasirPenjualan'] ?? $kasirPenjualan;
-                $detailPP = $cachedData['detailPP'] ?? [];
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
-                Log::info('Data sales order diambil dari cache karena API error');
-            } else {
-                if (is_null($errorMessage)) $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache tersedia.';
-                Log::warning('Tidak ada cache tersedia, menampilkan data kosong');
+                $salesOrders = $cachedData['salesOrders'] ?? [];
+                Log::info('Menggunakan cache lama sebagai fallback');
             }
         }
 
-        // Simpan data ke cache
-        $dataToCache = [
-            'kasirPenjualan' => $kasirPenjualan,
-            'detailPP' => $detailPP,
-            'errorMessage' => $errorMessage
-        ];
+        // Simpan ke cache
+        Cache::put($cacheKey, [
+            'salesOrders'  => $salesOrders,
+            'errorMessage' => $errorMessage,
+        ], $cacheDuration * 60);
 
-        Cache::put($cacheKey, $dataToCache, $cacheDuration * 60);
         Log::info('Data sales order disimpan ke cache');
 
-        return view('sales_cashier.index', compact('detailPP', 'kasirPenjualan', 'errorMessage'));
+        return view('sales_cashier.index', compact('salesOrders', 'errorMessage'));
     }
+
 
     /**
      * Mengambil detail sales order dalam batch untuk mengoptimalkan performa

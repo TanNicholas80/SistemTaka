@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth;
 
 class PenerimaanBarangController extends Controller
 {
@@ -30,12 +31,12 @@ class PenerimaanBarangController extends Controller
         $baseUrl = $branch->url_accurate ?? 'https://iris.accurate.id';
         $baseUrl = rtrim($baseUrl, '/');
         $apiPath = '/accurate/api';
-        
+
         // Jika url_accurate sudah termasuk path /accurate/api, gunakan langsung
         if (strpos($baseUrl, '/accurate/api') !== false) {
             return $baseUrl . '/' . ltrim($endpoint, '/');
         }
-        
+
         return $baseUrl . $apiPath . '/' . ltrim($endpoint, '/');
     }
 
@@ -127,10 +128,12 @@ class PenerimaanBarangController extends Controller
                 $cachedData = Cache::get($cacheKey);
                 $penerimaanBarang = $cachedData['penerimaanBarang'] ?? $penerimaanBarang;
                 $detailPOs = $cachedData['detailPOs'] ?? [];
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
                 Log::info('Data penerimaan barang diambil dari cache karena API error');
             } else {
-                if (is_null($errorMessage)) $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache tersedia.';
+                if (is_null($errorMessage))
+                    $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache tersedia.';
                 Log::warning('Tidak ada cache tersedia, menampilkan data kosong');
             }
         }
@@ -178,7 +181,8 @@ class PenerimaanBarangController extends Controller
                 ]);
             }
 
-            if (empty($promises)) continue;
+            if (empty($promises))
+                continue;
 
             // Jalankan batch promise secara paralel
             $results = Utils::settle($promises)->wait();
@@ -427,8 +431,8 @@ class PenerimaanBarangController extends Controller
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
             ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
-                'number' => $noPo,
-            ]);
+                        'number' => $noPo,
+                    ]);
 
             $itemDetails = [];
             $vendorData = null;
@@ -932,6 +936,76 @@ class PenerimaanBarangController extends Controller
 
         try {
             $validatedData = $validator->validated();
+            $userId = Auth::id();
+
+            // 1. Verify Temp Barcodes first
+            $masterBarcodes = \App\Models\TempMasterBarcode::where('no_po', $validatedData['no_po'])->where('user_id', $userId)->get();
+            $scannedCount = \App\Models\TempScannedBarcode::where('no_po', $validatedData['no_po'])->where('user_id', $userId)->count();
+
+            if ($masterBarcodes->isEmpty() || $masterBarcodes->count() !== $scannedCount) {
+                DB::rollBack();
+                return back()->with('error', 'Validasi fisik belum 100% selesai atau data master kedaluwarsa. Silakan upload dan scan ulang.');
+            }
+
+            // 2. Commit Temp to Permanent Tables
+            foreach ($masterBarcodes as $master) {
+                // Barcode
+                \App\Models\Barcode::updateOrCreate(
+                    ['barcode' => $master->barcode, 'kode_customer' => $master->kode_customer],
+                    [
+                        'no_packing_list' => $master->no_packing_list,
+                        'no_billing' => $master->no_billing,
+                        'kode_barang' => $master->kode_barang,
+                        'keterangan' => $master->keterangan,
+                        'nomor_seri' => $master->nomor_seri,
+                        'pcs' => $master->pcs,
+                        'berat_kg' => $master->berat_kg,
+                        'panjang_mlc' => $master->panjang_mlc,
+                        'warna' => $master->warna,
+                        'bale' => $master->bale,
+                        'harga_ppn' => $master->harga_ppn,
+                        'harga_jual' => $master->harga_jual,
+                        'pemasok' => $master->pemasok,
+                        'customer' => $master->customer,
+                        'kontrak' => $master->kontrak,
+                        'subtotal' => $master->subtotal,
+                        'tanggal' => $master->tanggal,
+                        'jatuh' => $master->jatuh,
+                        'no_vehicle' => $master->no_vehicle,
+                    ]
+                );
+
+                // Barang Masuk
+                \App\Models\BarangMasuk::firstOrCreate([
+                    'nbrg' => $master->barcode,
+                    'kode_customer' => $master->kode_customer,
+                ], [
+                    'tanggal' => $validatedData['tanggal'],
+                ]);
+
+                // Approval Stock
+                $nama = $this->formatKeteranganForApproval($master->keterangan ?? '');
+                ApprovalStock::updateOrCreate(
+                    [
+                        'barcode' => $master->barcode,
+                        'kode_customer' => $master->kode_customer
+                    ],
+                    [
+                        'nama' => $nama,
+                        'npl' => $master->no_packing_list,
+                        'no_invoice' => $validatedData['no_terima'], // Override for perfect PO receive matching
+                        'kontrak' => $master->kontrak,
+                        'panjang' => $master->panjang_mlc,
+                        'harga_unit' => $master->harga_ppn,
+                        'status' => 'approved',
+                        'id_pb' => $validatedData['npb']
+                    ]
+                );
+            }
+
+            // Clear temporary data after successful commit
+            \App\Models\TempMasterBarcode::where('no_po', $validatedData['no_po'])->where('user_id', $userId)->delete();
+            \App\Models\TempScannedBarcode::where('no_po', $validatedData['no_po'])->where('user_id', $userId)->delete();
 
             // Simpan penerimaan barang dengan kode_customer dari cabang aktif
             $penerimaan = PenerimaanBarang::create([
@@ -1228,7 +1302,8 @@ class PenerimaanBarangController extends Controller
                 $cachedData = Cache::get($cacheKey);
                 $penerimaanBarang = $cachedData['penerimaanBarang'] ?? null;
                 $matchedItems = $cachedData['matchedItems'] ?? [];
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
                 Log::info("Menggunakan data cached untuk {$npb} karena error pada API");
             }
         }
@@ -1303,7 +1378,8 @@ class PenerimaanBarangController extends Controller
                 $cachedData = Cache::get($cacheKey);
                 $penerimaanBarang = $cachedData['penerimaanBarang'] ?? null;
                 $approvalStock = $cachedData['approvalStock'] ?? null;
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
                 Log::info("Menggunakan data cached untuk approval {$npb} karena error pada database");
             }
         }
@@ -1450,5 +1526,57 @@ class PenerimaanBarangController extends Controller
         Log::info('Formatted nama barang:', ['output' => $formatted]);
 
         return $formatted;
+    }
+
+    private function formatKeteranganForApproval($keterangan)
+    {
+        // Bersihkan karakter kontrol termasuk \x1A (SUB character)
+        $cleaned = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $keterangan);
+        $cleaned = trim($cleaned);
+
+        // Split berdasarkan slash
+        $parts = explode('/', $cleaned);
+
+        if (count($parts) >= 4) {
+            $nama = trim($parts[0]);
+
+            // Ambil bagian ke-4 (indeks 3) yang berisi detail
+            $detailPart = trim($parts[3]);
+
+            // Hapus karakter * dan karakter kontrol lainnya
+            $detailPart = str_replace('*', '', $detailPart);
+            $detailPart = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $detailPart);
+
+            // Ekstrak nomor dan warna dari detailPart
+            $result = ['number' => '000', 'color' => ''];
+
+            // Pattern 1: #012/NAVY (dengan slash)
+            if (preg_match('/#(\d+)\/([A-Z\s]+)$/i', $detailPart, $matches)) {
+                $result['number'] = str_pad($matches[1], 3, '0', STR_PAD_LEFT);
+                $result['color'] = trim($matches[2]);
+            }
+            // Pattern 2: #012 NAVY (dengan spasi)
+            elseif (preg_match('/#(\d+)\s+([A-Z\s]+)$/i', $detailPart, $matches)) {
+                $result['number'] = str_pad($matches[1], 3, '0', STR_PAD_LEFT);
+                $result['color'] = trim($matches[2]);
+            }
+            // Pattern 3: #012 (hanya nomor)
+            elseif (preg_match('/#(\d+)$/i', $detailPart, $matches)) {
+                $result['number'] = str_pad($matches[1], 3, '0', STR_PAD_LEFT);
+            }
+
+            $nomor = $result['number'];
+            $warna = $result['color'];
+
+            // Jika tidak ada warna di detailPart, coba ambil dari bagian ke-5
+            if (empty($warna) && count($parts) >= 5) {
+                $warna = trim($parts[4]);
+                $warna = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $warna);
+            }
+
+            return $nama . ' #' . $nomor . ($warna ? ' ' . $warna : '');
+        }
+
+        return $cleaned;
     }
 }

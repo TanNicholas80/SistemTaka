@@ -157,6 +157,50 @@
                     </div>
                 </form>
 
+                <!-- ERROR ALERT (Hanya muncul jika ada kesalahan dari Controller setelah Form Submit) -->
+                @if(session('error'))
+                    <div class="p-2">
+                        <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                            <strong class="font-bold">Error!</strong>
+                            <span class="block sm:inline">{{ session('error') }}</span>
+                        </div>
+                    </div>
+                @endif
+
+                <!-- Bagian Upload & Validasi Barcode (Sembunyi by Default) -->
+                <div id="barcode-validation-section" class="m-2 p-4 border border-blue-300 bg-blue-50 rounded hidden">
+                    <h3 class="font-bold text-blue-800 mb-2"><i class="fas fa-barcode mr-2"></i>Tahap Validasi Barcode Fisik</h3>
+                    
+                    <!-- Upload TXT -->
+                    <div id="upload-txt-container" class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">1. Upload File Master Barcode (TXT)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="file" id="txt_file" name="txt_file" accept=".txt,.csv" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white w-full max-w-md">
+                            <button type="button" id="btn-upload-txt" onclick="uploadMasterTxt()" class="bg-indigo-600 text-white px-4 py-1.5 rounded hover:bg-indigo-700 text-sm font-medium shadow-sm transition-all"><i class="fas fa-upload mr-1"></i> Upload & Proses</button>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">Atau biarkan kosong lalu tekan Upload untuk menggunakan file TXT default jika tersedia di server.</p>
+                    </div>
+
+                    <!-- Scan Fisik -->
+                    <div id="scan-physical-container" class="hidden">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">2. Scan Barcode Fisik</label>
+                        <div class="flex items-center gap-2 mb-2">
+                            <input type="text" id="scan_barcode_input" class="border border-green-400 rounded px-3 py-2 text-sm bg-white w-full max-w-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" placeholder="Arahkan kursor kesini, lalu Scan Barcode..." autocomplete="off">
+                            <button type="button" id="btn-reset-scan" onclick="resetScan()" class="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 text-sm font-medium shadow-sm transition-all"><i class="fas fa-trash-alt mr-1"></i> Reset Data Temporary</button>
+                        </div>
+                        <div class="bg-white p-3 rounded border border-blue-200 mt-3 shadow-inner">
+                            <p class="text-sm font-medium text-gray-800 flex items-center justify-between">
+                                <span>Status Validasi Master & Fisik:</span>
+                                <span id="scan-status-text" class="text-xl font-bold text-blue-600 px-3 py-1 bg-blue-100 rounded">0 / 0 Barcode Cocok</span>
+                            </p>
+                            <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
+                                <div id="scan-progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <p id="scan-success-message" class="text-sm font-bold text-green-600 mt-2 hidden"><i class="fas fa-check-circle mr-1"></i> Validasi 100% Selesai! Silakan tekan tombol Save di atas.</p>
+                    </div>
+                </div>
+
                 <!-- Table container -->
                 <div class="p-2 flex flex-col gap-4">
                     <div class="border border-gray-300 rounded overflow-hidden text-sm">
@@ -346,8 +390,8 @@
                     // Tampilkan data barang di tabel
                     updateBarangTable(data.barang);
 
-                    // Tampilkan tombol Save
-                    document.getElementById('save-btn').classList.remove('hidden');
+                    // Tampilkan bagian Validasi Barcode BUKAN tombol Save
+                    document.getElementById('barcode-validation-section').classList.remove('hidden');
 
                     resolve(data);
                 })
@@ -605,6 +649,7 @@
         const searchBtnNoPO = document.getElementById('no-po-search-btn');
         const lanjutBtn = document.getElementById('lanjut-btn');
         const saveBtn = document.getElementById('save-btn');
+        const validationSection = document.getElementById('barcode-validation-section');
 
         console.log('Setting readonly:', readonly);
 
@@ -631,7 +676,6 @@
             tanggalInput.style.cursor = 'not-allowed';
 
             if (lanjutBtn) lanjutBtn.style.display = 'none';
-            if (saveBtn) saveBtn.classList.remove('hidden');
 
             isDetailFormReady = true;
             document.getElementById('form_submitted').value = '1';
@@ -660,6 +704,7 @@
 
             if (lanjutBtn) lanjutBtn.style.display = 'inline-block';
             if (saveBtn) saveBtn.classList.add('hidden');
+            if (validationSection) validationSection.classList.add('hidden');
 
             isDetailFormReady = false;
             document.getElementById('form_submitted').value = '0';
@@ -784,6 +829,16 @@
         const searchInput = document.getElementById('search-barang');
         const tableBody = document.getElementById('table-barang-body');
         const errorContainer = document.getElementById('laravel-errors');
+        const scanInput = document.getElementById('scan_barcode_input');
+
+        if (scanInput) {
+            scanInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handlePhysicalScan(this.value);
+                }
+            });
+        }
 
         if (errorContainer) {
             // Cek untuk session 'error'
@@ -932,6 +987,212 @@
 
         dropdownPO.classList.remove('hidden');
         console.log('All PO dropdown shown');
+    }
+
+    // --- FUNGSI VALIDASI BARCODE (TEMP) ---
+
+    // 1. Upload Master TXT
+    function uploadMasterTxt() {
+        if (!formData.no_po) {
+            Swal.fire('Error', 'Nomor PO belum dipilih.', 'error');
+            return;
+        }
+
+        const fileInput = document.getElementById('txt_file');
+        const btnUpload = document.getElementById('btn-upload-txt');
+        const originText = btnUpload.innerHTML;
+
+        const data = new FormData();
+        data.append('no_po', formData.no_po);
+        data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+        
+        if (fileInput.files.length > 0) {
+            data.append('txt_file', fileInput.files[0]);
+        }
+
+        btnUpload.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...';
+        btnUpload.disabled = true;
+
+        fetch('{{ route("temp_scan.upload_txt") }}', {
+            method: 'POST',
+            body: data,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(result => {
+            btnUpload.innerHTML = originText;
+            btnUpload.disabled = false;
+
+            if (result.success) {
+                Swal.fire('Berhasil', result.message, 'success');
+                
+                // Switch view to Scanning Input
+                document.getElementById('upload-txt-container').classList.add('hidden');
+                document.getElementById('scan-physical-container').classList.remove('hidden');
+                document.getElementById('scan_barcode_input').focus();
+                
+                // Fetch initial scan state
+                refreshScanStats();
+            } else {
+                Swal.fire('Gagal', result.message || 'Gagal memproses file.', 'error');
+            }
+        })
+        .catch(error => {
+            btnUpload.innerHTML = originText;
+            btnUpload.disabled = false;
+            console.error(error);
+            Swal.fire('Error', 'Terjadi kesalahan jaringan/server.', 'error');
+        });
+    }
+
+    // 2. Physical Scan Check
+    function handlePhysicalScan(barcodeVal) {
+        if (!barcodeVal.trim()) return;
+        
+        const scanInput = document.getElementById('scan_barcode_input');
+        
+        // Block until request done to prevent double scanning
+        scanInput.disabled = true;
+
+        const data = new FormData();
+        data.append('no_po', formData.no_po);
+        data.append('barcode', barcodeVal);
+        data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+
+        fetch('{{ route("temp_scan.scan_physical") }}', {
+            method: 'POST',
+            body: data,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(result => {
+            scanInput.value = '';
+            scanInput.disabled = false;
+            scanInput.focus();
+
+            if (result.success) {
+                // Update text & progress
+                updateScanUI(result.scanned_count, result.master_count, result.is_perfect_match);
+                
+                // SweetAlert toast for quick feedback
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Cocok!',
+                    text: result.message,
+                    timer: 1000,
+                    showConfirmButton: false,
+                    toast: true,
+                    position: 'top-end'
+                });
+
+                if (result.is_perfect_match) {
+                    onPerfectMatch();
+                }
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Tidak Cocok / Gagal',
+                    text: result.message,
+                    timer: 3000,
+                    showConfirmButton: false,
+                    toast: true,
+                    position: 'top-end'
+                });
+                
+                // Play error sound could be added here
+            }
+        })
+        .catch(error => {
+            scanInput.value = '';
+            scanInput.disabled = false;
+            scanInput.focus();
+            console.error(error);
+            Swal.fire('Error', 'Terjadi kesalahan sistem.', 'error');
+        });
+    }
+
+    // 3. Reset Scan
+    function resetScan() {
+        if (!formData.no_po) return;
+
+        Swal.fire({
+            title: 'Reset Validasi?',
+            text: 'Ini akan menghapus semua Master Data dan Riwayat Scan yang belum disimpan. Anda yakin?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, Reset',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const data = new FormData();
+                data.append('no_po', formData.no_po);
+                data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+
+                fetch('{{ route("temp_scan.flush") }}', {
+                    method: 'POST',
+                    body: data,
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(r => r.json())
+                .then(res => {
+                    if (res.success) {
+                        Swal.fire('Tereset!', 'Silakan mulai dari awal (Upload TXT).', 'success');
+                        
+                        document.getElementById('scan-physical-container').classList.add('hidden');
+                        document.getElementById('upload-txt-container').classList.remove('hidden');
+                        document.getElementById('txt_file').value = '';
+                        document.getElementById('save-btn').classList.add('hidden');
+                        document.getElementById('scan-success-message').classList.add('hidden');
+                        updateScanUI(0, 0, false);
+                    }
+                });
+            }
+        });
+    }
+
+    // Helper UI Updates
+    function refreshScanStats() {
+        fetch(`{{ url('penerimaan-barang/temp/scanned-items') }}?no_po=${encodeURIComponent(formData.no_po)}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                const isPerfect = (res.scanned_count === res.master_count) && (res.master_count > 0);
+                updateScanUI(res.scanned_count, res.master_count, isPerfect);
+                
+                if (isPerfect) onPerfectMatch();
+            }
+        });
+    }
+
+    function updateScanUI(scanned, master, isPerfect) {
+        document.getElementById('scan-status-text').textContent = `${scanned} / ${master} Barcode Cocok`;
+        
+        let percentage = master > 0 ? (scanned / master) * 100 : 0;
+        const progress = document.getElementById('scan-progress-bar');
+        progress.style.width = percentage + '%';
+        
+        if (percentage >= 100) {
+            progress.classList.replace('bg-blue-600', 'bg-green-500');
+            document.getElementById('scan-status-text').classList.replace('text-blue-600', 'text-green-600');
+            document.getElementById('scan-status-text').classList.replace('bg-blue-100', 'bg-green-100');
+        } else {
+            progress.classList.replace('bg-green-500', 'bg-blue-600');
+            document.getElementById('scan-status-text').classList.replace('text-green-600', 'text-blue-600');
+            document.getElementById('scan-status-text').classList.replace('bg-green-100', 'bg-blue-100');
+        }
+    }
+
+    function onPerfectMatch() {
+        document.getElementById('scan_barcode_input').disabled = true;
+        document.getElementById('scan_barcode_input').placeholder = "Validasi selesai...";
+        document.getElementById('scan-success-message').classList.remove('hidden');
+        document.getElementById('save-btn').classList.remove('hidden');
     }
 </script>
 @endsection

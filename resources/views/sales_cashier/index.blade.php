@@ -32,14 +32,6 @@
             @endif
             <div class="row">
                 <div class="col-12">
-                    <!-- Add Button -->
-                    @if (Auth::user()->role != 'owner')
-                    <div class="d-flex justify-content-end mb-3">
-                        <a href="{{ route('cashier.create') }}" class="btn btn-primary">
-                            <i class="fas fa-plus"></i> Add
-                        </a>
-                    </div>
-                    @endif
 
                     <!-- Card Table -->
                     <div class="card">
@@ -65,49 +57,20 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @foreach ($kasirPenjualan as $item)
+                                    @forelse ($salesOrders as $so)
                                     <tr>
-                                        <td><a
-                                                href="{{ route('cashier.detail', $item->npj) }}">{{ $item->npj }}</a></td>
-                                        <td>{{ \Carbon\Carbon::parse($item->tanggal)->format('d-m-Y') }}</td>
-                                        <td>{{ $detailPP[$item->npj]['customer_name'] ?? '-' }}</td>
-                                        <td>{{ $detailPP[$item->npj]['description'] ?? '-' }}</td>
-                                        <td>{{ $detailPP[$item->npj]['status'] ?? '-' }}</td>
-                                        <td>{{ $detailPP[$item->npj]['total_amount'] ?? '-' }}</td>
+                                        <td>{{ $so['number'] ?? '-' }}</td>
+                                        <td>{{ !empty($so['transDate']) ? \Carbon\Carbon::createFromFormat('d/m/Y', $so['transDate'])->format('d-m-Y') : '-' }}</td>
+                                        <td>{{ $so['customer']['contactInfo']['name'] ?? ($so['customer']['name'] ?? '-') }}</td>
+                                        <td>{{ $so['description'] ?? '-' }}</td>
+                                        <td>{{ $so['statusName'] ?? '-' }}</td>
+                                        <td>{{ isset($so['totalAmount']) ? number_format($so['totalAmount'], 0, ',', '.') : '-' }}</td>
                                     </tr>
-
-                                    <!-- Modal Hapus -->
-                                    <div class="modal fade" id="modal-hapus{{ $item->id }}">
-                                        <div class="modal-dialog">
-                                            <div class="modal-content">
-                                                <div class="modal-header">
-                                                    <h4 class="modal-title">Konfirmasi Hapus</h4>
-                                                    <button type="button" class="close" data-dismiss="modal"
-                                                        aria-label="Close">
-                                                        <span aria-hidden="true">&times;</span>
-                                                    </button>
-                                                </div>
-                                                <div class="modal-body">
-                                                    <p>Apakah anda yakin ingin menghapus
-                                                        <strong>{{ $item->nbrg }}</strong>?
-                                                    </p>
-                                                </div>
-                                                <div class="modal-footer justify-content-between">
-                                                    <button type="button" class="btn btn-default"
-                                                        data-dismiss="modal">Batal</button>
-                                                    <form action="{{ route('barang-masuk.destroy', $item->id) }}"
-                                                        method="POST">
-                                                        @csrf
-                                                        @method('DELETE')
-                                                        <button type="submit" class="btn btn-danger">Ya,
-                                                            Hapus</button>
-                                                    </form>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <!-- End Modal -->
-                                    @endforeach
+                                    @empty
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted">Tidak ada data pesanan penjualan</td>
+                                    </tr>
+                                    @endforelse
                                 </tbody>
                             </table>
                         </div>

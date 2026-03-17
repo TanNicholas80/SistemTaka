@@ -363,29 +363,14 @@
                         </li>
 
                         <li
-                            class="nav-item {{ Request::routeIs('pelanggan.*') || Request::routeIs('cashier.*') || Request::routeIs('pengiriman_pesanan.*') || Request::routeIs('faktur_penjualan.*') || Request::routeIs('retur_penjualan.*') ? 'menu-open' : '' }}">
+                            class="nav-item {{ Request::routeIs('pelanggan.*') || Request::routeIs('cashier.*') || Request::routeIs('pengiriman_pesanan.*') || Request::routeIs('retur_penjualan.*') ? 'menu-open' : '' }}">
                             <a href="#"
-                                class="nav-link {{ Request::routeIs('pelanggan.*') || Request::routeIs('cashier.*') || Request::routeIs('pengiriman_pesanan.*') || Request::routeIs('faktur_penjualan.*') || Request::routeIs('retur_penjualan.*') ? 'active' : '' }}">
+                                class="nav-link {{ Request::routeIs('pelanggan.*') || Request::routeIs('cashier.*') || Request::routeIs('pengiriman_pesanan.*') || Request::routeIs('retur_penjualan.*') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-tags"></i>
                                 <p>Penjualan <i class="right fas fa-angle-left"></i></p>
                             </a>
                             <ul class="nav nav-treeview">
-                                <li class="nav-item">
-                                    <a href="{{ route('pelanggan.index') }}"
-                                        class="nav-link {{ Request::is('pelanggan*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Pelanggan</p>
-                                    </a>
-                                </li>
-                                @if(Auth::user()->role !== 'owner')
-                                <li class="nav-item">
-                                    <a href="{{ route('cashier.create') }}"
-                                        class="nav-link {{ Request::routeIs('cashier.create') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Sales Cashier</p>
-                                    </a>
-                                </li>
-                                @endif
+
                                 <li class="nav-item">
                                     <a href="{{ route('cashier.index') }}"
                                         class="nav-link {{ Request::routeIs('cashier.index') ? 'active' : '' }}">
@@ -398,13 +383,6 @@
                                         class="nav-link {{ Request::routeIs('pengiriman_pesanan.*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Pengiriman Pesanan</p>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('faktur_penjualan.index') }}"
-                                        class="nav-link {{ Request::routeIs('faktur_penjualan.*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Faktur Penjualan</p>
                                     </a>
                                 </li>
                                 <li class="nav-item">
