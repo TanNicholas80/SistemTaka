@@ -552,14 +552,91 @@ class PengirimanPesananController extends Controller
                 // Check if the response contains the 'd' key
                 if (isset($responseData['d'])) {
                     $salesOrderDetail = $responseData['d'];
+                    $detailItems = $salesOrderDetail['detailItem'] ?? [];
 
-                    // Extract customer information
+                    // Fetch serial numbers per item via item/detail.do (using id)
+                    $serialNumberCache = [];
+                    foreach ($detailItems as $detail) {
+                        $itemId = $detail['item']['id'] ?? null;
+                        $itemNo = $detail['item']['no'] ?? null;
+                        $itemName = $detail['item']['name'] ?? '';
+                        if (!$itemId) continue;
+
+                        try {
+                            $itemTimestamp = Carbon::now()->toIso8601String();
+                            $itemSignature = hash_hmac('sha256', $itemTimestamp, $signatureSecret);
+
+                            $itemDetailUrl = $this->buildApiUrl($branch, 'item/detail.do');
+
+                            $itemResponse = Http::withoutVerifying()->withHeaders([
+                                'Authorization' => 'Bearer ' . $apiToken,
+                                'X-Api-Signature' => $itemSignature,
+                                'X-Api-Timestamp' => $itemTimestamp,
+                            ])->get($itemDetailUrl, [
+                                'id' => $itemId,
+                            ]);
+
+                            if ($itemResponse->successful()) {
+                                $itemJson = $itemResponse->json();
+                                // Accurate kadang mengembalikan SN di:
+                                // - d.detailSerialNumber (flat)
+                                // - d.detailOpenBalance[].detailSerialNumber (nested)
+                                $serialNumbers = $itemJson['d']['detailSerialNumber'] ?? [];
+                                if (empty($serialNumbers)) {
+                                    $openBalances = $itemJson['d']['detailOpenBalance'] ?? [];
+                                    if (is_array($openBalances)) {
+                                        foreach ($openBalances as $ob) {
+                                            $nested = $ob['detailSerialNumber'] ?? [];
+                                            if (is_array($nested) && !empty($nested)) {
+                                                $serialNumbers = array_merge($serialNumbers, $nested);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Log::info('item/detail.do response', [
+                                    'itemId' => $itemId,
+                                    'itemNo' => $itemNo,
+                                    'status' => $itemResponse->status(),
+                                    'has_serialNumbers' =>
+                                        isset($itemJson['d']['detailSerialNumber']) ||
+                                        (isset($itemJson['d']['detailOpenBalance']) && is_array($itemJson['d']['detailOpenBalance'])),
+                                    'serialNumberCount' => count($serialNumbers),
+                                ]);
+
+                                foreach ($serialNumbers as $sn) {
+                                    $snNumber = $sn['serialNumber']['number'] ?? null;
+                                    $snQty = (float) ($sn['quantity'] ?? 0);
+                                    if ($snNumber) {
+                                        $serialNumberCache[] = [
+                                            'barcode' => $snNumber,
+                                            'quantity' => $snQty,
+                                            'itemNo' => $itemNo,
+                                            'itemName' => $itemName,
+                                        ];
+                                    }
+                                }
+                            }
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to fetch item detail for serial numbers', [
+                                'itemId' => $itemId,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    }
+
+                    Log::info('Serial number cache built for SO', [
+                        'so_number' => $number,
+                        'total_serial_numbers' => count($serialNumberCache),
+                    ]);
+
                     $customerData = [
                         'success' => true,
-                        'detailItems' => $salesOrderDetail['detailItem'] ?? [],
+                        'detailItems' => $detailItems,
+                        'serialNumberCache' => $serialNumberCache,
                         'customerNo' => $salesOrderDetail['customer']['customerNo'] ?? null,
                         'customerName' => $salesOrderDetail['customer']['name'] ?? null,
-                        'transDate' => $salesOrderDetail['transDate'] ?? null, // Added transDate for validation
+                        'transDate' => $salesOrderDetail['transDate'] ?? null,
                         'message' => 'Customer data retrieved successfully'
                     ];
 
@@ -625,6 +702,7 @@ class PengirimanPesananController extends Controller
             'tanggal_pengiriman'    => 'required|date',
             'no_pengiriman'         => 'required|string|max:255|unique:pengiriman_pesanans,no_pengiriman',
             'detailItems'           => 'required|array|min:1',
+            'serials_json'          => 'nullable|string',
             'detailItems.*.kode'      => 'required|string',
             'detailItems.*.kuantitas' => 'required|numeric|min:0',
             'detailItems.*.harga'     => 'required|numeric|min:0',
@@ -672,70 +750,85 @@ class PengirimanPesananController extends Controller
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
-            // Query KasirPenjualan berdasarkan npj dan kode_customer
-            $kasirPenjualan = KasirPenjualan::where('npj', $validatedData['penjualan_id'])
-                ->where('kode_customer', $branch->customer_id)
-                ->first();
+            // Pengiriman Pesanan sekarang dibuat langsung dari Accurate (tanpa depend data KasirPenjualan lokal).
+            // Ambil Sales Order detail dari Accurate untuk kebutuhan metadata (alamat, term bayar, pajak, diskon, dll).
+            $salesOrderDetail = null;
+            $alamatFallback = null;
+            $keterangan = null;
+            $syaratBayar = null;
+            $kenaPajak = null;
+            $totalTermasukPajak = null;
+            $diskonKeseluruhan = 0;
 
-            if (!$kasirPenjualan) {
-                return back()->withInput()->with('error', 'Data Kasir Penjualan dengan NPJ ' . $validatedData['penjualan_id'] . ' tidak ditemukan.');
-            }
-
-            Log::info('KasirPenjualan data found:', [
-                'npj' => $kasirPenjualan->npj,
-                'customer' => $kasirPenjualan->customer,
-                'alamat' => $kasirPenjualan->alamat,
-                'syarat_bayar' => $kasirPenjualan->syarat_bayar,
-                'kena_pajak' => $kasirPenjualan->kena_pajak,
-                'total_termasuk_pajak' => $kasirPenjualan->total_termasuk_pajak,
-                'diskon_keseluruhan' => $kasirPenjualan->diskon_keseluruhan
-            ]);
-
-            // Fallback untuk mendapatkan alamat jika kosong dari database
-            $alamatFallback = $kasirPenjualan->alamat;
-            if (empty($alamatFallback)) {
-                Log::info('Alamat kosong dari KasirPenjualan, melakukan fallback ke API sales-order/detail.do', [
-                    'penjualan_id' => $validatedData['penjualan_id']
+            try {
+                $salesOrderResponse = Http::withoutVerifying()->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'X-Api-Signature' => $signature,
+                    'X-Api-Timestamp' => $timestamp,
+                ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
+                    'number' => $validatedData['penjualan_id']
                 ]);
 
-                try {
-                    // Buat instance HTTP client untuk sales order detail
-                    $salesOrderResponse = Http::withoutVerifying()->withHeaders([
-                        'Authorization' => 'Bearer ' . $apiToken,
-                        'X-Api-Signature' => $signature,
-                        'X-Api-Timestamp' => $timestamp,
-                    ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
-                        'number' => $validatedData['penjualan_id']
-                    ]);
+                Log::info('Sales Order Detail API Response for store:', [
+                    'status' => $salesOrderResponse->status(),
+                    'successful' => $salesOrderResponse->successful()
+                ]);
 
-                    Log::info('Sales Order Detail API Response for fallback:', [
-                        'status' => $salesOrderResponse->status(),
-                        'successful' => $salesOrderResponse->successful()
-                    ]);
+                if ($salesOrderResponse->successful() && isset($salesOrderResponse->json()['d'])) {
+                    $salesOrderDetail = $salesOrderResponse->json()['d'];
 
-                    if ($salesOrderResponse->successful() && isset($salesOrderResponse->json()['d'])) {
-                        $salesOrderDetail = $salesOrderResponse->json()['d'];
+                    $alamatFallback = $salesOrderDetail['toAddress'] ?? null;
+                    $keterangan = $salesOrderDetail['description'] ?? null;
+                    $syaratBayar = $salesOrderDetail['paymentTerm']['name'] ?? null;
+                    $kenaPajak = $salesOrderDetail['taxable'] ?? null;
+                    $totalTermasukPajak = $salesOrderDetail['inclusiveTax'] ?? null;
 
-                        // Ambil alamat dari customer di sales order detail
-                        if (isset($salesOrderDetail['toAddress']) && !empty($salesOrderDetail['toAddress'])) {
-                            $alamatFallback = $salesOrderDetail['toAddress'];
-                            Log::info('Alamat berhasil diambil dari sales order detail:', [
-                                'alamat' => $alamatFallback
-                            ]);
-                        } else {
-                            Log::warning('Alamat tidak ditemukan di sales order detail customer');
-                        }
-                    } else {
-                        Log::warning('Gagal mengambil sales order detail untuk fallback alamat', [
-                            'status' => $salesOrderResponse->status(),
-                            'body' => $salesOrderResponse->body()
-                        ]);
+                    // Diskon keseluruhan (jika ada) bisa berupa persen atau nominal
+                    $cashDiscPercent = $salesOrderDetail['cashDiscPercent'] ?? null;
+                    $cashDiscount = $salesOrderDetail['cashDiscount'] ?? null;
+                    if (!empty($cashDiscPercent)) {
+                        $diskonKeseluruhan = (float) $cashDiscPercent;
+                    } elseif (!empty($cashDiscount)) {
+                        $diskonKeseluruhan = (float) $cashDiscount;
                     }
-                } catch (\Exception $e) {
-                    Log::error('Exception saat fallback alamat dari sales order detail: ' . $e->getMessage(), [
-                        'penjualan_id' => $validatedData['penjualan_id'],
-                        'trace' => $e->getTraceAsString()
+                } else {
+                    Log::warning('Gagal mengambil sales order detail untuk store', [
+                        'status' => $salesOrderResponse->status(),
+                        'body' => $salesOrderResponse->body()
                     ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Exception saat mengambil sales order detail untuk store: ' . $e->getMessage(), [
+                    'penjualan_id' => $validatedData['penjualan_id'],
+                    'trace' => $e->getTraceAsString()
+                ]);
+            }
+
+            // Parse serial map dari frontend (hasil scan) jika ada
+            $serialsMap = [];
+            try {
+                $serialsRaw = $request->input('serials_json', '{}');
+                $decoded = json_decode($serialsRaw, true);
+                if (is_array($decoded)) $serialsMap = $decoded;
+            } catch (\Exception $e) {
+                Log::warning('Gagal parse serials_json', ['error' => $e->getMessage()]);
+            }
+
+            // Build lookup dari SO detail untuk itemUnitName & warehouseName
+            $soDetailItemLookup = [];
+            if (is_array($salesOrderDetail) && isset($salesOrderDetail['detailItem']) && is_array($salesOrderDetail['detailItem'])) {
+                foreach ($salesOrderDetail['detailItem'] as $d) {
+                    $itemNo = $d['item']['no'] ?? null;
+                    if (!$itemNo) continue;
+                    $soDetailItemLookup[$itemNo] = [
+                        'itemUnitName' => $d['itemUnit']['name'] ?? null,
+                        'warehouseName' =>
+                            $d['defaultWarehouseDeliveryOrder']['name'] ??
+                            $d['warehouse']['name'] ??
+                            null,
+                        'manageSN' => (bool) ($d['item']['manageSN'] ?? false),
+                        'serialNumberType' => $d['item']['serialNumberType'] ?? null,
+                    ];
                 }
             }
 
@@ -770,12 +863,39 @@ class PengirimanPesananController extends Controller
             // Format detail items untuk API Accurate
             $detailItemsForAccurate = [];
             foreach ($validatedData['detailItems'] as $item) {
+                $itemNo = $item['kode'];
+                $soMeta = $soDetailItemLookup[$itemNo] ?? [];
                 $accurateItem = [
-                    "itemNo"    => $item['kode'],
-                    "quantity"  => $item['kuantitas'],
-                    "unitPrice" => $item['harga'],
+                    "itemNo"    => $itemNo,
+                    "quantity"  => (float) $item['kuantitas'],
+                    "unitPrice" => (float) $item['harga'],
                     "salesOrderNumber" => $validatedData['penjualan_id'],
                 ];
+
+                // Sertakan unit & gudang bila tersedia (sering dibutuhkan Accurate)
+                if (!empty($soMeta['itemUnitName'])) {
+                    $accurateItem['itemUnitName'] = $soMeta['itemUnitName'];
+                }
+                if (!empty($soMeta['warehouseName'])) {
+                    $accurateItem['warehouseName'] = $soMeta['warehouseName'];
+                }
+
+                // Jika item manageSN (BATCH/SERIAL), sertakan detailSerialNumber dari hasil scan
+                $serialsForItem = $serialsMap[$itemNo] ?? null;
+                if (is_array($serialsForItem) && !empty($serialsForItem)) {
+                    $detailSerialNumber = [];
+                    foreach ($serialsForItem as $snNo => $snQty) {
+                        $snNo = trim((string) $snNo);
+                        if ($snNo === '') continue;
+                        $detailSerialNumber[] = [
+                            'serialNumberNo' => $snNo,
+                            'quantity' => (float) $snQty,
+                        ];
+                    }
+                    if (!empty($detailSerialNumber)) {
+                        $accurateItem['detailSerialNumber'] = $detailSerialNumber;
+                    }
+                }
 
                 // --- LOGIKA UTAMA: Kondisi Diskon ---
                 // Cek apakah ada diskon dan nilainya lebih dari 0
@@ -803,21 +923,19 @@ class PengirimanPesananController extends Controller
                 "detailItem"        => $detailItemsForAccurate,
             ];
 
-            // Set alamat dari KasirPenjualan atau fallback dari sales order detail
+            // Set alamat dari sales order detail (jika ada)
             if (!empty($alamatFallback)) {
                 $postDataForAccurate['toAddress'] = $alamatFallback;
             }
 
-            if (!empty($kasirPenjualan->keterangan)) {
-                $postDataForAccurate['description'] = $kasirPenjualan->keterangan;
+            if (!empty($keterangan)) {
+                $postDataForAccurate['description'] = $keterangan;
             }
 
-            // Set syarat bayar dari KasirPenjualan atau default C.O.D
-            $syaratBayar = !empty($kasirPenjualan->syarat_bayar) ? $kasirPenjualan->syarat_bayar : 'C.O.D';
-            $postDataForAccurate['paymentTermName'] = $syaratBayar;
+            // Set syarat bayar dari SO Accurate jika ada, fallback ke C.O.D
+            $postDataForAccurate['paymentTermName'] = !empty($syaratBayar) ? $syaratBayar : 'C.O.D';
 
-            // Set diskon keseluruhan dari KasirPenjualan
-            $diskonKeseluruhan = $kasirPenjualan->diskon_keseluruhan ?? 0;
+            // Set diskon keseluruhan (jika ada)
             if ($diskonKeseluruhan > 0) {
                 $diskonKeseluruhan = (float) $diskonKeseluruhan;
 
@@ -831,14 +949,14 @@ class PengirimanPesananController extends Controller
                 }
             }
 
-            // Set kena pajak dari KasirPenjualan
-            if (isset($kasirPenjualan->kena_pajak)) {
-                $postDataForAccurate['taxable'] = $kasirPenjualan->kena_pajak;
+            // Set pajak dari SO Accurate jika tersedia
+            if (!is_null($kenaPajak)) {
+                $postDataForAccurate['taxable'] = $kenaPajak;
             }
 
-            // Set total termasuk pajak dari KasirPenjualan
-            if (isset($kasirPenjualan->total_termasuk_pajak)) {
-                $postDataForAccurate['inclusiveTax'] = $kasirPenjualan->total_termasuk_pajak;
+            // Set inclusive tax dari SO Accurate jika tersedia
+            if (!is_null($totalTermasukPajak)) {
+                $postDataForAccurate['inclusiveTax'] = $totalTermasukPajak;
             }
 
             Log::info('PostDataForAccurate prepared for delivery order:', $postDataForAccurate);
@@ -850,6 +968,11 @@ class PengirimanPesananController extends Controller
                 'X-Api-Timestamp' => $timestamp,
                 'Content-Type'  => 'application/json',
             ])->post($this->buildApiUrl($branch, 'delivery-order/save.do'), $postDataForAccurate);
+
+            Log::info('Delivery Order save.do response', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
 
             // Validasi response dari API Accurate
             if (!$response->successful()) {
@@ -873,11 +996,11 @@ class PengirimanPesananController extends Controller
                 'tanggal_pengiriman' => $validatedData['tanggal_pengiriman'],
                 'no_pengiriman' => $validatedData['no_pengiriman'],
                 'alamat' => $alamatFallback,
-                'keterangan' => $kasirPenjualan->keterangan,
-                'syarat_bayar' => $kasirPenjualan->syarat_bayar,
-                'kena_pajak' => $kasirPenjualan->kena_pajak,
-                'total_termasuk_pajak' => $kasirPenjualan->total_termasuk_pajak,
-                'diskon_keseluruhan' => $kasirPenjualan->diskon_keseluruhan,
+                'keterangan' => $keterangan,
+                'syarat_bayar' => $syaratBayar,
+                'kena_pajak' => $kenaPajak,
+                'total_termasuk_pajak' => $totalTermasukPajak,
+                'diskon_keseluruhan' => $diskonKeseluruhan,
                 'kode_customer' => $branch->customer_id,
             ]);
 

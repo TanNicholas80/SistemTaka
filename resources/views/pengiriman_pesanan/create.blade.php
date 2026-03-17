@@ -258,8 +258,14 @@
         // Variabel untuk menyimpan detail items
         let detailItems = [];
 
+        // Cache serial numbers dari Accurate (diisi saat klik Lanjut)
+        let serialNumberCache = [];
+
         // Variabel validasi barcode
         let scannedItemsQuantities = {};
+        // Menyimpan detail scan per item (barcode -> qty) untuk dikirim saat Save
+        // Struktur: { [itemNo]: { [barcode]: qty } }
+        let scannedSerialMap = {};
         let totalTargetQuantity = 0;
         let totalScannedQuantity = 0;
 
@@ -514,72 +520,127 @@
                 const barcode = input.value.trim();
                 if (!barcode) return;
 
-                input.disabled = true;
+                // Jika ada serial number cache dari Accurate, gunakan itu
+                if (serialNumberCache.length > 0) {
+                    input.value = '';
+                    input.focus();
+                    handleCachedScan(barcode);
+                } else {
+                    // Fallback: scan via local DB
+                    input.disabled = true;
+                    handleLocalDbScan(barcode, input);
+                }
+            }
+        }
 
-                fetch('{{ route("temp_scan.scan_outbound") }}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({
-                        barcode: barcode
-                    })
-                })
-                    .then(res => res.json())
-                    .then(data => {
-                        input.disabled = false;
-                        input.value = '';
-                        input.focus();
+        function handleCachedScan(barcode) {
+            const cachedEntry = serialNumberCache.find(sn => sn.barcode === barcode);
 
-                        if (data.status === 'success') {
-                            // Cek kode_barang atau alias_nama yang match dengan item.no (atau item.name) di sales order 
-                            let matchedItemIndex = detailItems.findIndex(i =>
-                                i.item && (
-                                    i.item.no === data.data.kode_barang ||
-                                    i.item.no === data.data.alias_nama ||
-                                    i.item.name === data.data.keterangan
-                                )
-                            );
+            if (!cachedEntry) {
+                Swal.fire({ icon: 'error', title: 'Tidak Ditemukan', text: `Barcode (${barcode}) tidak ada di dalam daftar serial number item SO!` });
+                return;
+            }
 
-                            if (matchedItemIndex !== -1) {
-                                let requiredQty = parseFloat(detailItems[matchedItemIndex].quantity || 0);
-                                let kodeUnik = detailItems[matchedItemIndex].item.no;
-                                let currentScanned = scannedItemsQuantities[kodeUnik] || 0;
-                                let barcodeQty = data.data.panjang_mlc || 0;
+            const matchedItemIndex = detailItems.findIndex(i =>
+                i.item && i.item.no === cachedEntry.itemNo
+            );
 
-                                // Menghindari floating point error
-                                let newQty = currentScanned + barcodeQty;
-                                newQty = Math.round(newQty * 1000) / 1000;
-                                requiredQty = Math.round(requiredQty * 1000) / 1000;
+            if (matchedItemIndex === -1) {
+                Swal.fire({ icon: 'error', title: 'Tidak Cocok', text: `Item (${cachedEntry.itemName}) tidak ditemukan di detail SO!` });
+                return;
+            }
 
-                                if (newQty > requiredQty) {
-                                    Swal.fire({ icon: 'warning', title: 'Kelebihan Kuantitas', text: `Scan barcode ini menghasilkan ${newQty} yang melebihi qty dipesan SO (${requiredQty})!` });
-                                } else {
-                                    scannedItemsQuantities[kodeUnik] = newQty;
-                                    totalScannedQuantity += barcodeQty;
-                                    totalScannedQuantity = Math.round(totalScannedQuantity * 1000) / 1000;
-                                    updateScanProgress();
+            processScanResult(matchedItemIndex, cachedEntry.quantity, barcode, cachedEntry.itemName);
+        }
 
-                                    // Highlight the row visually
-                                    let rows = document.getElementById('table-barang-body').getElementsByTagName('tr');
-                                    if (rows[matchedItemIndex]) {
-                                        rows[matchedItemIndex].classList.add('bg-green-100');
-                                        setTimeout(() => rows[matchedItemIndex].classList.remove('bg-green-100'), 1500);
-                                    }
-                                }
-                            } else {
-                                Swal.fire({ icon: 'error', title: 'Tidak Cocok', text: `Barang (${data.data.kode_barang}) tidak ada di dalam detail pesanan SO!` });
-                            }
-                        } else {
-                            Swal.fire({ icon: 'error', title: 'Error Scan', text: data.message });
-                        }
-                    })
-                    .catch(err => {
-                        input.disabled = false;
-                        input.focus();
-                        Swal.fire({ icon: 'error', title: 'System Error', text: err.toString() });
+        function handleLocalDbScan(barcode, input) {
+            fetch('{{ route("temp_scan.scan_outbound") }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ barcode: barcode })
+            })
+            .then(res => res.json())
+            .then(data => {
+                input.disabled = false;
+                input.value = '';
+                input.focus();
+
+                if (data.status === 'success') {
+                    let mcf = (data.data.material_code_formatted || '').trim();
+                    let matchedItemIndex = detailItems.findIndex(i => {
+                        if (!i.item) return false;
+                        const itemNo = (i.item.no || '').trim();
+                        const itemName = (i.item.name || '').trim();
+                        return (
+                            itemNo === data.data.kode_barang ||
+                            itemNo === data.data.alias_nama ||
+                            itemNo === mcf ||
+                            (mcf && itemNo.startsWith(mcf)) ||
+                            (mcf && mcf.startsWith(itemNo)) ||
+                            itemName === data.data.keterangan
+                        );
                     });
+
+                    if (matchedItemIndex !== -1) {
+                        const qtyFromDb = (data.data.panjang_mlc ?? data.data.length ?? 0);
+                        processScanResult(matchedItemIndex, qtyFromDb, barcode, detailItems[matchedItemIndex].item.name);
+                    } else {
+                        Swal.fire({ icon: 'error', title: 'Tidak Cocok', text: `Barang (${data.data.kode_barang}) tidak ada di dalam detail pesanan SO!` });
+                    }
+                } else {
+                    Swal.fire({ icon: 'error', title: 'Error Scan', text: data.message });
+                }
+            })
+            .catch(err => {
+                input.disabled = false;
+                input.focus();
+                Swal.fire({ icon: 'error', title: 'System Error', text: err.toString() });
+            });
+        }
+
+        function processScanResult(matchedItemIndex, barcodeQty, barcode, itemName) {
+            let requiredQty = parseFloat(detailItems[matchedItemIndex].quantity || 0);
+            let kodeUnik = detailItems[matchedItemIndex].item.no;
+            let currentScanned = scannedItemsQuantities[kodeUnik] || 0;
+
+            let newQty = currentScanned + barcodeQty;
+            newQty = Math.round(newQty * 1000) / 1000;
+            requiredQty = Math.round(requiredQty * 1000) / 1000;
+
+            if (newQty > requiredQty) {
+                Swal.fire({ icon: 'warning', title: 'Kelebihan Kuantitas', text: `Scan barcode ini menghasilkan ${newQty} yang melebihi qty dipesan SO (${requiredQty})!` });
+            } else {
+                scannedItemsQuantities[kodeUnik] = newQty;
+                totalScannedQuantity += barcodeQty;
+                totalScannedQuantity = Math.round(totalScannedQuantity * 1000) / 1000;
+                updateScanProgress();
+
+                // Simpan detail serial yang discan (per itemNo)
+                if (!scannedSerialMap[kodeUnik]) scannedSerialMap[kodeUnik] = {};
+                const prev = scannedSerialMap[kodeUnik][barcode] || 0;
+                let next = prev + (parseFloat(barcodeQty) || 0);
+                next = Math.round(next * 1000) / 1000;
+                scannedSerialMap[kodeUnik][barcode] = next;
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Barcode Valid',
+                    text: `${barcode} → ${itemName} (${barcodeQty})`,
+                    timer: 1500,
+                    timerProgressBar: true,
+                    showConfirmButton: false,
+                    toast: true,
+                    position: 'top-end'
+                });
+
+                let rows = document.getElementById('table-barang-body').getElementsByTagName('tr');
+                if (rows[matchedItemIndex]) {
+                    rows[matchedItemIndex].classList.add('bg-green-100');
+                    setTimeout(() => rows[matchedItemIndex].classList.remove('bg-green-100'), 1500);
+                }
             }
         }
 
@@ -711,7 +772,8 @@
                             customerDisplay: customerDisplay,
                             customerNo: customerNo,
                             detailItems: data.detailItems || [],
-                            transDate: data.transDate || '' // Capture transDate
+                            serialNumberCache: data.serialNumberCache || [],
+                            transDate: data.transDate || ''
                         };
                     } else {
                         if (updateCustomerOnly) {
@@ -836,6 +898,10 @@
 
                         // Store detail items
                         detailItems = response.detailItems;
+
+                        // Store serial number cache dari Accurate
+                        serialNumberCache = response.serialNumberCache || [];
+                        console.log('Serial number cache loaded:', serialNumberCache.length, 'barcodes');
 
                         // Store SO trans date for validation
                         formData.so_trans_date = response.transDate;
@@ -1140,6 +1206,15 @@
                         form.appendChild(input);
                     });
                 });
+
+                // Kirim juga detail serial/barcode yang discan (untuk item manageSN=BATCH)
+                const existingSerialMapInputs = form.querySelectorAll('input[name="serials_json"]');
+                existingSerialMapInputs.forEach(input => input.remove());
+                const serialMapInput = document.createElement('input');
+                serialMapInput.type = 'hidden';
+                serialMapInput.name = 'serials_json';
+                serialMapInput.value = JSON.stringify(scannedSerialMap || {});
+                form.appendChild(serialMapInput);
 
                 // Set form_submitted flag
                 formSubmittedInput.value = '1';
