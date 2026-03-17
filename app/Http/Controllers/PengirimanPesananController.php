@@ -101,7 +101,7 @@ class PengirimanPesananController extends Controller
             ];
 
             // Fetch delivery order IDs from the API
-            $firstPageResponse = Http::withHeaders([
+            $firstPageResponse = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -304,7 +304,7 @@ class PengirimanPesananController extends Controller
         // Get sales orders directly from API without caching
         $salesOrders = $this->getSalesOrdersFromAccurate($branch);
 
-        $selectedTanggal = date('Y-m-d');
+        $selectedTanggal = '';
         $formReadonly = false;
         $no_pengiriman = PengirimanPesanan::generateNoPengiriman();
 
@@ -340,28 +340,31 @@ class PengirimanPesananController extends Controller
     /**
      * Fetch all sales orders with parallel processing dan pagination handling
      */
+    /**
+     * Fetch all sales orders with parallel processing dan pagination handling
+     */
     private function fetchAllSalesOrders($apiToken, $signature, $timestamp, Branch $branch)
     {
         $salesOrderApiUrl = $this->buildApiUrl($branch, 'sales-order/list.do');
         $data = [
             'sp.page' => 1,
             'sp.pageSize' => 20,
-            'fields' => 'number,customer'
         ];
 
-        $firstPageResponse = Http::withHeaders([
+        $firstPageResponse = Http::withoutVerifying()->withHeaders([
             'Authorization' => 'Bearer ' . $apiToken,
             'X-Api-Signature' => $signature,
             'X-Api-Timestamp' => $timestamp,
         ])->get($salesOrderApiUrl, $data);
 
-        $allSalesOrders = [];
+        $allSalesOrderIds = [];
 
         if ($firstPageResponse->successful()) {
             $responseData = $firstPageResponse->json();
+            Log::info('Accurate SO list response for DO (IDs only):', ['response' => $responseData]);
 
             if (isset($responseData['d']) && is_array($responseData['d'])) {
-                $allSalesOrders = $responseData['d'];
+                $allSalesOrderIds = $responseData['d'];
 
                 // Hitung total halaman berdasarkan sp.rowCount jika tersedia
                 $totalItems = $responseData['sp']['rowCount'] ?? 0;
@@ -374,6 +377,7 @@ class PengirimanPesananController extends Controller
 
                     for ($page = 2; $page <= $totalPages; $page++) {
                         $promises[$page] = $client->getAsync($salesOrderApiUrl, [
+                            'verify' => false,
                             'headers' => [
                                 'Authorization' => 'Bearer ' . $apiToken,
                                 'X-Api-Signature' => $signature,
@@ -382,7 +386,6 @@ class PengirimanPesananController extends Controller
                             'query' => [
                                 'sp.page' => $page,
                                 'sp.pageSize' => 20,
-                                'fields' => 'number,customer'
                             ]
                         ]);
                     }
@@ -393,7 +396,7 @@ class PengirimanPesananController extends Controller
                         if ($result['state'] === 'fulfilled') {
                             $pageResponse = json_decode($result['value']->getBody(), true);
                             if (isset($pageResponse['d']) && is_array($pageResponse['d'])) {
-                                $allSalesOrders = array_merge($allSalesOrders, $pageResponse['d']);
+                                $allSalesOrderIds = array_merge($allSalesOrderIds, $pageResponse['d']);
                             }
                         } else {
                             Log::error("Failed to fetch sales orders page {$page}: " . $result['reason']);
@@ -409,9 +412,12 @@ class PengirimanPesananController extends Controller
             return [];
         }
 
-        // Get all existing penjualan_id from local database filtered by kode_customer
-        $existingPenjualanIds = PengirimanPesanan::where('kode_customer', $branch->customer_id)
-            ->pluck('penjualan_id')
+        // Ambil detail untuk setiap SO ID secara paralel dalam batch
+        $batchResult = $this->fetchSalesOrderDetailsInBatches($allSalesOrderIds, $branch, $apiToken, $signature, $timestamp);
+        $allSalesOrders = $batchResult['details'];
+
+        // Get all existing penjualan_id from local database
+        $existingPenjualanIds = PengirimanPesanan::pluck('penjualan_id')
             ->toArray();
 
         // Filter out sales orders that already exist in local database
@@ -422,13 +428,67 @@ class PengirimanPesananController extends Controller
         // Reset array indexes after filtering
         $salesOrders = array_values($salesOrders);
 
-        Log::info('Sales Orders filtered successfully:', [
-            'total_from_api' => count($allSalesOrders),
+        Log::info('Sales Orders fully detailed and filtered:', [
+            'total_ids_from_api' => count($allSalesOrderIds),
+            'total_detailed' => count($allSalesOrders),
             'existing_in_database' => count($existingPenjualanIds),
             'filtered_available' => count($salesOrders)
         ]);
 
         return $salesOrders;
+    }
+
+    /**
+     * Mengambil detail sales order dalam batch untuk mengoptimalkan performa
+     */
+    private function fetchSalesOrderDetailsInBatches($salesOrders, $branch, $apiToken, $signature, $timestamp, $batchSize = 10)
+    {
+        $salesOrderDetails = [];
+        $batches = array_chunk($salesOrders, $batchSize);
+        $hasApiError = false;
+
+        foreach ($batches as $batch) {
+            $promises = [];
+            $client = new \GuzzleHttp\Client();
+
+            foreach ($batch as $order) {
+                if (!isset($order['id'])) continue;
+                
+                $detailUrl = $this->buildApiUrl($branch, 'sales-order/detail.do?id=' . $order['id']);
+                $promises[$order['id']] = $client->getAsync($detailUrl, [
+                    'verify' => false,
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $apiToken,
+                        'X-Api-Signature' => $signature,
+                        'X-Api-Timestamp' => $timestamp,
+                    ]
+                ]);
+            }
+
+            if (empty($promises)) continue;
+
+            $results = Utils::settle($promises)->wait();
+
+            foreach ($results as $orderId => $result) {
+                if ($result['state'] === 'fulfilled') {
+                    $detailResponse = json_decode($result['value']->getBody(), true);
+                    if (isset($detailResponse['d'])) {
+                        $salesOrderDetails[] = $detailResponse['d'];
+                    }
+                } else {
+                    Log::error("Failed to fetch sales order detail for ID {$orderId}: " . $result['reason']->getMessage());
+                    $hasApiError = true;
+                }
+            }
+
+            // Small delay to prevent rate limits
+            usleep(100000); // 100ms
+        }
+
+        return [
+            'details' => $salesOrderDetails,
+            'has_error' => $hasApiError
+        ];
     }
 
     public function getCustomerByAjax($number)
@@ -470,7 +530,7 @@ class PengirimanPesananController extends Controller
 
         try {
             // Make API request to get sales order detail
-            $response = Http::withHeaders([
+            $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -499,6 +559,7 @@ class PengirimanPesananController extends Controller
                         'detailItems' => $salesOrderDetail['detailItem'] ?? [],
                         'customerNo' => $salesOrderDetail['customer']['customerNo'] ?? null,
                         'customerName' => $salesOrderDetail['customer']['name'] ?? null,
+                        'transDate' => $salesOrderDetail['transDate'] ?? null, // Added transDate for validation
                         'message' => 'Customer data retrieved successfully'
                     ];
 
@@ -639,7 +700,7 @@ class PengirimanPesananController extends Controller
 
                 try {
                     // Buat instance HTTP client untuk sales order detail
-                    $salesOrderResponse = Http::withHeaders([
+                    $salesOrderResponse = Http::withoutVerifying()->withHeaders([
                         'Authorization' => 'Bearer ' . $apiToken,
                         'X-Api-Signature' => $signature,
                         'X-Api-Timestamp' => $timestamp,
@@ -675,6 +736,34 @@ class PengirimanPesananController extends Controller
                         'penjualan_id' => $validatedData['penjualan_id'],
                         'trace' => $e->getTraceAsString()
                     ]);
+                }
+            }
+
+            // --- VALIDASI TANGGAL (SERVER SIDE) ---
+            // Ambil info detail SO jika belum ada (dari fallback alamat di atas mungkin sudah ada, tapi mari pastikan)
+            $soTransDate = null;
+            try {
+                $soDetailResponse = Http::withoutVerifying()->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'X-Api-Signature' => $signature,
+                    'X-Api-Timestamp' => $timestamp,
+                ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
+                    'number' => $validatedData['penjualan_id']
+                ]);
+
+                if ($soDetailResponse->successful() && isset($soDetailResponse->json()['d'])) {
+                    $soTransDate = $soDetailResponse->json()['d']['transDate']; // Format DD/MM/YYYY
+                }
+            } catch (\Exception $e) {
+                Log::error('Gagal mengambil tanggal SO untuk validasi: ' . $e->getMessage());
+            }
+
+            if ($soTransDate) {
+                $soDateObj = Carbon::createFromFormat('d/m/Y', $soTransDate);
+                $doDateObj = Carbon::parse($validatedData['tanggal_pengiriman']);
+
+                if ($doDateObj->lt($soDateObj)) {
+                    return back()->withInput()->with('error', "Tanggal Pengiriman Pesanan tidak dapat lebih kecil dari tanggal Pesanan Penjualan {$validatedData['penjualan_id']}.");
                 }
             }
 
@@ -755,7 +844,7 @@ class PengirimanPesananController extends Controller
             Log::info('PostDataForAccurate prepared for delivery order:', $postDataForAccurate);
 
             // Kirim data ke API Accurate (delivery-order endpoint)
-            $response = Http::withHeaders([
+            $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -863,7 +952,7 @@ class PengirimanPesananController extends Controller
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
             // Buat instance HTTP client sekali saja untuk digunakan berulang kali
-            $httpClient = Http::withHeaders([
+            $httpClient = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
