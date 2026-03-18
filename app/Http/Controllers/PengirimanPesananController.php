@@ -29,12 +29,12 @@ class PengirimanPesananController extends Controller
         $baseUrl = $branch->url_accurate ?? 'https://iris.accurate.id';
         $baseUrl = rtrim($baseUrl, '/');
         $apiPath = '/accurate/api';
-        
+
         // Jika url_accurate sudah termasuk path /accurate/api, gunakan langsung
         if (strpos($baseUrl, '/accurate/api') !== false) {
             return $baseUrl . '/' . ltrim($endpoint, '/');
         }
-        
+
         return $baseUrl . $apiPath . '/' . ltrim($endpoint, '/');
     }
 
@@ -169,12 +169,12 @@ class PengirimanPesananController extends Controller
                     // Setelah mendapatkan semua ID delivery order, ambil detail untuk masing-masing secara batch
                     $detailsResult = $this->fetchDeliveryOrderDetailsInBatches($allDeliveryOrders, $branch, $apiToken, $signature, $timestamp);
                     $pengirimanPesanan = $detailsResult['details'];
-                    
+
                     // Cek jika ada error dari proses fetch detail
                     if ($detailsResult['has_error']) {
                         $hasApiError = true;
                     }
-                    
+
                     $apiSuccess = true;
                     Log::info('Data delivery order dari API berhasil diambil');
                 } else {
@@ -204,12 +204,27 @@ class PengirimanPesananController extends Controller
             if (Cache::has($cacheKey)) {
                 $cachedData = Cache::get($cacheKey);
                 $pengirimanPesanan = $cachedData['pengirimanPesanan'] ?? [];
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
                 Log::info('Data delivery order diambil dari cache karena API error');
             } else {
-                if (is_null($errorMessage)) $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache tersedia.';
+                if (is_null($errorMessage))
+                    $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache tersedia.';
                 Log::warning('Tidak ada cache tersedia, menampilkan data kosong');
             }
+        }
+
+        // Merge is_partial dari database lokal berdasarkan nomor DO
+        if (!empty($pengirimanPesanan)) {
+            $localDoMap = PengirimanPesanan::where('kode_customer', $branch->customer_id)
+                ->pluck('is_partial', 'no_pengiriman')
+                ->toArray();
+
+            $pengirimanPesanan = array_map(function ($item) use ($localDoMap) {
+                $nomor = $item['number'] ?? null;
+                $item['is_partial'] = $nomor && isset($localDoMap[$nomor]) ? (bool) $localDoMap[$nomor] : false;
+                return $item;
+            }, $pengirimanPesanan);
         }
 
         // Simpan data ke cache
@@ -235,7 +250,7 @@ class PengirimanPesananController extends Controller
 
         foreach ($batches as $batch) {
             $promises = [];
-            $client = new \GuzzleHttp\Client();
+            $client = new \GuzzleHttp\Client(['verify' => false]);
 
             foreach ($batch as $order) {
                 $detailUrl = $this->buildApiUrl($branch, 'delivery-order/detail.do?id=' . $order['id']);
@@ -248,7 +263,8 @@ class PengirimanPesananController extends Controller
                 ]);
             }
 
-            if (empty($promises)) continue;
+            if (empty($promises))
+                continue;
 
             // Jalankan batch promise secara paralel
             $results = Utils::settle($promises)->wait();
@@ -264,7 +280,7 @@ class PengirimanPesananController extends Controller
                 } else {
                     $reason = $result['reason'];
                     Log::error("Failed to fetch delivery order detail for ID {$orderId}: " . $reason->getMessage());
-                    
+
                     // Check if it's a rate limiting error
                     if ($reason instanceof \GuzzleHttp\Exception\ClientException && $reason->getResponse()->getStatusCode() == 429) {
                         $hasApiError = true;
@@ -416,13 +432,16 @@ class PengirimanPesananController extends Controller
         $batchResult = $this->fetchSalesOrderDetailsInBatches($allSalesOrderIds, $branch, $apiToken, $signature, $timestamp);
         $allSalesOrders = $batchResult['details'];
 
-        // Get all existing penjualan_id from local database
-        $existingPenjualanIds = PengirimanPesanan::pluck('penjualan_id')
-            ->toArray();
+        $salesOrders = array_filter($allSalesOrders, function ($salesOrder) {
+            $status = strtoupper($salesOrder['status'] ?? '');
+            $percentShipped = (float) ($salesOrder['percentShipped'] ?? 0);
 
-        // Filter out sales orders that already exist in local database
-        $salesOrders = array_filter($allSalesOrders, function ($salesOrder) use ($existingPenjualanIds) {
-            return !in_array($salesOrder['number'], $existingPenjualanIds);
+            if ($status === 'PROCESSED')
+                return false;
+            if ($percentShipped >= 100)
+                return false;
+
+            return true;
         });
 
         // Reset array indexes after filtering
@@ -431,7 +450,6 @@ class PengirimanPesananController extends Controller
         Log::info('Sales Orders fully detailed and filtered:', [
             'total_ids_from_api' => count($allSalesOrderIds),
             'total_detailed' => count($allSalesOrders),
-            'existing_in_database' => count($existingPenjualanIds),
             'filtered_available' => count($salesOrders)
         ]);
 
@@ -452,8 +470,9 @@ class PengirimanPesananController extends Controller
             $client = new \GuzzleHttp\Client();
 
             foreach ($batch as $order) {
-                if (!isset($order['id'])) continue;
-                
+                if (!isset($order['id']))
+                    continue;
+
                 $detailUrl = $this->buildApiUrl($branch, 'sales-order/detail.do?id=' . $order['id']);
                 $promises[$order['id']] = $client->getAsync($detailUrl, [
                     'verify' => false,
@@ -465,7 +484,8 @@ class PengirimanPesananController extends Controller
                 ]);
             }
 
-            if (empty($promises)) continue;
+            if (empty($promises))
+                continue;
 
             $results = Utils::settle($promises)->wait();
 
@@ -536,8 +556,8 @@ class PengirimanPesananController extends Controller
                 'X-Api-Timestamp' => $timestamp,
                 'Content-Type' => 'application/json',
             ])->get($detailApiUrl, [
-                'number' => $number
-            ]);
+                        'number' => $number
+                    ]);
 
             // Log the response for debugging
             Log::info('Sales Order Detail API Response for number ' . $number . ':', [
@@ -552,8 +572,140 @@ class PengirimanPesananController extends Controller
                 // Check if the response contains the 'd' key
                 if (isset($responseData['d'])) {
                     $salesOrderDetail = $responseData['d'];
+                    $detailItems = $salesOrderDetail['detailItem'] ?? [];
 
-                    // Extract customer information
+                    // Fetch associated Delivery Orders to calculate remaining quantity
+                    $shippedQuantities = [];
+                    try {
+                        // Ambil DO lokal yang terkait SO ini
+                        $localDOs = PengirimanPesanan::where('penjualan_id', $number)
+                            ->where('kode_customer', $branch->customer_id)
+                            ->pluck('no_pengiriman')
+                            ->toArray();
+
+                        if (!empty($localDOs)) {
+                            foreach ($localDOs as $doNumber) {
+                                $doDetailResponse = Http::withoutVerifying()->withHeaders([
+                                    'Authorization' => 'Bearer ' . $apiToken,
+                                    'X-Api-Signature' => $signature,
+                                    'X-Api-Timestamp' => $timestamp,
+                                ])->get($this->buildApiUrl($branch, 'delivery-order/detail.do'), [
+                                            'number' => $doNumber
+                                        ]);
+
+                                if ($doDetailResponse->successful()) {
+                                    $doDetail = $doDetailResponse->json()['d'] ?? null;
+                                    if ($doDetail) {
+                                        foreach ($doDetail['detailItem'] ?? [] as $di) {
+                                            $itemNo = $di['item']['no'] ?? null;
+                                            $qty = (float) ($di['quantity'] ?? 0);
+                                            if ($itemNo) {
+                                                $shippedQuantities[$itemNo] = ($shippedQuantities[$itemNo] ?? 0) + $qty;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Log::info('Shipped quantities calculated:', [
+                            'so_number' => $number,
+                            'local_dos' => $localDOs,
+                            'shipped' => $shippedQuantities
+                        ]);
+
+                    } catch (\Exception $e) {
+                        Log::warning('Failed to fetch associated DOs for quantity calculation', [
+                            'so_number' => $number,
+                            'error' => $e->getMessage()
+                        ]);
+                    }
+
+                    // Adjust SO item quantities based on already shipped amounts
+                    foreach ($detailItems as &$detail) {
+                        $itemNo = $detail['item']['no'] ?? null;
+                        if ($itemNo && isset($shippedQuantities[$itemNo])) {
+                            $originalQty = (float) ($detail['quantity'] ?? 0);
+                            $alreadyShipped = (float) $shippedQuantities[$itemNo];
+                            $remainingQty = max(0, $originalQty - $alreadyShipped);
+
+                            Log::info("Adjusting item quantity:", [
+                                'item' => $itemNo,
+                                'original' => $originalQty,
+                                'shipped' => $alreadyShipped,
+                                'remaining' => $remainingQty
+                            ]);
+
+                            $detail['quantity'] = $remainingQty;
+                        }
+                    }
+                    unset($detail); // break reference
+
+                    // Filter out items that are already fully shipped (quantity 0)
+                    $detailItems = array_values(array_filter($detailItems, function ($item) {
+                        return (float) ($item['quantity'] ?? 0) > 0;
+                    }));
+
+                    $serialNumberCache = [];
+                    foreach ($detailItems as $detail) {
+                        $itemNo = $detail['item']['no'] ?? null;
+                        $itemName = $detail['item']['name'] ?? '';
+                        if (!$itemNo)
+                            continue;
+
+                        try {
+                            $itemTimestamp = Carbon::now()->toIso8601String();
+                            $itemSignature = hash_hmac('sha256', $itemTimestamp, $signatureSecret);
+
+                            $snResponse = Http::withoutVerifying()->withHeaders([
+                                'Authorization' => 'Bearer ' . $apiToken,
+                                'X-Api-Signature' => $itemSignature,
+                                'X-Api-Timestamp' => $itemTimestamp,
+                            ])->get($this->buildApiUrl($branch, 'report/serial-number-per-warehouse.do'), [
+                                        'itemNo' => $itemNo,
+                                    ]);
+
+                            if ($snResponse->successful()) {
+                                $snData = $snResponse->json()['d'] ?? [];
+
+                                foreach ($snData as $entry) {
+                                    // Filter hanya GUDANG STOK
+                                    $warehouseName = $entry['warehouse']['name'] ?? '';
+                                    if (strtoupper($warehouseName) !== 'GUDANG STOK')
+                                        continue;
+
+                                    $snNumber = $entry['serialNumber']['number'] ?? null;
+                                    $snQty = (float) ($entry['quantity'] ?? 0);
+
+                                    if ($snNumber && $snQty > 0) {
+                                        $serialNumberCache[] = [
+                                            'barcode' => $snNumber,
+                                            'quantity' => $snQty,
+                                            'itemNo' => $itemNo,
+                                            'itemName' => $itemName,
+                                        ];
+                                    }
+                                }
+                            }
+
+                            Log::info('Serial numbers fetched from warehouse report', [
+                                'itemNo' => $itemNo,
+                                'count' => count($serialNumberCache),
+                            ]);
+
+                        } catch (\Exception $e) {
+                            Log::warning('Failed to fetch serial numbers from warehouse report', [
+                                'itemNo' => $itemNo,
+                                'error' => $e->getMessage(),
+                            ]);
+                        }
+                    }
+
+                    Log::info('Serial number cache built for SO', [
+                        'so_number' => $number,
+                        'total_serial_numbers' => count($serialNumberCache),
+                    ]);
+
                     $customerData = [
                         'success' => true,
                         'detailItems' => $salesOrderDetail['detailItem'] ?? [],
@@ -620,15 +772,17 @@ class PengirimanPesananController extends Controller
         }
 
         $validator = Validator::make($request->all(), [
-            'penjualan_id'          => 'required|string|max:255|unique:pengiriman_pesanans,penjualan_id',
-            'pelanggan_id'          => 'required|string|max:255',
-            'tanggal_pengiriman'    => 'required|date',
-            'no_pengiriman'         => 'required|string|max:255|unique:pengiriman_pesanans,no_pengiriman',
-            'detailItems'           => 'required|array|min:1',
-            'detailItems.*.kode'      => 'required|string',
+            'penjualan_id' => 'required|string|max:255',
+            'pelanggan_id' => 'required|string|max:255',
+            'tanggal_pengiriman' => 'required|date',
+            'no_pengiriman' => 'required|string|max:255|unique:pengiriman_pesanans,no_pengiriman',
+            'detailItems' => 'required|array|min:1',
+            'serials_json' => 'nullable|string',
+            'is_partial' => 'nullable|boolean',
+            'detailItems.*.kode' => 'required|string',
             'detailItems.*.kuantitas' => 'required|numeric|min:0',
-            'detailItems.*.harga'     => 'required|numeric|min:0',
-            'detailItems.*.diskon'    => 'nullable|numeric|min:0',
+            'detailItems.*.harga' => 'required|numeric|min:0',
+            'detailItems.*.diskon' => 'nullable|numeric|min:0',
         ], [
             // Penjualan ID validation messages
             'penjualan_id.required' => 'Nomor Pesanan Penjualan (NPJ) wajib diisi.',
@@ -672,70 +826,87 @@ class PengirimanPesananController extends Controller
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
-            // Query KasirPenjualan berdasarkan npj dan kode_customer
-            $kasirPenjualan = KasirPenjualan::where('npj', $validatedData['penjualan_id'])
-                ->where('kode_customer', $branch->customer_id)
-                ->first();
+            // Pengiriman Pesanan sekarang dibuat langsung dari Accurate (tanpa depend data KasirPenjualan lokal).
+            // Ambil Sales Order detail dari Accurate untuk kebutuhan metadata (alamat, term bayar, pajak, diskon, dll).
+            $salesOrderDetail = null;
+            $alamatFallback = null;
+            $keterangan = null;
+            $syaratBayar = null;
+            $kenaPajak = null;
+            $totalTermasukPajak = null;
+            $diskonKeseluruhan = 0;
 
-            if (!$kasirPenjualan) {
-                return back()->withInput()->with('error', 'Data Kasir Penjualan dengan NPJ ' . $validatedData['penjualan_id'] . ' tidak ditemukan.');
-            }
+            try {
+                $salesOrderResponse = Http::withoutVerifying()->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'X-Api-Signature' => $signature,
+                    'X-Api-Timestamp' => $timestamp,
+                ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
+                            'number' => $validatedData['penjualan_id']
+                        ]);
 
-            Log::info('KasirPenjualan data found:', [
-                'npj' => $kasirPenjualan->npj,
-                'customer' => $kasirPenjualan->customer,
-                'alamat' => $kasirPenjualan->alamat,
-                'syarat_bayar' => $kasirPenjualan->syarat_bayar,
-                'kena_pajak' => $kasirPenjualan->kena_pajak,
-                'total_termasuk_pajak' => $kasirPenjualan->total_termasuk_pajak,
-                'diskon_keseluruhan' => $kasirPenjualan->diskon_keseluruhan
-            ]);
-
-            // Fallback untuk mendapatkan alamat jika kosong dari database
-            $alamatFallback = $kasirPenjualan->alamat;
-            if (empty($alamatFallback)) {
-                Log::info('Alamat kosong dari KasirPenjualan, melakukan fallback ke API sales-order/detail.do', [
-                    'penjualan_id' => $validatedData['penjualan_id']
+                Log::info('Sales Order Detail API Response for fallback:', [
+                    'status' => $salesOrderResponse->status(),
+                    'successful' => $salesOrderResponse->successful()
                 ]);
 
-                try {
-                    // Buat instance HTTP client untuk sales order detail
-                    $salesOrderResponse = Http::withoutVerifying()->withHeaders([
-                        'Authorization' => 'Bearer ' . $apiToken,
-                        'X-Api-Signature' => $signature,
-                        'X-Api-Timestamp' => $timestamp,
-                    ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
-                        'number' => $validatedData['penjualan_id']
-                    ]);
+                if ($salesOrderResponse->successful() && isset($salesOrderResponse->json()['d'])) {
+                    $salesOrderDetail = $salesOrderResponse->json()['d'];
 
-                    Log::info('Sales Order Detail API Response for fallback:', [
-                        'status' => $salesOrderResponse->status(),
-                        'successful' => $salesOrderResponse->successful()
-                    ]);
+                    $alamatFallback = $salesOrderDetail['toAddress'] ?? null;
+                    $keterangan = $salesOrderDetail['description'] ?? null;
+                    $syaratBayar = $salesOrderDetail['paymentTerm']['name'] ?? null;
+                    $kenaPajak = $salesOrderDetail['taxable'] ?? null;
+                    $totalTermasukPajak = $salesOrderDetail['inclusiveTax'] ?? null;
 
-                    if ($salesOrderResponse->successful() && isset($salesOrderResponse->json()['d'])) {
-                        $salesOrderDetail = $salesOrderResponse->json()['d'];
-
-                        // Ambil alamat dari customer di sales order detail
-                        if (isset($salesOrderDetail['toAddress']) && !empty($salesOrderDetail['toAddress'])) {
-                            $alamatFallback = $salesOrderDetail['toAddress'];
-                            Log::info('Alamat berhasil diambil dari sales order detail:', [
-                                'alamat' => $alamatFallback
-                            ]);
-                        } else {
-                            Log::warning('Alamat tidak ditemukan di sales order detail customer');
-                        }
-                    } else {
-                        Log::warning('Gagal mengambil sales order detail untuk fallback alamat', [
-                            'status' => $salesOrderResponse->status(),
-                            'body' => $salesOrderResponse->body()
-                        ]);
+                    // Diskon keseluruhan (jika ada) bisa berupa persen atau nominal
+                    $cashDiscPercent = $salesOrderDetail['cashDiscPercent'] ?? null;
+                    $cashDiscount = $salesOrderDetail['cashDiscount'] ?? null;
+                    if (!empty($cashDiscPercent)) {
+                        $diskonKeseluruhan = (float) $cashDiscPercent;
+                    } elseif (!empty($cashDiscount)) {
+                        $diskonKeseluruhan = (float) $cashDiscount;
                     }
-                } catch (\Exception $e) {
-                    Log::error('Exception saat fallback alamat dari sales order detail: ' . $e->getMessage(), [
-                        'penjualan_id' => $validatedData['penjualan_id'],
-                        'trace' => $e->getTraceAsString()
+                } else {
+                    Log::warning('Gagal mengambil sales order detail untuk store', [
+                        'status' => $salesOrderResponse->status(),
+                        'body' => $salesOrderResponse->body()
                     ]);
+                }
+            } catch (\Exception $e) {
+                Log::error('Exception saat mengambil sales order detail untuk store: ' . $e->getMessage(), [
+                    'penjualan_id' => $validatedData['penjualan_id'],
+                    'trace' => $e->getTraceAsString()
+                ]);
+            }
+
+            // Parse serial map dari frontend (hasil scan) jika ada
+            $serialsMap = [];
+            try {
+                $serialsRaw = $request->input('serials_json', '{}');
+                $decoded = json_decode($serialsRaw, true);
+                if (is_array($decoded))
+                    $serialsMap = $decoded;
+            } catch (\Exception $e) {
+                Log::warning('Gagal parse serials_json', ['error' => $e->getMessage()]);
+            }
+
+            // Build lookup dari SO detail untuk itemUnitName & warehouseName
+            $soDetailItemLookup = [];
+            if (is_array($salesOrderDetail) && isset($salesOrderDetail['detailItem']) && is_array($salesOrderDetail['detailItem'])) {
+                foreach ($salesOrderDetail['detailItem'] as $d) {
+                    $itemNo = $d['item']['no'] ?? null;
+                    if (!$itemNo)
+                        continue;
+                    $soDetailItemLookup[$itemNo] = [
+                        'itemUnitName' => $d['itemUnit']['name'] ?? null,
+                        'warehouseName' =>
+                            $d['defaultWarehouseDeliveryOrder']['name'] ??
+                            $d['warehouse']['name'] ??
+                            null,
+                        'manageSN' => (bool) ($d['item']['manageSN'] ?? false),
+                        'serialNumberType' => $d['item']['serialNumberType'] ?? null,
+                    ];
                 }
             }
 
@@ -748,8 +919,8 @@ class PengirimanPesananController extends Controller
                     'X-Api-Signature' => $signature,
                     'X-Api-Timestamp' => $timestamp,
                 ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
-                    'number' => $validatedData['penjualan_id']
-                ]);
+                            'number' => $validatedData['penjualan_id']
+                        ]);
 
                 if ($soDetailResponse->successful() && isset($soDetailResponse->json()['d'])) {
                     $soTransDate = $soDetailResponse->json()['d']['transDate']; // Format DD/MM/YYYY
@@ -762,7 +933,7 @@ class PengirimanPesananController extends Controller
                 $soDateObj = Carbon::createFromFormat('d/m/Y', $soTransDate);
                 $doDateObj = Carbon::parse($validatedData['tanggal_pengiriman']);
 
-                if ($doDateObj->lt($soDateObj)) {
+                if ($doDateObj->eq($soDateObj)) {
                     return back()->withInput()->with('error', "Tanggal Pengiriman Pesanan tidak dapat lebih kecil dari tanggal Pesanan Penjualan {$validatedData['penjualan_id']}.");
                 }
             }
@@ -771,11 +942,37 @@ class PengirimanPesananController extends Controller
             $detailItemsForAccurate = [];
             foreach ($validatedData['detailItems'] as $item) {
                 $accurateItem = [
-                    "itemNo"    => $item['kode'],
-                    "quantity"  => $item['kuantitas'],
-                    "unitPrice" => $item['harga'],
+                    "itemNo" => $itemNo,
+                    "quantity" => (float) $item['kuantitas'],
+                    "unitPrice" => (float) $item['harga'],
                     "salesOrderNumber" => $validatedData['penjualan_id'],
                 ];
+
+                // Sertakan unit & gudang bila tersedia (sering dibutuhkan Accurate)
+                if (!empty($soMeta['itemUnitName'])) {
+                    $accurateItem['itemUnitName'] = $soMeta['itemUnitName'];
+                }
+                if (!empty($soMeta['warehouseName'])) {
+                    $accurateItem['warehouseName'] = $soMeta['warehouseName'];
+                }
+
+                // Jika item manageSN (BATCH/SERIAL), sertakan detailSerialNumber dari hasil scan
+                $serialsForItem = $serialsMap[$itemNo] ?? null;
+                if (is_array($serialsForItem) && !empty($serialsForItem)) {
+                    $detailSerialNumber = [];
+                    foreach ($serialsForItem as $snNo => $snQty) {
+                        $snNo = trim((string) $snNo);
+                        if ($snNo === '')
+                            continue;
+                        $detailSerialNumber[] = [
+                            'serialNumberNo' => $snNo,
+                            'quantity' => (float) $snQty,
+                        ];
+                    }
+                    if (!empty($detailSerialNumber)) {
+                        $accurateItem['detailSerialNumber'] = $detailSerialNumber;
+                    }
+                }
 
                 // --- LOGIKA UTAMA: Kondisi Diskon ---
                 // Cek apakah ada diskon dan nilainya lebih dari 0
@@ -797,10 +994,10 @@ class PengirimanPesananController extends Controller
 
             // Siapkan data untuk API Accurate dengan mengambil data dari Sales Order
             $postDataForAccurate = [
-                "customerNo"        => $validatedData['pelanggan_id'],
-                "transDate"         => date('d/m/Y', strtotime($validatedData['tanggal_pengiriman'])),
-                "number"            => $validatedData['no_pengiriman'],
-                "detailItem"        => $detailItemsForAccurate,
+                "customerNo" => $validatedData['pelanggan_id'],
+                "transDate" => date('d/m/Y', strtotime($validatedData['tanggal_pengiriman'])),
+                "number" => $validatedData['no_pengiriman'],
+                "detailItem" => $detailItemsForAccurate,
             ];
 
             // Set alamat dari KasirPenjualan atau fallback dari sales order detail
@@ -848,7 +1045,7 @@ class PengirimanPesananController extends Controller
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
-                'Content-Type'  => 'application/json',
+                'Content-Type' => 'application/json',
             ])->post($this->buildApiUrl($branch, 'delivery-order/save.do'), $postDataForAccurate);
 
             // Validasi response dari API Accurate
@@ -866,18 +1063,45 @@ class PengirimanPesananController extends Controller
                 return back()->withInput()->with('error', 'Accurate API mengembalikan error: ' . ($responseData['m'] ?? 'Unknown error'));
             }
 
-            // Jika API Accurate berhasil, simpan ke database lokal
+            $isPartial = false;
+
+            if (is_array($salesOrderDetail) && isset($salesOrderDetail['detailItem'])) {
+                foreach ($salesOrderDetail['detailItem'] as $soItem) {
+                    $itemNo = $soItem['item']['no'] ?? null;
+                    if (!$itemNo)
+                        continue;
+
+                    $soQty = (float) ($soItem['quantity'] ?? 0);
+
+                    // Cari qty yang dikirim untuk item ini
+                    $sentQty = 0;
+                    foreach ($validatedData['detailItems'] as $sentItem) {
+                        if ($sentItem['kode'] === $itemNo) {
+                            $sentQty = (float) $sentItem['kuantitas'];
+                            break;
+                        }
+                    }
+
+                    // Kalau ada item yang qty-nya kurang dari SO → partial
+                    if ($sentQty < $soQty) {
+                        $isPartial = true;
+                        break;
+                    }
+                }
+            }
+
             $pengirimanPesanan = PengirimanPesanan::create([
                 'penjualan_id' => $validatedData['penjualan_id'],
                 'pelanggan_id' => $validatedData['pelanggan_id'],
                 'tanggal_pengiriman' => $validatedData['tanggal_pengiriman'],
                 'no_pengiriman' => $validatedData['no_pengiriman'],
                 'alamat' => $alamatFallback,
-                'keterangan' => $kasirPenjualan->keterangan,
-                'syarat_bayar' => $kasirPenjualan->syarat_bayar,
-                'kena_pajak' => $kasirPenjualan->kena_pajak,
-                'total_termasuk_pajak' => $kasirPenjualan->total_termasuk_pajak,
-                'diskon_keseluruhan' => $kasirPenjualan->diskon_keseluruhan,
+                'keterangan' => $keterangan,
+                'syarat_bayar' => $syaratBayar,
+                'kena_pajak' => $kenaPajak,
+                'total_termasuk_pajak' => $totalTermasukPajak,
+                'diskon_keseluruhan' => $diskonKeseluruhan,
+                'is_partial' => $isPartial,
                 'kode_customer' => $branch->customer_id,
             ]);
 
@@ -1018,9 +1242,11 @@ class PengirimanPesananController extends Controller
             if ($pengirimanPesanan->penjualan_id) {
                 Log::info("Searching KasirPenjualan with NPJ:", ['npj' => $pengirimanPesanan->penjualan_id]);
 
-                $kasirPenjualan = KasirPenjualan::with(['detailItems' => function ($query) {
-                    $query->with('barcode'); // Eager load approval stock untuk mengurangi N+1 query
-                }])
+                $kasirPenjualan = KasirPenjualan::with([
+                    'detailItems' => function ($query) {
+                        $query->with('barcode'); // Eager load approval stock untuk mengurangi N+1 query
+                    }
+                ])
                     ->where('npj', $pengirimanPesanan->penjualan_id)
                     ->where('kode_customer', $branch->customer_id)
                     ->first();
@@ -1156,7 +1382,7 @@ class PengirimanPesananController extends Controller
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             $errorMessage = "Data pengiriman pesanan dengan nomor {$no_pengiriman} tidak ditemukan.";
             Log::error('Pengiriman pesanan tidak ditemukan: ' . $e->getMessage(), ['no_pengiriman' => $no_pengiriman]);
-            
+
             $dataToCache = [
                 'pengirimanPesanan' => null,
                 'accurateDeliveryOrderDetail' => null,
@@ -1190,7 +1416,8 @@ class PengirimanPesananController extends Controller
                 $mergedItems = $cachedData['mergedItems'] ?? [];
                 $detailBarcodeMappings = $cachedData['detailBarcodeMappings'] ?? [];
                 $kasirPenjualan = $cachedData['kasirPenjualan'] ?? null;
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
                 Log::info("Menampilkan detail pengiriman pesanan {$no_pengiriman} dari cache karena API gagal.");
             } else {
                 Log::warning("Tidak ada data cache tersedia sebagai fallback untuk no_pengiriman: {$no_pengiriman}");

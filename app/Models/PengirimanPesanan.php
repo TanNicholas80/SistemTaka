@@ -26,6 +26,7 @@ class PengirimanPesanan extends Model
         'kena_pajak',
         'total_termasuk_pajak',
         'diskon_keseluruhan',
+        'is_partial',
         'kode_customer',
     ];
 
