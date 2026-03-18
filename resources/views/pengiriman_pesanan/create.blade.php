@@ -371,8 +371,14 @@
         // Variabel untuk menyimpan detail items
         let detailItems = [];
 
+        // Cache serial numbers dari Accurate (diisi saat klik Lanjut)
+        let serialNumberCache = [];
+
         // Variabel validasi barcode
         let scannedItemsQuantities = {};
+        // Menyimpan detail scan per item (barcode -> qty) untuk dikirim saat Save
+        // Struktur: { [itemNo]: { [barcode]: qty } }
+        let scannedSerialMap = {};
         let totalTargetQuantity = 0;
         let totalScannedQuantity = 0;
 
@@ -989,7 +995,8 @@
                             customerDisplay: customerDisplay,
                             customerNo: customerNo,
                             detailItems: data.detailItems || [],
-                            transDate: data.transDate || '' // Capture transDate
+                            serialNumberCache: data.serialNumberCache || [],
+                            transDate: data.transDate || ''
                         };
                     } else {
                         if (updateCustomerOnly) {
@@ -1114,6 +1121,10 @@
 
                         // Store detail items
                         detailItems = response.detailItems;
+
+                        // Store serial number cache dari Accurate
+                        serialNumberCache = response.serialNumberCache || [];
+                        console.log('Serial number cache loaded:', serialNumberCache.length, 'barcodes');
 
                         // Store SO trans date for validation
                         formData.so_trans_date = response.transDate;

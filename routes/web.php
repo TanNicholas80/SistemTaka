@@ -161,9 +161,9 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('packing-list', PackingListController::class);
     Route::get('/packing-list/detail/{id}', [PackingListController::class, 'show'])->name('packing_list_detail');
 
-    Route::get('/faktur', [FakturController::class, 'index'])->name('faktur.index');
-    Route::get('/faktur/{no_billing}', [FakturController::class, 'show'])->name('faktur.show');
+    // Route::get('/faktur', [FakturController::class, 'index'])->name('faktur.index');
+    // Route::get('/faktur/{no_billing}', [FakturController::class, 'show'])->name('faktur.show');
 
-    Route::get('/surat-jalan', [SuratJalanController::class, 'index'])->name('surat_jalan.index');
-    Route::get('/surat-jalan/{no_billing}', [SuratJalanController::class, 'show'])->name('surat_jalan.show');
+    // Route::get('/surat-jalan', [SuratJalanController::class, 'index'])->name('surat_jalan.index');
+    // Route::get('/surat-jalan/{no_billing}', [SuratJalanController::class, 'show'])->name('surat_jalan.show');
 });

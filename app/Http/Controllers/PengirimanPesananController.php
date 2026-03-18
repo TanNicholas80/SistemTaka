@@ -708,10 +708,11 @@ class PengirimanPesananController extends Controller
 
                     $customerData = [
                         'success' => true,
-                        'detailItems' => $salesOrderDetail['detailItem'] ?? [],
+                        'detailItems' => $detailItems,
+                        'serialNumberCache' => $serialNumberCache,
                         'customerNo' => $salesOrderDetail['customer']['customerNo'] ?? null,
                         'customerName' => $salesOrderDetail['customer']['name'] ?? null,
-                        'transDate' => $salesOrderDetail['transDate'] ?? null, // Added transDate for validation
+                        'transDate' => $salesOrderDetail['transDate'] ?? null,
                         'message' => 'Customer data retrieved successfully'
                     ];
 
@@ -845,7 +846,7 @@ class PengirimanPesananController extends Controller
                             'number' => $validatedData['penjualan_id']
                         ]);
 
-                Log::info('Sales Order Detail API Response for fallback:', [
+                Log::info('Sales Order Detail API Response for store:', [
                     'status' => $salesOrderResponse->status(),
                     'successful' => $salesOrderResponse->successful()
                 ]);
@@ -941,6 +942,8 @@ class PengirimanPesananController extends Controller
             // Format detail items untuk API Accurate
             $detailItemsForAccurate = [];
             foreach ($validatedData['detailItems'] as $item) {
+                $itemNo = $item['kode'];
+                $soMeta = $soDetailItemLookup[$itemNo] ?? [];
                 $accurateItem = [
                     "itemNo" => $itemNo,
                     "quantity" => (float) $item['kuantitas'],
@@ -1000,21 +1003,19 @@ class PengirimanPesananController extends Controller
                 "detailItem" => $detailItemsForAccurate,
             ];
 
-            // Set alamat dari KasirPenjualan atau fallback dari sales order detail
+            // Set alamat dari sales order detail (jika ada)
             if (!empty($alamatFallback)) {
                 $postDataForAccurate['toAddress'] = $alamatFallback;
             }
 
-            if (!empty($kasirPenjualan->keterangan)) {
-                $postDataForAccurate['description'] = $kasirPenjualan->keterangan;
+            if (!empty($keterangan)) {
+                $postDataForAccurate['description'] = $keterangan;
             }
 
-            // Set syarat bayar dari KasirPenjualan atau default C.O.D
-            $syaratBayar = !empty($kasirPenjualan->syarat_bayar) ? $kasirPenjualan->syarat_bayar : 'C.O.D';
-            $postDataForAccurate['paymentTermName'] = $syaratBayar;
+            // Set syarat bayar dari SO Accurate jika ada, fallback ke C.O.D
+            $postDataForAccurate['paymentTermName'] = !empty($syaratBayar) ? $syaratBayar : 'C.O.D';
 
-            // Set diskon keseluruhan dari KasirPenjualan
-            $diskonKeseluruhan = $kasirPenjualan->diskon_keseluruhan ?? 0;
+            // Set diskon keseluruhan (jika ada)
             if ($diskonKeseluruhan > 0) {
                 $diskonKeseluruhan = (float) $diskonKeseluruhan;
 
@@ -1028,14 +1029,14 @@ class PengirimanPesananController extends Controller
                 }
             }
 
-            // Set kena pajak dari KasirPenjualan
-            if (isset($kasirPenjualan->kena_pajak)) {
-                $postDataForAccurate['taxable'] = $kasirPenjualan->kena_pajak;
+            // Set pajak dari SO Accurate jika tersedia
+            if (!is_null($kenaPajak)) {
+                $postDataForAccurate['taxable'] = $kenaPajak;
             }
 
-            // Set total termasuk pajak dari KasirPenjualan
-            if (isset($kasirPenjualan->total_termasuk_pajak)) {
-                $postDataForAccurate['inclusiveTax'] = $kasirPenjualan->total_termasuk_pajak;
+            // Set inclusive tax dari SO Accurate jika tersedia
+            if (!is_null($totalTermasukPajak)) {
+                $postDataForAccurate['inclusiveTax'] = $totalTermasukPajak;
             }
 
             Log::info('PostDataForAccurate prepared for delivery order:', $postDataForAccurate);
@@ -1047,6 +1048,11 @@ class PengirimanPesananController extends Controller
                 'X-Api-Timestamp' => $timestamp,
                 'Content-Type' => 'application/json',
             ])->post($this->buildApiUrl($branch, 'delivery-order/save.do'), $postDataForAccurate);
+
+            Log::info('Delivery Order save.do response', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
 
             // Validasi response dari API Accurate
             if (!$response->successful()) {
