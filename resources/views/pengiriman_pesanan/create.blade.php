@@ -2,6 +2,115 @@
 
 @section('content')
     <div class="content-wrapper">
+        <style>
+            .modal-tabs {
+                display: flex;
+                border-bottom: 2px solid #e5e7eb;
+                margin-bottom: 1rem;
+            }
+
+            .modal-tab {
+                padding: 0.75rem 1rem;
+                cursor: pointer;
+                font-weight: 600;
+                color: #6b7280;
+                border-bottom: 2px solid transparent;
+                margin-bottom: -2px;
+                transition: all 0.2s;
+            }
+
+            .modal-tab.active {
+                color: #d32f2f;
+                border-bottom-color: #d32f2f;
+            }
+
+            .modal-tab:hover:not(.active) {
+                color: #374151;
+                border-bottom-color: #d1d5db;
+            }
+
+            .swal2-popup.swal2-modal.item-detail-modal {
+                width: 700px !important;
+                padding: 0;
+                border-radius: 8px;
+                overflow: hidden;
+            }
+
+            .item-detail-modal-vcentered .swal2-header {
+                background: transparent;
+                border: none;
+                padding: 0.5rem 1rem;
+                position: relative;
+            }
+
+            .item-detail-modal-vcentered .swal2-close {
+                color: #6b7280 !important;
+                top: 10px !important;
+                right: 10px !important;
+                transition: color 0.2s;
+            }
+
+            .item-detail-modal-vcentered .swal2-close:hover {
+                color: #1f2937 !important;
+            }
+
+            .item-detail-modal-vcentered .item-detail-modal-actions {
+                display: flex !important;
+                justify-content: space-between !important;
+                width: 100% !important;
+                padding: 0.5rem 1.5rem 1rem 1.5rem !important;
+                border-top: none !important;
+                margin-top: 0 !important;
+                flex-row-reverse: false;
+            }
+
+            .item-detail-modal-vcentered .btn-lanjut-modal {
+                background: #1a4b8c;
+                color: white;
+                padding: 8px 30px;
+                border-radius: 6px;
+                font-weight: 600;
+                border: 1px solid #1a4b8c;
+                order: 2;
+            }
+
+            .item-detail-modal-vcentered .btn-hapus-modal {
+                background: #fff;
+                color: #dc2626;
+                border: 1px solid #dc2626;
+                padding: 8px 30px;
+                border-radius: 6px;
+                font-weight: 600;
+                order: 1;
+            }
+
+            .item-detail-modal-vcentered .btn-lanjut-modal:hover {
+                background: #1e3a8a;
+            }
+
+            .item-detail-modal-vcentered .btn-hapus-modal:hover {
+                background: #fef2f2;
+            }
+
+            .item-detail-modal-vcentered .swal2-html-container {
+                margin: 0 !important;
+                padding: 0 1.5rem 1.5rem 1.5rem !important;
+                width: 100%;
+            }
+
+            .item-detail-modal-vcentered {
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: center !important;
+                align-items: center !important;
+                margin: auto !important;
+            }
+
+            #table-barang-body tr:hover {
+                background-color: #f3f4f6 !important;
+                cursor: pointer;
+            }
+        </style>
         <!-- Content Header -->
         <div class="content-header">
             <div class="container-fluid">
@@ -116,17 +225,9 @@
                                     style="background-color: #dc3545 !important; color: white !important;"><i
                                         class="fas fa-arrow-left mr-1"></i> Kembali</a>
                             </div>
-                            <div class="bg-white p-3 rounded border border-blue-200 mt-3 shadow-inner">
-                                <p class="text-sm font-medium text-gray-800 flex items-center justify-between">
-                                    <span>Status Pemenuhan Sales Order:</span>
-                                    <span id="scan-status-text"
-                                        class="text-xl font-bold text-blue-600 px-3 py-1 bg-blue-100 rounded">0 / 0
-                                        Kuantitas Terpenuhi</span>
-                                </p>
-                                <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                                    <div id="scan-progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%">
-                                    </div>
-                                </div>
+                            <div class="hidden">
+                                <span id="scan-status-text">0 / 0 Kuantitas Terpenuhi</span>
+                                <div id="scan-progress-bar" style="width: 0%"></div>
                             </div>
                             <p id="scan-success-message" class="text-sm font-bold text-green-600 mt-2 hidden"><i
                                     class="fas fa-check-circle mr-1"></i> Validasi Spesifikasi 100% Cocok! Silakan tekan
@@ -168,6 +269,9 @@
                                         <th class="border border-gray-400 px-2 py-1">
                                             Kuantitas
                                         </th>
+                                        <th class="border border-gray-400 px-2 py-1 bg-green-800">
+                                            Qty Scan
+                                        </th>
                                         <th class="border border-gray-400 px-2 py-1">
                                             Satuan
                                         </th>
@@ -198,17 +302,20 @@
                                                 <td class="border border-gray-400 px-2 py-3 align-top">
                                                     {{ $item['quantity'] }}
                                                 </td>
+                                                <td class="border border-gray-400 px-2 py-3 align-top text-gray-400" data-scan-qty>
+                                                    <span class="scan-text">0 / {{ $item['quantity'] }}</span>
+                                                </td>
                                                 <td class="border border-gray-400 px-2 py-3 align-top">
                                                     {{ $item['itemUnit']['name'] }}
                                                 </td>
-                                                <td class="border border-gray-400 px-2 py-3 align-top">
-                                                    {{ $item['unitPrice'] }}
+                                                <td class="border border-gray-400 px-2 py-3 align-top text-right">
+                                                    Rp. {{ number_format($item['unitPrice'], 0, ',', '.') }}
                                                 </td>
-                                                <td class="border border-gray-400 px-2 py-3 align-top">
+                                                <td class="border border-gray-400 px-2 py-3 align-top text-right">
                                                     {{ $item['itemCashDiscount'] }}
                                                 </td>
-                                                <td class="border border-gray-400 px-2 py-3 align-top">
-                                                    {{ $item['totalPrice'] }}
+                                                <td class="border border-gray-400 px-2 py-3 align-top text-right font-semibold">
+                                                    Rp. {{ number_format($item['totalPrice'], 0, ',', '.') }}
                                                 </td>
                                             </tr>
                                         @endforeach
@@ -217,7 +324,7 @@
                                             <td class="border border-gray-400 px-2 py-3 text-left align-top">
                                                 ≡
                                             </td>
-                                            <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="7">
+                                            <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="8">
                                                 Belum ada data
                                             </td>
                                         </tr>
@@ -225,11 +332,17 @@
                                 </tbody>
                             </table>
                         </div>
-                        <div class="flex justify-end mt-2">
+                        <div class="flex justify-end mt-2 gap-2">
+                            <input type="hidden" id="is_partial_input" name="is_partial" value="0">
+                            <button type="button" id="btn-save-partial"
+                                class="bg-gray-500 text-white font-bold py-2 px-4 rounded text-sm cursor-not-allowed opacity-50"
+                                disabled>
+                                <i class="fas fa-shipping-fast mr-2"></i>Kirim Sebagian
+                            </button>
                             <button type="button" id="btn-save-pengiriman-pesanan"
                                 class="bg-gray-500 text-white font-bold py-2 px-4 rounded text-sm cursor-not-allowed opacity-50"
                                 disabled>
-                                <i class="fas fa-lock mr-2"></i>Save Terkunci (Selesaikan Scan)
+                                <i class="fas fa-lock mr-2"></i>Kirim Semua (Selesaikan Scan)
                             </button>
                         </div>
                     </div>
@@ -562,85 +675,128 @@
                 },
                 body: JSON.stringify({ barcode: barcode })
             })
-            .then(res => res.json())
-            .then(data => {
-                input.disabled = false;
-                input.value = '';
-                input.focus();
+                .then(res => res.json())
+                .then(data => {
+                    input.disabled = false;
+                    input.value = '';
+                    input.focus();
 
-                if (data.status === 'success') {
-                    let mcf = (data.data.material_code_formatted || '').trim();
-                    let matchedItemIndex = detailItems.findIndex(i => {
-                        if (!i.item) return false;
-                        const itemNo = (i.item.no || '').trim();
-                        const itemName = (i.item.name || '').trim();
-                        return (
-                            itemNo === data.data.kode_barang ||
-                            itemNo === data.data.alias_nama ||
-                            itemNo === mcf ||
-                            (mcf && itemNo.startsWith(mcf)) ||
-                            (mcf && mcf.startsWith(itemNo)) ||
-                            itemName === data.data.keterangan
-                        );
-                    });
+                    if (data.status === 'success') {
+                        let mcf = (data.data.material_code_formatted || '').trim();
+                        let matchedItemIndex = detailItems.findIndex(i => {
+                            if (!i.item) return false;
+                            const itemNo = (i.item.no || '').trim();
+                            const itemName = (i.item.name || '').trim();
+                            return (
+                                itemNo === data.data.kode_barang ||
+                                itemNo === data.data.alias_nama ||
+                                itemNo === mcf ||
+                                (mcf && itemNo.startsWith(mcf)) ||
+                                (mcf && mcf.startsWith(itemNo)) ||
+                                itemName === data.data.keterangan
+                            );
+                        });
 
-                    if (matchedItemIndex !== -1) {
-                        const qtyFromDb = (data.data.panjang_mlc ?? data.data.length ?? 0);
-                        processScanResult(matchedItemIndex, qtyFromDb, barcode, detailItems[matchedItemIndex].item.name);
+                        if (matchedItemIndex !== -1) {
+                            const qtyFromDb = (data.data.panjang_mlc ?? data.data.length ?? 0);
+                            processScanResult(matchedItemIndex, qtyFromDb, barcode, detailItems[matchedItemIndex].item.name);
+                        } else {
+                            Swal.fire({ icon: 'error', title: 'Tidak Cocok', text: `Barang (${data.data.kode_barang}) tidak ada di dalam detail pesanan SO!` });
+                        }
                     } else {
-                        Swal.fire({ icon: 'error', title: 'Tidak Cocok', text: `Barang (${data.data.kode_barang}) tidak ada di dalam detail pesanan SO!` });
+                        Swal.fire({ icon: 'error', title: 'Error Scan', text: data.message });
                     }
-                } else {
-                    Swal.fire({ icon: 'error', title: 'Error Scan', text: data.message });
-                }
-            })
-            .catch(err => {
-                input.disabled = false;
-                input.focus();
-                Swal.fire({ icon: 'error', title: 'System Error', text: err.toString() });
-            });
+                })
+                .catch(err => {
+                    input.disabled = false;
+                    input.focus();
+                    Swal.fire({ icon: 'error', title: 'System Error', text: err.toString() });
+                });
         }
 
         function processScanResult(matchedItemIndex, barcodeQty, barcode, itemName) {
             let requiredQty = parseFloat(detailItems[matchedItemIndex].quantity || 0);
-            let kodeUnik = detailItems[matchedItemIndex].item.no;
+            let kodeUnik = (detailItems[matchedItemIndex].item.no || '').trim();
             let currentScanned = scannedItemsQuantities[kodeUnik] || 0;
 
-            let newQty = currentScanned + barcodeQty;
+            // Simpan detail serial yang discan (per itemNo)
+            if (!scannedSerialMap[kodeUnik]) scannedSerialMap[kodeUnik] = {};
+
+            let existingQty = scannedSerialMap[kodeUnik][barcode] || 0;
+            let addedQty = 0;
+
+            if (existingQty > 0) {
+                // Barcode sudah pernah discan
+                if (existingQty >= barcodeQty) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Quantity sudah max',
+                        text: `Barcode ${barcode} sudah memiliki kuantitas maksimal (${barcodeQty}).`,
+                        timer: 2000,
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false
+                    });
+                    return;
+                } else {
+                    // Top-up behavior: Kembalikan ke qty aslinya
+                    addedQty = barcodeQty - existingQty;
+                    scannedSerialMap[kodeUnik][barcode] = barcodeQty; // Set to full
+                }
+            } else {
+                // Barcode baru
+                addedQty = barcodeQty;
+                scannedSerialMap[kodeUnik][barcode] = barcodeQty;
+            }
+
+            let newQty = currentScanned + addedQty;
             newQty = Math.round(newQty * 1000) / 1000;
             requiredQty = Math.round(requiredQty * 1000) / 1000;
 
             if (newQty > requiredQty) {
-                Swal.fire({ icon: 'warning', title: 'Kelebihan Kuantitas', text: `Scan barcode ini menghasilkan ${newQty} yang melebihi qty dipesan SO (${requiredQty})!` });
-            } else {
-                scannedItemsQuantities[kodeUnik] = newQty;
-                totalScannedQuantity += barcodeQty;
-                totalScannedQuantity = Math.round(totalScannedQuantity * 1000) / 1000;
-                updateScanProgress();
+                // Set maksimal sesuai sisa yang bisa dikirim
+                const maxAllowed = requiredQty - (currentScanned - (existingQty > 0 ? existingQty : 0));
 
-                // Simpan detail serial yang discan (per itemNo)
-                if (!scannedSerialMap[kodeUnik]) scannedSerialMap[kodeUnik] = {};
-                const prev = scannedSerialMap[kodeUnik][barcode] || 0;
-                let next = prev + (parseFloat(barcodeQty) || 0);
-                next = Math.round(next * 1000) / 1000;
-                scannedSerialMap[kodeUnik][barcode] = next;
-
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Barcode Valid',
-                    text: `${barcode} → ${itemName} (${barcodeQty})`,
-                    timer: 1500,
-                    timerProgressBar: true,
-                    showConfirmButton: false,
-                    toast: true,
-                    position: 'top-end'
-                });
-
-                let rows = document.getElementById('table-barang-body').getElementsByTagName('tr');
-                if (rows[matchedItemIndex]) {
-                    rows[matchedItemIndex].classList.add('bg-green-100');
-                    setTimeout(() => rows[matchedItemIndex].classList.remove('bg-green-100'), 1500);
+                if (maxAllowed <= 0) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Sudah Penuh',
+                        text: `Item ini sudah mencapai limit SO (${requiredQty}).`,
+                        timer: 2000,
+                        toast: true,
+                        position: 'top-end',
+                        showConfirmButton: false
+                    });
+                    return;
                 }
+
+                // Set ke maksimal yang diperbolehkan
+                scannedSerialMap[kodeUnik][barcode] = maxAllowed;
+                addedQty = maxAllowed - (existingQty > 0 ? existingQty : 0);
+                newQty = requiredQty;
+            }
+
+            scannedItemsQuantities[kodeUnik] = newQty;
+            totalScannedQuantity = Object.values(scannedItemsQuantities).reduce((a, b) => a + b, 0);
+            totalScannedQuantity = Math.round(totalScannedQuantity * 1000) / 1000;
+
+            updateScanProgress();
+
+            Swal.fire({
+                icon: 'success',
+                title: addedQty > 0 && existingQty > 0 ? 'Quantity di-Update' : 'Barcode Valid',
+                text: `${barcode} → ${itemName} (${barcodeQty})`,
+                timer: 1500,
+                timerProgressBar: true,
+                showConfirmButton: false,
+                toast: true,
+                position: 'top-end'
+            });
+
+            let rows = document.getElementById('table-barang-body').getElementsByTagName('tr');
+            if (rows[matchedItemIndex]) {
+                rows[matchedItemIndex].classList.add('bg-green-100');
+                setTimeout(() => rows[matchedItemIndex].classList.remove('bg-green-100'), 1500);
             }
         }
 
@@ -657,19 +813,86 @@
             document.getElementById('scan-status-text').innerText = `${totalScannedQuantity} / ${totalTargetQuantity} Kuantitas`;
             document.getElementById('scan-progress-bar').style.width = perc + '%';
 
+            const btnAll = document.getElementById('btn-save-pengiriman-pesanan');
+            const btnPart = document.getElementById('btn-save-partial');
+
             if (perc >= 100 && totalTargetQuantity > 0) {
+                // 100% — aktifkan Kirim Semua, nonaktifkan Kirim Sebagian
                 document.getElementById('scan-success-message').classList.remove('hidden');
-                let btnSave = document.getElementById('btn-save-pengiriman-pesanan');
-                btnSave.disabled = false;
-                btnSave.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm';
-                btnSave.innerHTML = '<i class="fas fa-save mr-2"></i>Save Pengiriman Pesanan';
-            } else {
+                btnAll.disabled = false;
+                btnAll.className = 'bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm';
+                btnAll.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Kirim Semua';
+
+                btnPart.disabled = true;
+                btnPart.className = 'bg-gray-500 text-white font-bold py-2 px-4 rounded text-sm cursor-not-allowed opacity-50';
+                btnPart.innerHTML = '<i class="fas fa-shipping-fast mr-2"></i>Kirim Sebagian';
+
+            } else if (perc > 0 && totalTargetQuantity > 0) {
+                // Ada yang discan tapi belum 100% — aktifkan Kirim Sebagian
                 document.getElementById('scan-success-message').classList.add('hidden');
-                let btnSave = document.getElementById('btn-save-pengiriman-pesanan');
-                btnSave.disabled = true;
-                btnSave.className = 'bg-gray-500 text-white font-bold py-2 px-4 rounded text-sm cursor-not-allowed opacity-50';
-                btnSave.innerHTML = '<i class="fas fa-lock mr-2"></i>Save Terkunci (Selesaikan Scan)';
+                btnAll.disabled = true;
+                btnAll.className = 'bg-gray-500 text-white font-bold py-2 px-4 rounded text-sm cursor-not-allowed opacity-50';
+                btnAll.innerHTML = '<i class="fas fa-lock mr-2"></i>Kirim Semua (Selesaikan Scan)';
+
+                btnPart.disabled = false;
+                btnPart.className = 'bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded text-sm';
+                btnPart.innerHTML = '<i class="fas fa-shipping-fast mr-2"></i>Kirim Sebagian (' + Math.round(perc) + '%)';
+
+            } else {
+                // Belum scan sama sekali — dua tombol terkunci
+                document.getElementById('scan-success-message').classList.add('hidden');
+                btnAll.disabled = true;
+                btnAll.className = 'bg-gray-500 text-white font-bold py-2 px-4 rounded text-sm cursor-not-allowed opacity-50';
+                btnAll.innerHTML = '<i class="fas fa-lock mr-2"></i>Kirim Semua (Selesaikan Scan)';
+
+                btnPart.disabled = true;
+                btnPart.className = 'bg-gray-500 text-white font-bold py-2 px-4 rounded text-sm cursor-not-allowed opacity-50';
+                btnPart.innerHTML = '<i class="fas fa-shipping-fast mr-2"></i>Kirim Sebagian';
             }
+
+            // Update tampilan qty scan per baris di tabel
+            updateTableScanQty();
+        }
+
+        function updateTableScanQty() {
+            const rows = document.getElementById('table-barang-body').getElementsByTagName('tr');
+            console.log(`Updating table scan qty. Detail items: ${detailItems.length}, TR rows: ${rows.length}`);
+
+            detailItems.forEach((item, index) => {
+                if (!rows[index]) return;
+                const kode = (item.item?.no || '').trim();
+                const scanned = scannedItemsQuantities[kode] || 0;
+                const total = parseFloat(item.quantity || 0);
+                const scanCell = rows[index].querySelector('[data-scan-qty]');
+
+                if (scanCell) {
+                    const scanSpan = scanCell.querySelector('.scan-text');
+                    const text = `${scanned} / ${total}`;
+                    if (scanSpan) {
+                        scanSpan.textContent = text;
+                    } else {
+                        scanCell.textContent = text;
+                    }
+
+                    // Highlight
+                    rows[index].classList.remove('bg-green-50', 'bg-yellow-50');
+                    if (scanned > 0 && scanned >= total) {
+                        rows[index].classList.add('bg-green-50');
+                        scanCell.classList.add('text-green-700');
+                        scanCell.classList.remove('text-orange-600', 'text-gray-400');
+                        if (scanSpan) scanSpan.className = 'scan-text text-green-700';
+                    } else if (scanned > 0) {
+                        rows[index].classList.add('bg-yellow-50');
+                        scanCell.classList.add('text-orange-600');
+                        scanCell.classList.remove('text-green-700', 'text-gray-400');
+                        if (scanSpan) scanSpan.className = 'scan-text text-orange-600';
+                    } else {
+                        scanCell.classList.add('text-gray-400');
+                        scanCell.classList.remove('text-green-700', 'text-orange-600');
+                        if (scanSpan) scanSpan.className = 'scan-text text-gray-400';
+                    }
+                }
+            });
         }
 
         function resetOutboundScan() {
@@ -872,14 +1095,14 @@
                             const soDateStr = response.transDate; // Format DD/MM/YYYY dari Accurate
                             const [day, month, year] = soDateStr.split('/');
                             const soDate = new Date(year, month - 1, day);
-                            
+
                             const doDateParts = formData.tanggal_pengiriman.split('-'); // YYYY-MM-DD from input
                             const doDate = new Date(doDateParts[0], doDateParts[1] - 1, doDateParts[2]);
 
                             if (doDate < soDate) {
                                 btnLanjut.disabled = false;
                                 btnLanjut.innerHTML = 'Lanjut';
-                                
+
                                 Swal.fire({
                                     icon: 'error',
                                     title: 'Validasi Gagal!',
@@ -985,19 +1208,19 @@
                 // Show empty state
                 const emptyRow = document.createElement('tr');
                 emptyRow.innerHTML = `
-                    <td class="border border-gray-400 px-2 py-3 text-left align-top">≡</td>
-                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="7">
-                        Belum ada data barang
-                    </td>
-                `;
+                                                                <td class="border border-gray-400 px-2 py-3 text-left align-top">≡</td>
+                                                                <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="8">
+                                                                    Belum ada data barang
+                                                                </td>
+                                                            `;
                 tableBody.appendChild(emptyRow);
                 console.log('Table filled with empty state');
                 return;
             }
 
-            // Add rows for each item
             items.forEach((item, index) => {
                 const row = document.createElement('tr');
+                row.onclick = () => openItemDetailModal(index);
 
                 // Format currency values
                 const unitPrice = formatCurrency(item.unitPrice || 0);
@@ -1005,29 +1228,34 @@
                 const totalPrice = formatCurrency(item.totalPrice || 0);
 
                 row.innerHTML = `
-                    <td class="border border-gray-400 px-2 py-3 text-left align-top">≡</td>
-                    <td class="border border-gray-400 px-2 py-3 text-left align-top">
-                        ${item.item?.name || 'N/A'}
-                    </td>
-                    <td class="border border-gray-400 px-2 py-3 align-top">
-                        ${item.item?.no || 'N/A'}
-                    </td>
-                    <td class="border border-gray-400 px-2 py-3 align-top">
-                        ${item.quantity || 0}
-                    </td>
-                    <td class="border border-gray-400 px-2 py-3 align-top">
-                        ${item.itemUnit?.name || 'N/A'}
-                    </td>
-                    <td class="border border-gray-400 px-2 py-3 align-top">
-                        ${unitPrice}
-                    </td>
-                    <td class="border border-gray-400 px-2 py-3 align-top">
-                        ${discount}
-                    </td>
-                    <td class="border border-gray-400 px-2 py-3 align-top">
-                        ${totalPrice}
-                    </td>
-                `;
+                                                                <td class="border border-gray-400 px-2 py-3 text-left align-top">≡</td>
+                                                                <td class="border border-gray-400 px-2 py-3 text-left align-top font-medium">
+                                                                    ${item.item?.name || 'N/A'}
+                                                                </td>
+                                                                <td class="border border-gray-400 px-2 py-3 align-top">
+                                                                    ${item.item?.no || 'N/A'}
+                                                                </td>
+                                                                <td class="border border-gray-400 px-2 py-3 align-top">
+                                                                    ${item.quantity || 0}
+                                                                </td>
+                                                                <td class="border border-gray-400 px-2 py-3 align-top text-gray-400" data-scan-qty id="scan-qty-${index}">
+                                                                    <div class="flex items-center justify-center">
+                                                                        <span class="scan-text">0 / ${item.quantity || 0}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td class="border border-gray-400 px-2 py-3 align-top">
+                                                                    ${item.itemUnit?.name || 'N/A'}
+                                                                </td>
+                                                                <td class="border border-gray-400 px-2 py-3 align-top text-right">
+                                                                    ${unitPrice}
+                                                                </td>
+                                                                <td class="border border-gray-400 px-2 py-3 align-top text-right">
+                                                                    ${discount}
+                                                                </td>
+                                                                <td class="border border-gray-400 px-2 py-3 align-top text-right font-semibold">
+                                                                    ${totalPrice}
+                                                                </td>
+                                                            `;
 
                 tableBody.appendChild(row);
             });
@@ -1071,6 +1299,306 @@
             console.log('Form readonly state set to:', readonly);
         }
 
+        // Function untuk update progress scan secara visual
+        function updateScanProgress() {
+            totalScannedQuantity = 0;
+            totalTargetQuantity = 0;
+
+            detailItems.forEach(item => {
+                const kode = (item.item?.no || '').trim();
+                const scannedQty = scannedItemsQuantities[kode] || 0;
+                const targetQty = item.quantity || 0;
+
+                totalScannedQuantity += scannedQty;
+                totalTargetQuantity += targetQty;
+            });
+
+            const btnSave = document.getElementById('btn-save-pengiriman-pesanan');
+            const btnSavePartial = document.getElementById('btn-save-partial');
+
+            if (totalTargetQuantity > 0) {
+                // Aktifkan tombol Kirim Sebagian jika ada yang discan (> 0)
+                if (totalScannedQuantity > 0) {
+                    btnSavePartial.disabled = false;
+                    btnSavePartial.classList.remove('bg-gray-500', 'opacity-50', 'cursor-not-allowed');
+                    btnSavePartial.classList.add('bg-orange-500', 'hover:bg-orange-600');
+                } else {
+                    btnSavePartial.disabled = true;
+                    btnSavePartial.classList.add('bg-gray-500', 'opacity-50', 'cursor-not-allowed');
+                    btnSavePartial.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                }
+
+                // Aktifkan tombol Kirim Semua jika scan lengkap (100%)
+                if (totalScannedQuantity >= totalTargetQuantity) {
+                    btnSave.disabled = false;
+                    btnSave.classList.remove('bg-gray-500', 'opacity-50', 'cursor-not-allowed');
+                    btnSave.classList.add('bg-green-600', 'hover:bg-green-700');
+                    btnSave.innerHTML = '<i class="fas fa-check-circle mr-2"></i>Kirim Semua';
+
+                    btnSavePartial.disabled = true;
+                    btnSavePartial.classList.add('bg-gray-500', 'opacity-50', 'cursor-not-allowed');
+                    btnSavePartial.classList.remove('bg-orange-500', 'hover:bg-orange-600');
+                    btnSavePartial.innerHTML = '<i class="fas fa-shipping-fast mr-2"></i>Kirim Sebagian';
+                } else {
+                    btnSave.disabled = true;
+                    btnSave.classList.add('bg-gray-500', 'opacity-50', 'cursor-not-allowed');
+                    btnSave.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    btnSave.innerHTML = '<i class="fas fa-lock mr-2"></i>Kirim Semua (Selesaikan Scan)';
+                }
+            }
+
+            updateTableScanQty();
+        }
+
+        // Function untuk membuka modal detail barang dengan 2 Tab
+        function openItemDetailModal(index) {
+            const item = detailItems[index];
+            if (!item) return;
+
+            const itemNo = (item.item?.no || '').trim();
+            const itemName = item.item?.name || 'Barang';
+            const maxQty = item.quantity || 0;
+
+            Swal.fire({
+                title: '',
+                customClass: {
+                    popup: 'item-detail-modal-vcentered !rounded-xl',
+                    confirmButton: 'btn-lanjut-modal',
+                    denyButton: 'btn-hapus-modal',
+                    actions: 'item-detail-modal-actions'
+                },
+                showCloseButton: false,
+                showConfirmButton: true,
+                showDenyButton: true,
+                confirmButtonText: 'Lanjut',
+                denyButtonText: 'Hapus',
+                buttonsStyling: false,
+                reverseButtons: false,
+                html: `
+                                                        <div>
+                                                            <div class="flex items-center justify-between px-6 pt-5 pb-3">
+                                                                <h2 class="text-base font-semibold text-gray-800">Rincian Barang</h2>
+                                                                <button type="button" id="close-modal-btn"
+                                                                    class="text-gray-400 hover:text-gray-700 focus:outline-none transition-colors">
+                                                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                                        viewBox="0 0 24 24" stroke="currentColor">
+                                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                                            d="M6 18L18 6M6 6l12 12" />
+                                                                    </svg>
+                                                                </button>
+                                                            </div>
+
+                                                            <div class="flex gap-6 px-6 mb-4" id="modal-tabs">
+                                                                <div class="modal-tab active cursor-pointer pb-2 border-b-2 border-red-600 text-red-600 font-bold"
+                                                                    data-tab="rincian">Rincian Barang</div>
+                                                                <div class="modal-tab cursor-pointer pb-2 text-gray-500 font-semibold"
+                                                                    data-tab="seri">No Seri/Produksi</div>
+                                                            </div>
+
+                                                            <div class="px-6 pb-2">
+                                                                <div id="tab-content-rincian" class="tab-content space-y-4">
+                                                                    <div class="grid grid-cols-[120px_1fr] gap-4 items-center text-sm">
+                                                                        <label class="text-gray-600">Kode #</label>
+                                                                        <div class="font-semibold text-blue-700">${itemNo}</div>
+
+                                                                        <label class="text-gray-600">Nama Barang</label>
+                                                                        <div class="font-semibold">${itemName}</div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div id="tab-content-seri" class="tab-content hidden space-y-4">
+                                                                    <div class="grid grid-cols-[120px_1fr] gap-2 items-center text-sm">
+                                                                        <label class="text-gray-600 font-bold">Nomor #</label>
+                                                                        <div class="flex gap-2">
+                                                                            <input type="text" id="modal-barcode-input" placeholder="Cari Barcode..."
+                                                                                class="border border-gray-300 rounded px-2 py-1 flex-grow focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="max-h-60 overflow-y-auto border border-gray-200 mt-4">
+                                                                        <table class="w-full text-xs">
+                                                                            <thead class="bg-[#166534] text-white sticky top-0">
+                                                                                <tr>
+                                                                                    <th class="p-2 border border-gray-300 text-center w-10"></th>
+                                                                                    <th class="p-2 border border-gray-300 text-left">Nomor #</th>
+                                                                                    <th class="p-2 border border-gray-300 text-center w-24">Kuantitas</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody id="modal-serial-table-body"></tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                    <div id="modal-serial-summary" class="text-xs font-semibold text-gray-700 mt-2">
+                                                                        0 No Seri/Produksi, Jumlah 0
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    `,
+                didOpen: () => {
+                    // ← Tambah listener untuk custom close button
+                    document.getElementById('close-modal-btn').addEventListener('click', () => {
+                        Swal.close();
+                    });
+
+                    const tabs = document.querySelectorAll('.modal-tab[data-tab]');
+                    const contents = document.querySelectorAll('.tab-content');
+                    const barcodeInput = document.getElementById('modal-barcode-input');
+
+                    tabs.forEach(tab => {
+                        tab.addEventListener('click', () => {
+                            tabs.forEach(t => {
+                                t.classList.remove('active', 'border-b-2', 'border-red-600', 'text-red-600', 'font-bold');
+                                t.classList.add('text-gray-500');
+                            });
+                            tab.classList.add('active', 'border-b-2', 'border-red-600', 'text-red-600', 'font-bold');
+                            tab.classList.remove('text-gray-500');
+
+                            const target = tab.getAttribute('data-tab');
+                            contents.forEach(c => c.classList.add('hidden'));
+                            document.getElementById(`tab-content-${target}`).classList.remove('hidden');
+
+                            if (target === 'seri') {
+                                barcodeInput.focus();
+                                renderSerialTable(itemNo, maxQty);
+                            }
+                        });
+                    });
+
+                    barcodeInput.addEventListener('input', () => {
+                        renderSerialTable(itemNo, maxQty, barcodeInput.value.trim().toLowerCase());
+                    });
+
+                    renderSerialTable(itemNo, maxQty);
+                }
+            }).then((result) => {
+                if (result.isDenied) {
+                    // Logika Hapus: Reset semua scan untuk item ini
+                    Swal.fire({
+                        title: 'Hapus Semua Scan?',
+                        text: `Seluruh hasil scan untuk item ${itemName} akan dihapus.`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Ya, Hapus',
+                        cancelButtonText: 'Batal'
+                    }).then((delResult) => {
+                        if (delResult.isConfirmed) {
+                            delete scannedItemsQuantities[itemNo];
+                            delete scannedSerialMap[itemNo];
+                            refreshMainUI();
+                            Swal.fire('Terhapus!', 'Data scan telah dibersihkan.', 'success');
+                        }
+                    });
+                }
+            });
+        }
+
+        // Helper untuk me-render tabel seri di dalam modal
+        function renderSerialTable(itemNo, maxQty, filter = '') {
+            const tbody = document.getElementById('modal-serial-table-body');
+            const summary = document.getElementById('modal-serial-summary');
+            if (!tbody) return;
+
+            const map = scannedSerialMap[itemNo] || {};
+            let barcodes = Object.keys(map);
+
+            if (filter) {
+                barcodes = barcodes.filter(bc => bc.toLowerCase().includes(filter));
+            }
+
+            tbody.innerHTML = '';
+
+            if (barcodes.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-center p-4 text-gray-400">${filter ? 'Tidak ada barcode yang cocok' : 'Belum ada barcode discan'}</td></tr>`;
+            } else {
+                barcodes.forEach(barcode => {
+                    const qty = map[barcode];
+                    const row = document.createElement('tr');
+                    row.className = 'hover:bg-gray-100 transition-colors';
+                    row.innerHTML = `
+                                                                    <td class="p-2 border border-gray-200 text-center">
+                                                                        <button type="button" class="btn-delete-barcode text-red-600 hover:text-red-800" data-barcode="${barcode}">
+                                                                            <i class="fas fa-trash"></i>
+                                                                        </button>
+                                                                    </td>
+                                                                    <td class="p-2 border border-gray-200">${barcode}</td>
+                                                                    <td class="p-1 border border-gray-200 text-center">
+                                                                        <input type="number" class="w-16 text-center border-none bg-transparent focus:bg-white focus:ring-1 focus:ring-blue-500 qty-edit-input" 
+                                                                            data-barcode="${barcode}" value="${qty}" step="any" min="1">
+                                                                    </td>
+                                                                `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            // Bind event listener to delete buttons
+            tbody.querySelectorAll('.btn-delete-barcode').forEach(btn => {
+                btn.onclick = () => {
+                    const bc = btn.getAttribute('data-barcode');
+                    Swal.fire({
+                        title: 'Hapus Barcode?',
+                        text: `Anda yakin ingin menghapus barcode ${bc}?`,
+                        icon: 'warning',
+                        showCancelButton: true,
+                        confirmButtonText: 'Ya, Hapus',
+                        cancelButtonText: 'Batal'
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            delete scannedSerialMap[itemNo][bc];
+                            syncTotalQty(itemNo);
+                            renderSerialTable(itemNo, maxQty, filter);
+                            refreshMainUI();
+                        }
+                    });
+                };
+            });
+
+            // Bind event listener to qty inputs
+            tbody.querySelectorAll('.qty-edit-input').forEach(input => {
+                input.onchange = (e) => {
+                    const bc = input.getAttribute('data-barcode');
+                    const newQty = parseFloat(input.value) || 0;
+
+                    if (newQty < 1) {
+                        input.value = 1;
+                        return;
+                    }
+
+                    const otherQtys = Object.keys(scannedSerialMap[itemNo])
+                        .filter(k => k !== bc)
+                        .reduce((sum, k) => sum + scannedSerialMap[itemNo][k], 0);
+
+                    if (otherQtys + newQty > maxQty) {
+                        Swal.showValidationMessage(`Total tidak boleh melebihi ${maxQty}`);
+                        input.value = map[bc];
+                        return;
+                    }
+
+                    scannedSerialMap[itemNo][bc] = newQty;
+                    syncTotalQty(itemNo);
+                    renderSerialTable(itemNo, maxQty, filter);
+                    refreshMainUI();
+                };
+            });
+
+            const actualTotalQty = Object.values(map).reduce((a, b) => a + b, 0);
+            const actualCount = Object.keys(map).length;
+            summary.textContent = `${actualCount} No Seri/Produksi, Jumlah ${actualTotalQty.toFixed(2)}`;
+        }
+
+        // Helper sinkronisasi total qty per item
+        function syncTotalQty(itemNo) {
+            const cleanKey = (itemNo || '').trim();
+            const map = scannedSerialMap[cleanKey] || {};
+            scannedItemsQuantities[cleanKey] = Object.values(map).reduce((a, b) => a + b, 0);
+            console.log(`Synced total qty for ${cleanKey}: ${scannedItemsQuantities[cleanKey]}`);
+        }
+
+        // Helper update UI utama dari modal
+        function refreshMainUI() {
+            updateTableScanQty();
+            updateScanProgress();
+        }
+
+
         // Function untuk format currency
         function formatCurrency(value) {
             if (value === null || value === undefined) return 'Rp. 0';
@@ -1086,20 +1614,37 @@
             }).format(numValue);
         }
 
-        // Function untuk format detail items sesuai kebutuhan controller
-        function formatDetailItemsForSubmission(items) {
-            if (!items || items.length === 0) {
-                return [];
-            }
+        // Format detail items sesuai kebutuhan controller
+        // isPartial: jika true, submit HANYA item yang discan (qty = qty scan)
+        //            jika false (kirim semua), qty = qty SO penuh
+        function formatDetailItemsForSubmission(items, isPartial) {
+            if (!items || items.length === 0) return [];
 
-            return items.map(item => {
-                return {
-                    kode: item.item?.no || '',
-                    kuantitas: item.quantity || 0,
-                    harga: item.unitPrice !== undefined && item.unitPrice !== null ? item.unitPrice : 0,
-                    diskon: item.itemCashDiscount !== undefined && item.itemCashDiscount !== null ? item.itemCashDiscount : 0
-                };
+            const result = [];
+            items.forEach(item => {
+                const kode = item.item?.no || '';
+                const scannedQty = scannedItemsQuantities[kode] || 0;
+
+                if (isPartial) {
+                    // Partial: hanya sertakan item yang memang discan
+                    if (scannedQty <= 0) return;
+                    result.push({
+                        kode: kode,
+                        kuantitas: scannedQty,
+                        harga: item.unitPrice !== undefined && item.unitPrice !== null ? item.unitPrice : 0,
+                        diskon: item.itemCashDiscount !== undefined && item.itemCashDiscount !== null ? item.itemCashDiscount : 0
+                    });
+                } else {
+                    // Kirim semua: gunakan qty penuh dari SO
+                    result.push({
+                        kode: kode,
+                        kuantitas: item.quantity || 0,
+                        harga: item.unitPrice !== undefined && item.unitPrice !== null ? item.unitPrice : 0,
+                        diskon: item.itemCashDiscount !== undefined && item.itemCashDiscount !== null ? item.itemCashDiscount : 0
+                    });
+                }
             });
+            return result;
         }
 
         // Function untuk validasi form sebelum submit
@@ -1141,118 +1686,91 @@
             return errors;
         }
 
-        // Function untuk handle submit form
-        function handleSubmitForm() {
-            const saveButton = document.getElementById('btn-save-pengiriman-pesanan');
+        // Fungsi inti submit form
+        function doSubmitForm(isPartial, saveButton) {
             const form = document.getElementById('pengirimanPesananForm');
             const formSubmittedInput = document.getElementById('form_submitted');
-
-            console.log('Starting form submission process...');
 
             // Validasi form
             const validationErrors = validateFormData();
             if (validationErrors.length > 0) {
                 let errorMessages = '';
-                validationErrors.forEach(error => {
-                    errorMessages += `<li>${error}</li>`;
-                });
-
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Validasi Gagal!',
-                    html: `<ul class="text-left list-disc list-inside">${errorMessages}</ul>`,
-                    timer: 6000,
-                    timerProgressBar: true,
-                    showConfirmButton: false,
-                    toast: true,
-                    position: 'top-end'
-                });
-                console.error('Validation errors:', validationErrors);
+                validationErrors.forEach(error => { errorMessages += `<li>${error}</li>`; });
+                Swal.fire({ icon: 'warning', title: 'Validasi Gagal!', html: `<ul class="text-left list-disc list-inside">${errorMessages}</ul>`, timer: 6000, timerProgressBar: true, showConfirmButton: false, toast: true, position: 'top-end' });
                 return;
             }
 
-            // Show loading state
             saveButton.disabled = true;
             saveButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Menyimpan...';
 
             try {
-                // Format detail items untuk dikirim ke controller
-                const formattedDetailItems = formatDetailItemsForSubmission(detailItems);
+                const formattedDetailItems = formatDetailItemsForSubmission(detailItems, isPartial);
 
-                console.log('Form data to be submitted:', {
-                    formData: formData,
-                    detailItems: formattedDetailItems
-                });
+                if (formattedDetailItems.length === 0) {
+                    Swal.fire({ icon: 'warning', title: 'Tidak Ada Item!', text: 'Tidak ada item yang telah discan untuk dikirim.', timer: 3000, showConfirmButton: false, toast: true, position: 'top-end' });
+                    saveButton.disabled = false;
+                    saveButton.innerHTML = isPartial ? '<i class="fas fa-shipping-fast mr-2"></i>Kirim Sebagian' : '<i class="fas fa-check-circle mr-2"></i>Kirim Semua';
+                    return;
+                }
+
+                // Set flag is_partial
+                document.getElementById('is_partial_input').value = isPartial ? '1' : '0';
 
                 // Buat hidden inputs untuk detail items
-                const existingDetailInputs = form.querySelectorAll('input[name^="detailItems"]');
-                existingDetailInputs.forEach(input => input.remove());
-
-                // Tambahkan detail items sebagai hidden inputs dengan nama field yang benar
+                form.querySelectorAll('input[name^="detailItems"]').forEach(i => i.remove());
                 formattedDetailItems.forEach((item, index) => {
-                    const fields = [
-                        'kode',
-                        'kuantitas',
-                        'harga',
-                        'diskon'
-                    ];
-
-                    fields.forEach(field => {
+                    ['kode', 'kuantitas', 'harga', 'diskon'].forEach(field => {
                         const input = document.createElement('input');
                         input.type = 'hidden';
                         input.name = `detailItems[${index}][${field}]`;
-                        // Pastikan nilai 0 tetap dikirim
                         input.value = item[field] !== undefined && item[field] !== null ? item[field] : '';
                         form.appendChild(input);
                     });
                 });
 
-                // Kirim juga detail serial/barcode yang discan (untuk item manageSN=BATCH)
-                const existingSerialMapInputs = form.querySelectorAll('input[name="serials_json"]');
-                existingSerialMapInputs.forEach(input => input.remove());
+                // Kirim serial map
+                form.querySelectorAll('input[name="serials_json"]').forEach(i => i.remove());
                 const serialMapInput = document.createElement('input');
                 serialMapInput.type = 'hidden';
                 serialMapInput.name = 'serials_json';
                 serialMapInput.value = JSON.stringify(scannedSerialMap || {});
                 form.appendChild(serialMapInput);
 
-                // Set form_submitted flag
                 formSubmittedInput.value = '1';
-
-                // Show success notification before submit
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Data Valid!',
-                    text: 'Sedang menyimpan data pengiriman pesanan...',
-                    timer: 2000,
-                    timerProgressBar: true,
-                    showConfirmButton: false,
-                    toast: true,
-                    position: 'top-end'
-                });
-
-                // Submit form
-                console.log('Submitting form to:', form.action);
                 form.submit();
 
             } catch (error) {
                 console.error('Error during form submission:', error);
-
-                // Reset button state
                 saveButton.disabled = false;
-                saveButton.innerHTML = 'Save Pengiriman Pesanan';
-
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Gagal Menyimpan!',
-                    text: 'Terjadi kesalahan saat menyimpan data. Silakan coba lagi.',
-                    timer: 4000,
-                    timerProgressBar: true,
-                    showConfirmButton: false,
-                    toast: true,
-                    position: 'top-end'
-                });
+                saveButton.innerHTML = isPartial ? '<i class="fas fa-shipping-fast mr-2"></i>Kirim Sebagian' : '<i class="fas fa-check-circle mr-2"></i>Kirim Semua';
+                Swal.fire({ icon: 'error', title: 'Gagal Menyimpan!', text: 'Terjadi kesalahan saat menyimpan data. Silakan coba lagi.', timer: 4000, showConfirmButton: false, toast: true, position: 'top-end' });
             }
+        }
+
+        // Handle tombol Kirim Semua (100%)
+        function handleSubmitForm() {
+            doSubmitForm(false, document.getElementById('btn-save-pengiriman-pesanan'));
+        }
+
+        // Handle tombol Kirim Sebagian
+        function handleSubmitPartial() {
+            const scannedCount = Object.keys(scannedItemsQuantities).filter(k => scannedItemsQuantities[k] > 0).length;
+            const totalItems = detailItems.length;
+
+            Swal.fire({
+                icon: 'question',
+                title: 'Konfirmasi Pengiriman Sebagian',
+                html: `Anda akan mengirimkan <strong>${scannedCount} dari ${totalItems} jenis item</strong> dengan total <strong>${totalScannedQuantity} kuantitas</strong> yang telah discan.<br><br>Sisa item yang belum discan <strong>tidak akan dikirim</strong> dalam pengiriman ini.<br><br>Apakah Anda yakin?`,
+                showCancelButton: true,
+                confirmButtonColor: '#f97316',
+                cancelButtonColor: '#6b7280',
+                confirmButtonText: 'Ya, Kirim Sebagian',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    doSubmitForm(true, document.getElementById('btn-save-partial'));
+                }
+            });
         }
 
         // Klik di luar dropdown
@@ -1285,10 +1803,15 @@
                 console.log('Button Lanjut event listener added');
             }
 
-            // Setup event listener untuk button Save
+            // Setup event listener untuk button Save (Kirim Semua)
             if (btnSave) {
                 btnSave.addEventListener('click', handleSubmitForm);
-                console.log('Button Save event listener added');
+            }
+
+            // Setup event listener untuk button Kirim Sebagian
+            const btnSavePartial = document.getElementById('btn-save-partial');
+            if (btnSavePartial) {
+                btnSavePartial.addEventListener('click', handleSubmitPartial);
             }
 
             // Setup event listener untuk penjualan_id input

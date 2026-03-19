@@ -32,7 +32,8 @@
     <!-- overlayScrollbars -->
     <link rel="stylesheet" href="{{ asset('lte/plugins/overlayScrollbars/css/OverlayScrollbars.min.css') }}">
     <!-- Daterange picker -->
-    {{-- <link rel="stylesheet" href="{{ asset('lte/plugins/daterangepicker/daterangepicker.css') }}"> --}}
+    {{--
+    <link rel="stylesheet" href="{{ asset('lte/plugins/daterangepicker/daterangepicker.css') }}"> --}}
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/daterangepicker/daterangepicker.css" />
     <!-- summernote -->
     <link rel="stylesheet" href="{{ asset('lte/plugins/summernote/summernote-bs4.min.css') }}">
@@ -145,8 +146,7 @@
         <nav class="main-header navbar navbar-expand navbar-white navbar-light">
             <ul class="navbar-nav">
                 <li class="nav-item">
-                    <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i
-                            class="fas fa-bars"></i></a>
+                    <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
                 </li>
                 <li class="nav-item d-none d-sm-inline-block">
                     <a href="{{ route('dashboard') }}" class="nav-link">Home</a>
@@ -196,9 +196,9 @@
                     </div>
                     <div class="info">
                         @auth
-                        <label style="font-size: 20px;" class="d-block"><b>{{ Auth::user()->name }}</b></label>
+                            <label style="font-size: 20px;" class="d-block"><b>{{ Auth::user()->name }}</b></label>
                         @else
-                        <label class="d-block">Guest</label>
+                            <label class="d-block">Guest</label>
                         @endauth
                     </div>
                 </div>
@@ -219,13 +219,13 @@
 
                         <!-- User Menu -->
                         @if (Auth::user()->role === 'super_admin')
-                        <li class="nav-item">
-                            <a href="{{ route('user.index') }}"
-                                class="nav-link {{ Request::is('user*') ? 'active' : '' }}">
-                                <i class="nav-icon fas fa-user"></i>
-                                <p>User</p>
-                            </a>
-                        </li>
+                            <li class="nav-item">
+                                <a href="{{ route('user.index') }}"
+                                    class="nav-link {{ Request::is('user*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-user"></i>
+                                    <p>User</p>
+                                </a>
+                            </li>
                         @endif
 
                         <li class="nav-item">
@@ -238,16 +238,17 @@
 
                         <!-- Log Aktivitas Menu -->
                         @if(Auth::user()->role !== 'owner')
-                        <li class="nav-item">
-                            <a href="{{ route('activity_logs.index') }}"
-                                class="nav-link {{ Request::routeIs('activity_logs.*') ? 'active' : '' }}">
-                                <i class="nav-icon fas fa-history"></i>
-                                <p>Log Activity</p>
-                            </a>
-                        </li>
+                            <li class="nav-item">
+                                <a href="{{ route('activity_logs.index') }}"
+                                    class="nav-link {{ Request::routeIs('activity_logs.*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-history"></i>
+                                    <p>Log Activity</p>
+                                </a>
+                            </li>
                         @endif
 
                         @if (Auth::user()->role !== 'owner')
+<<<<<<< HEAD
                         <li class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') ? 'menu-open' : '' }}">
                             <a href="#" class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-warehouse"></i>
@@ -305,12 +306,61 @@
                                 </li>
                             </ul>
                         </li>
+=======
+                            <li class="nav-item {{ Request::routeIs('barcode.*') ? 'menu-open' : '' }}">
+                                <a href="{{ route('barcode.index') }}"
+                                    class="nav-link {{ Request::routeIs('barcode.*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-database"></i>
+                                    <p>Barcode</p>
+                                </a>
+                            </li>
+
+
+                            <li
+                                class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('packing-list.*') || Request::routeIs('barang-masuk.*') || Request::routeIs('penerimaan-barang.*') ? 'menu-open' : '' }}">
+                                <a href="#"
+                                    class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('packing-list.*') || Request::routeIs('barang-masuk.*') || Request::routeIs('penerimaan-barang.*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-warehouse"></i>
+                                    <p>Penerimaan <i class="right fas fa-angle-left"></i></p>
+                                </a>
+                                <ul class="nav nav-treeview">
+                                    <li class="nav-item">
+                                        <a href="{{ route('pesanan_pembelian.index') }}"
+                                            class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Pesanan Pembelian</p>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a href="{{ route('packing-list.index') }}"
+                                            class="nav-link {{ Request::is('packing-list*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Packing List</p>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a href="{{ route('barang-masuk.index') }}"
+                                            class="nav-link {{ Request::is('barang-masuk*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Scan Barang</p>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a href="{{ route('penerimaan-barang.index') }}"
+                                            class="nav-link {{ Request::is('penerimaan-barang*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Penerimaan Barang</p>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
+>>>>>>> 0a45948e30bab106944a99552333650f9e785433
                         @endif
 
                         <li
-                            class="nav-item {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') || Request::routeIs('satuan_barang.*') ? 'menu-open' : '' }}">
+                            class="nav-item {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') ? 'menu-open' : '' }}">
                             <a href="#"
-                                class="nav-link {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') || Request::routeIs('satuan_barang.*') ? 'active' : '' }}">
+                                class="nav-link {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') ? 'active' : '' }}">
                                 <i class="nav-icon fa-solid fa-cart-flatbed"></i>
                                 <p>Persediaan <i class="right fas fa-angle-left"></i></p>
                             </a>
@@ -336,20 +386,11 @@
                                         <p>Barang & Jasa</p>
                                     </a>
                                 </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('satuan_barang.index') }}"
-                                        class="nav-link {{ Request::is('satuan-barang*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Satuan Barang</p>
-                                    </a>
-                                </li>
                             </ul>
                         </li>
 
-                        <li
-                            class="nav-item {{ Request::routeIs('pemasok.*') || Request::routeIs('retur_pembelian.*') ? 'menu-open' : '' }}">
-                            <a href="#"
-                                class="nav-link {{ Request::routeIs('pemasok.*') || Request::routeIs('retur_pembelian.*')? 'active' : '' }}">
+                        <li class="nav-item {{ Request::routeIs('retur_pembelian.*') ? 'menu-open' : '' }}">
+                            <a href="#" class="nav-link {{ Request::routeIs('retur_pembelian.*') ? 'active' : '' }}">
                                 <i class="nav-icon fa-solid fa-cart-shopping"></i>
                                 <p>Pembelian <i class="right fas fa-angle-left"></i></p>
                             </a>
@@ -359,13 +400,6 @@
                                         class="nav-link {{ Request::is('retur-pembelian*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Retur Pembelian</p>
-                                    </a>
-                                </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('pemasok.index') }}"
-                                        class="nav-link {{ Request::is('pemasok*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Pemasok</p>
                                     </a>
                                 </li>
                             </ul>
@@ -518,12 +552,12 @@
         }
 
         // Call the function initially when the page loads
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             updateDateTime();
             setInterval(updateDateTime, 1000);
         });
 
-        $(document).ready(function() {
+        $(document).ready(function () {
             let tables = [
                 '#user',
                 '#packing_list',
@@ -534,9 +568,7 @@
                 '#faktur_detail',
                 '#surat_jalan',
                 '#surat_jalan_detail',
-                '#pemasok',
                 '#barang_masuk',
-                '#satuan_barang',
                 '#activityTable',
                 '#pengiriman_pesanan',
                 '#faktur_penjualan',
@@ -559,7 +591,7 @@
                         "ordering": true,
                         "info": true,
                         "buttons": ["copy", "colvis"]
-                    }).on('init', function() {
+                    }).on('init', function () {
                         initialized++;
                         if (initialized === tables.filter(id => $(id).length).length) {
                             hideLoading();
@@ -577,24 +609,30 @@
         });
 
 
+<<<<<<< HEAD
         $(document).ready(function() {
             $('.select2').select2();
             $('.select2bs4').select2({
                 theme: 'bootstrap4'
             });
+=======
+        $(document).ready(function () {
+            //Initialize Select2 Elements
+            $('.select2').select2()
+>>>>>>> 0a45948e30bab106944a99552333650f9e785433
         });
 
         //Bootstrap Duallistbox
         $('.duallistbox').bootstrapDualListbox()
 
         // BS-Stepper Init
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             window.stepper = new Stepper(document.querySelector('.bs-stepper'))
         })
 
 
-        $(function() {
-            $("input[data-bootstrap-switch]").each(function() {
+        $(function () {
+            $("input[data-bootstrap-switch]").each(function () {
                 $(this).bootstrapSwitch('state', $(this).prop('checked'));
             })
         })
@@ -609,7 +647,7 @@
         }
 
         // Show loading on page navigation
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             // Hide loading when page is fully loaded
             hideLoading();
 
@@ -618,8 +656,8 @@
 
             // Add loading to links that actually change pages
             const pageLinks = document.querySelectorAll('a[href]');
-            pageLinks.forEach(function(link) {
-                link.addEventListener('click', function(e) {
+            pageLinks.forEach(function (link) {
+                link.addEventListener('click', function (e) {
                     const href = this.getAttribute('href');
 
                     // Only show loading for actual page changes
@@ -643,8 +681,8 @@
 
             // Add loading to form submissions that redirect to different pages
             const forms = document.querySelectorAll('form');
-            forms.forEach(function(form) {
-                form.addEventListener('submit', function() {
+            forms.forEach(function (form) {
+                form.addEventListener('submit', function () {
                     // Only show loading if form method is GET or if action leads to different page
                     const method = this.getAttribute('method');
                     const action = this.getAttribute('action');
@@ -657,12 +695,12 @@
             });
 
             // Hide loading if browser back/forward button is used
-            window.addEventListener('pageshow', function(event) {
+            window.addEventListener('pageshow', function (event) {
                 hideLoading();
             });
 
             // Hide loading on any page load/refresh
-            window.addEventListener('load', function() {
+            window.addEventListener('load', function () {
                 hideLoading();
             });
         });
@@ -673,49 +711,49 @@
 
         // Toast notifications
         @if(session('success'))
-        const ToastSuccess = Swal.mixin({
-            toast: true,
-            position: 'top-end',
-            icon: 'success',
-            showConfirmButton: false,
-            timer: 1000,
-            timerProgressBar: true,
-        });
+            const ToastSuccess = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                icon: 'success',
+                showConfirmButton: false,
+                timer: 1000,
+                timerProgressBar: true,
+            });
 
-        ToastSuccess.fire({
-            title: "{{ session('success') }}"
-        });
+            ToastSuccess.fire({
+                title: "{{ session('success') }}"
+            });
         @endif
 
-        @if(session('error'))
-        const ToastError = Swal.mixin({
-            toast: true,
-            position: 'top-end',
-            icon: 'error',
-            showConfirmButton: false,
-            timer: 1000,
-            timerProgressBar: true,
-        });
+            @if(session('error'))
+                const ToastError = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'error',
+                    showConfirmButton: false,
+                    timer: 1000,
+                    timerProgressBar: true,
+                });
 
-        ToastError.fire({
-            title: "{{ session('error') }}"
-        });
-        @endif
+                ToastError.fire({
+                    title: "{{ session('error') }}"
+                });
+            @endif
 
-        @if(session('info'))
-        const ToastInfo = Swal.mixin({
-            toast: true,
-            position: 'top-end',
-            icon: 'info',
-            showConfirmButton: false,
-            timer: 1000,
-            timerProgressBar: true,
-        });
+            @if(session('info'))
+                const ToastInfo = Swal.mixin({
+                    toast: true,
+                    position: 'top-end',
+                    icon: 'info',
+                    showConfirmButton: false,
+                    timer: 1000,
+                    timerProgressBar: true,
+                });
 
-        ToastInfo.fire({
-            title: "{{ session('info') }}"
-        });
-        @endif
+                ToastInfo.fire({
+                    title: "{{ session('info') }}"
+                });
+            @endif
     </script>
     @stack('scripts')
 </body>

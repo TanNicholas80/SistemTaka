@@ -26,6 +26,7 @@ class PengirimanPesanan extends Model
         'kena_pajak',
         'total_termasuk_pajak',
         'diskon_keseluruhan',
+        'is_partial',
         'kode_customer',
     ];
 
@@ -138,20 +139,20 @@ class PengirimanPesanan extends Model
 
             // 1. PRIORITAS UTAMA: Cek database lokal terlebih dahulu filtered by kode_customer
             $query = self::where('no_pengiriman', 'like', $prefix . '%');
-            
+
             // Jika kode_customer tersedia, filter berdasarkan kode_customer
             // Jika tidak, gunakan customer_id dari branch sebagai fallback
             $customerId = $kodeCustomer ?? $branch->customer_id;
             if ($customerId) {
                 $query->where('kode_customer', $customerId);
             }
-            
+
             $lastEntry = $query->orderBy('no_pengiriman', 'desc')->first();
 
             if ($lastEntry && !empty($lastEntry->no_pengiriman)) {
                 // Extract nomor dari no_pengiriman terakhir dan increment
                 $lastNoPengiriman = $lastEntry->no_pengiriman;
-                $lastIter = (int)substr($lastNoPengiriman, strrpos($lastNoPengiriman, '.') + 1);
+                $lastIter = (int) substr($lastNoPengiriman, strrpos($lastNoPengiriman, '.') + 1);
                 $newIter = $lastIter + 1;
                 $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
 
@@ -168,7 +169,7 @@ class PengirimanPesanan extends Model
             $lastNoPengirimanFromAPI = self::getLastNoPengirimanFromAPI($apiToken, $signatureSecret, $prefix, $branch);
 
             if ($lastNoPengirimanFromAPI) {
-                $lastIter = (int)substr($lastNoPengirimanFromAPI, strrpos($lastNoPengirimanFromAPI, '.') + 1);
+                $lastIter = (int) substr($lastNoPengirimanFromAPI, strrpos($lastNoPengirimanFromAPI, '.') + 1);
                 $newIter = $lastIter + 1;
                 $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
 
@@ -215,11 +216,11 @@ class PengirimanPesanan extends Model
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
             ])->get($baseUrl, [
-                'fields' => 'number',
-                'sp.page' => $page,
-                'sp.pageSize' => $pageSize,
-                'sp.sort' => 'number|desc', // Coba sorting descending
-            ]);
+                        'fields' => 'number',
+                        'sp.page' => $page,
+                        'sp.pageSize' => $pageSize,
+                        'sp.sort' => 'number|desc', // Coba sorting descending
+                    ]);
 
             if (!$response->successful()) {
                 Log::error('API request failed', [
