@@ -38,6 +38,13 @@
             height: 23mm;
             object-fit: contain;
         }
+        .barcode-text {
+            margin-top: 1mm;
+            font-size: 9px;
+            font-weight: bold;
+            text-align: center;
+            word-break: break-all;
+        }
         .right {
             display: table-cell;
             vertical-align: middle;
@@ -59,6 +66,7 @@
     <div class="label label-type-{{ $type ?: 'DEFAULT' }}">
         <div class="left">
             <img class="qr" src="{{ $label['qrSrc'] ?? '' }}" alt="QR"/>
+            <div class="barcode-text">{{ $label['barcode'] ?? '' }}</div>
         </div>
         <div class="right">
             @foreach(($label['rightLines'] ?? []) as $line)

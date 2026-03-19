@@ -248,7 +248,6 @@
                         @endif
 
                         @if (Auth::user()->role !== 'owner')
-<<<<<<< HEAD
                         <li class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') ? 'menu-open' : '' }}">
                             <a href="#" class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-warehouse"></i>
@@ -306,55 +305,6 @@
                                 </li>
                             </ul>
                         </li>
-=======
-                            <li class="nav-item {{ Request::routeIs('barcode.*') ? 'menu-open' : '' }}">
-                                <a href="{{ route('barcode.index') }}"
-                                    class="nav-link {{ Request::routeIs('barcode.*') ? 'active' : '' }}">
-                                    <i class="nav-icon fas fa-database"></i>
-                                    <p>Barcode</p>
-                                </a>
-                            </li>
-
-
-                            <li
-                                class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('packing-list.*') || Request::routeIs('barang-masuk.*') || Request::routeIs('penerimaan-barang.*') ? 'menu-open' : '' }}">
-                                <a href="#"
-                                    class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('packing-list.*') || Request::routeIs('barang-masuk.*') || Request::routeIs('penerimaan-barang.*') ? 'active' : '' }}">
-                                    <i class="nav-icon fas fa-warehouse"></i>
-                                    <p>Penerimaan <i class="right fas fa-angle-left"></i></p>
-                                </a>
-                                <ul class="nav nav-treeview">
-                                    <li class="nav-item">
-                                        <a href="{{ route('pesanan_pembelian.index') }}"
-                                            class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Pesanan Pembelian</p>
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{{ route('packing-list.index') }}"
-                                            class="nav-link {{ Request::is('packing-list*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Packing List</p>
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{{ route('barang-masuk.index') }}"
-                                            class="nav-link {{ Request::is('barang-masuk*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Scan Barang</p>
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{{ route('penerimaan-barang.index') }}"
-                                            class="nav-link {{ Request::is('penerimaan-barang*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Penerimaan Barang</p>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </li>
->>>>>>> 0a45948e30bab106944a99552333650f9e785433
                         @endif
 
                         <li
@@ -609,17 +559,11 @@
         });
 
 
-<<<<<<< HEAD
         $(document).ready(function() {
             $('.select2').select2();
             $('.select2bs4').select2({
                 theme: 'bootstrap4'
             });
-=======
-        $(document).ready(function () {
-            //Initialize Select2 Elements
-            $('.select2').select2()
->>>>>>> 0a45948e30bab106944a99552333650f9e785433
         });
 
         //Bootstrap Duallistbox
