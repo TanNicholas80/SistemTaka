@@ -85,8 +85,8 @@ class DashboardController extends Controller
         // Hitung statistik dasar (data lokal - cepat) filtered by kode_customer
         $totalPenjualan = KasirPenjualan::where('kode_customer', $branch->customer_id)->count();
         $barangSiapJual = Barcode::where('status', 'uploaded')
-            ->whereNotNull('panjang_mlc')
-            ->where('panjang_mlc', '>', 0)
+            ->whereNotNull('length')
+            ->where('length', '>', 0)
             ->where('kode_customer', $branch->customer_id)
             ->count();
         $totalPackingList = PackingList::where('kode_customer', $branch->customer_id)->count();

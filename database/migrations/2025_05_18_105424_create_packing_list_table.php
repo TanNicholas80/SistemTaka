@@ -11,14 +11,12 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('penerimaan_barangs', function (Blueprint $table) {
+        Schema::create('packing_list', function (Blueprint $table) {
             $table->id();
-            $table->string('kode_customer', 50)->index();
-            $table->string('no_po');
-            $table->string('vendor');
-            $table->string('no_terima')->unique();
-            $table->string('npb')->unique();
             $table->date('tanggal');
+            $table->string('npl')->unique();
+            $table->enum('status', ['pending', 'approved', 'reject', 'closed'])->default('pending');
+            $table->string('kode_customer', 50)->index();
             $table->timestamps();
         });
     }
@@ -28,6 +26,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('penerimaan_barangs');
+        Schema::dropIfExists('packing_list');
     }
 };

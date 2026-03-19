@@ -80,11 +80,11 @@
                         <tbody>
                             @foreach ($barcodes as $barcode)
                                 <tr>
-                                    <td>{{ $barcode->keterangan }}</td>
-                                    <td>{{ $barcode->nomor_seri }}</td>
-                                    <td>{{ $barcode->pcs }}</td>
-                                    <td>{{ $barcode->berat_kg ? number_format($barcode->berat_kg, 2) : '-' }}</td>
-                                    <td>{{ $barcode->panjang_mlc ? number_format($barcode->panjang_mlc, 2) : '-' }}</td>
+                                    <td>{{ $barcode->salestext ?? '-' }}</td>
+                                    <td>{{ $barcode->batch_no ?? ($barcode->nomor_seri ?? '-') }}</td>
+                                    <td>{{ $barcode->pcs ?? '-' }}</td>
+                                    <td>{{ isset($barcode->weight) ? number_format((float) $barcode->weight, 2) : (isset($barcode->berat_kg) ? number_format((float) $barcode->berat_kg, 2) : '-') }}</td>
+                                    <td>{{ isset($barcode->length) ? number_format((float) $barcode->length, 2) : (isset($barcode->panjang_mlc) ? number_format((float) $barcode->panjang_mlc, 2) : '-') }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

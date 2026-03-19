@@ -11,12 +11,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('packing_list', function (Blueprint $table) {
+        Schema::create('barcode_non_p_l_s', function (Blueprint $table) {
             $table->id();
-            $table->date('tanggal');
-            $table->string('npl')->unique();
-            $table->enum('status', ['pending', 'approved', 'used'])->default('pending');
             $table->string('kode_customer', 50)->index();
+            $table->string('barcode')->unique();
+            $table->decimal('quantity', 15, 3);
+            $table->string('npb');
+            $table->string('item_no')->index();
+            $table->string('item_name')->nullable();
+
+            $table->foreign('npb')->references('npb')->on('penerimaan_barangs');
             $table->timestamps();
         });
     }
@@ -26,6 +30,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('packing_list');
+        Schema::dropIfExists('barcode_non_p_l_s');
     }
 };

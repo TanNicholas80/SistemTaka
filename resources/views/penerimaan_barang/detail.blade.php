@@ -58,10 +58,12 @@
                                     @foreach ($sortedItems as $pb)
                                     <tr>
                                         <td><a
-                                                href="{{ route('penerimaan-barang.showApproval', ['npb' => $penerimaanBarang->npb, 'namaBarang' => $pb['nama_barang']]) }}">{{ $pb['nama_barang'] ?? '-' }}</a></td>
+                                                href="{{ route('penerimaan-barang.showApproval', ['npb' => $penerimaanBarang->npb, 'kodeBarang' => $pb['kode_barang']]) }}">{{ $pb['nama_barang'] ?? '-' }}</a></td>
                                         <td>{{ $pb['kode_barang'] ?? '-' }}</td>
                                         <td>{{ number_format($pb['panjang_total'], 2) }}</td>
-                                        <td>{{ $pb['unit'] ?? '-' }}</td>
+                                        <td>
+                                            {{ $pb['unit'] ?? (($pb['uom_acc'] ?? '') === 'YD' ? 'YD' : 'METER') }}
+                                        </td>
                                     </tr>
                                     @endforeach
                                 </tbody>

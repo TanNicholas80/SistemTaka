@@ -14,7 +14,7 @@ class PackingList extends Model
 
     const STATUS_PENDING = 'pending';
     const STATUS_APPROVED = 'approved';
-    const STATUS_USED = 'used';
+    // const STATUS_REJECT = 'reject'; // Kalau Tidak Cocok
     const STATUS_CLOSED = 'closed';
 
     protected $table = 'packing_list';
@@ -29,6 +29,11 @@ class PackingList extends Model
     public function barcodes()
     {
         return $this->hasMany(Barcode::class, 'no_packing_list', 'npl');
+    }
+
+    public function rawBarcodes()
+    {
+        return $this->hasMany(RawBarcode::class, 'no_packing_list', 'npl');
     }
 
     /**
