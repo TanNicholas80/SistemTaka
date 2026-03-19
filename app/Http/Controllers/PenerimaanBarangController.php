@@ -401,161 +401,6 @@ class PenerimaanBarangController extends Controller
         return view('penerimaan_barang.create', compact('purchase_order', 'npb', 'noTerima', 'packingLists', 'kodeCustomer'));
     }
 
-    public function mapItemDetailsFromAccurateAndApproval($noPo, $npb, $noTerima, $updateIdPb = false, $includeVendor = false, $filterByIdPb = false, $statusFilter = 'approved')
-    {
-        // Validasi cabang aktif
-        $activeBranchId = session('active_branch');
-        if (!$activeBranchId) {
-            throw new \Exception('Cabang belum dipilih.');
-        }
-
-        $branch = Branch::find($activeBranchId);
-        if (!$branch) {
-            throw new \Exception('Cabang tidak valid.');
-        }
-
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
-            throw new \Exception('Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
-        }
-
-        // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
-        $timestamp = Carbon::now()->toIso8601String();
-        $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
-
-        try {
-            // Ambil detail PO dari Accurate dengan authentication baru
-            $detailPurchaseOrderResponse = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $apiToken,
-                'X-Api-Signature' => $signature,
-                'X-Api-Timestamp' => $timestamp,
-            ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
-                        'number' => $noPo,
-                    ]);
-
-            $itemDetails = [];
-            $vendorData = null;
-
-            if ($detailPurchaseOrderResponse->failed()) {
-                Log::error("Gagal mengambil detail PO dari Accurate", [
-                    'po_number' => $noPo,
-                    'status' => $detailPurchaseOrderResponse->status(),
-                    'response' => $detailPurchaseOrderResponse->body()
-                ]);
-            }
-
-            if ($detailPurchaseOrderResponse->successful()) {
-                $resData = $detailPurchaseOrderResponse->json();
-
-                if (!isset($resData['d']['detailItem']) || !is_array($resData['d']['detailItem'])) {
-                    Log::warning("Detail item kosong atau tidak sesuai format pada PO: $noPo", ['response' => $resData]);
-                }
-
-                // Ambil detail barang
-                foreach ($resData['d']['detailItem'] ?? [] as $detail) {
-                    $itemDetails[] = [
-                        'nama_barang' => $detail['item']['name'] ?? null,
-                        'kode_barang' => $detail['item']['no'] ?? null,
-                        'unit' => $detail['item']['unit1']['name'] ?? null,
-                        'panjang_total' => 0,
-                        'availableToSell' => 0,
-                        'unit_price' => 0,
-                    ];
-                }
-
-                // Ambil vendor data hanya jika diperlukan
-                if ($includeVendor && isset($resData['d']['vendor'])) {
-                    $vendorData = [
-                        'vendorNo' => $resData['d']['vendor']['vendorNo'] ?? null,
-                    ];
-                }
-            }
-
-            // Query Barcode (menggantikan ApprovalStock) berdasarkan no_billing = no_terima
-            $barcodeQuery = Barcode::where('no_billing', $noTerima)
-                ->where('kode_customer', $branch->customer_id);
-
-            if (is_array($statusFilter)) {
-                $barcodeQuery->whereIn('status', $statusFilter);
-            } else {
-                $barcodeQuery->where('status', $statusFilter);
-            }
-
-            if ($filterByIdPb) {
-                $barcodeQuery->where('id_pb', $npb);
-            }
-
-            $barcodes = $barcodeQuery->get();
-
-            if ($barcodes->isEmpty()) {
-                Log::error("Barcode tidak ditemukan untuk invoice", [
-                    'no_billing' => $noTerima,
-                    'filter_id_pb' => $filterByIdPb,
-                    'id_pb' => $npb,
-                    'status_filter' => $statusFilter,
-                ]);
-
-                throw new \Exception("Data stok tidak ditemukan untuk Invoice No. {$noTerima}");
-            }
-
-            $matchedItems = [];
-
-            foreach ($barcodes as $barcode) {
-                $namaBarcode = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace('KC', '', $barcode->nama)));
-
-                foreach ($itemDetails as $item) {
-                    $normalizedItemName = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $item['nama_barang']));
-
-                    if ($normalizedItemName === $namaBarcode) {
-                        if ($updateIdPb) {
-                            try {
-                                $barcode->update(['id_pb' => $npb]);
-                            } catch (\Exception $e) {
-                                Log::error("Gagal update id_pb pada barcode", [
-                                    'barcode_id' => $barcode->id,
-                                    'error' => $e->getMessage(),
-                                ]);
-                            }
-                        }
-
-                        $existingItemIndex = array_search($item['nama_barang'], array_column($matchedItems, 'nama_barang'));
-
-                        if ($existingItemIndex !== false) {
-                            $matchedItems[$existingItemIndex]['panjang_total'] = bcadd(
-                                (string) $matchedItems[$existingItemIndex]['panjang_total'],
-                                (string) ($barcode->panjang ?? 0),
-                                2 // presisi 2 angka desimal
-                            );
-                            $matchedItems[$existingItemIndex]['availableToSell'] = $matchedItems[$existingItemIndex]['panjang_total'];
-                            $matchedItems[$existingItemIndex]['unit_price'] += $barcode->harga_unit ?? 0;
-                        } else {
-                            $newItem = $item;
-                            $newItem['panjang_total'] = $barcode->panjang ?? 0;
-                            $newItem['availableToSell'] = $newItem['panjang_total'];
-                            $newItem['unit_price'] = $barcode->harga_unit ?? 0;
-                            $matchedItems[] = $newItem;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            return [
-                'items' => $matchedItems,
-                'vendor' => $vendorData,
-                'approvalStocks' => $barcodes // Tetap nama approvalStocks untuk backward compatibility
-            ];
-        } catch (\Exception $e) {
-            Log::error("Terjadi error di mapItemDetailsFromAccurateAndApproval", [
-                'message' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'params' => compact('noPo', 'npb', 'noTerima', 'updateIdPb', 'includeVendor', 'filterByIdPb', 'statusFilter'),
-            ]);
-            throw $e; // biar tetap melempar exception ke atas
-        }
-    }
-
     public function getDetailPo(Request $request)
     {
         $validated = $request->validate([
@@ -883,6 +728,9 @@ class PenerimaanBarangController extends Controller
         return [
             'items' => $matchedItems,
             'vendor' => $vendorData,
+            // Gunakan penamaan "barcodes" untuk logika baru,
+            // tapi tetap sediakan "approvalStocks" untuk kompatibilitas pemanggil lama.
+            'barcodes' => $barcodes,
             'approvalStocks' => $barcodes,
             'matchedBarcodeIds' => $matchedBarcodeIds,
         ];
@@ -982,25 +830,6 @@ class PenerimaanBarangController extends Controller
                 ], [
                     'tanggal' => $validatedData['tanggal'],
                 ]);
-
-                // Approval Stock
-                $nama = $this->formatKeteranganForApproval($master->keterangan ?? '');
-                ApprovalStock::updateOrCreate(
-                    [
-                        'barcode' => $master->barcode,
-                        'kode_customer' => $master->kode_customer
-                    ],
-                    [
-                        'nama' => $nama,
-                        'npl' => $master->no_packing_list,
-                        'no_invoice' => $validatedData['no_terima'], // Override for perfect PO receive matching
-                        'kontrak' => $master->kontrak,
-                        'panjang' => $master->panjang_mlc,
-                        'harga_unit' => $master->harga_ppn,
-                        'status' => 'approved',
-                        'id_pb' => $validatedData['npb']
-                    ]
-                );
             }
 
             // Clear temporary data after successful commit
@@ -1032,17 +861,17 @@ class PenerimaanBarangController extends Controller
             );
 
             $itemDetails = $result['items'];
-            $approvalStocks = $result['approvalStocks'];
+            $barcodes = $result['barcodes'] ?? ($result['approvalStocks'] ?? collect());
             $vendorData = $result['vendor'];
             $matchedBarcodeIds = $result['matchedBarcodeIds'] ?? [];
 
             Log::info('Mapped items and vendor data:', [
                 'items_count' => count($itemDetails),
-                'approval_stocks_count' => $approvalStocks->count(),
+                'barcodes_count' => $barcodes->count(),
                 'vendor_data' => $vendorData
             ]);
 
-            if ($approvalStocks->isEmpty()) {
+            if ($barcodes->isEmpty()) {
                 Log::warning("Barcode kosong saat simpan penerimaan barang", [
                     'no_po' => $validatedData['no_po'],
                     'npb' => $validatedData['npb']
@@ -1054,10 +883,10 @@ class PenerimaanBarangController extends Controller
                     ->with('error', 'Tidak ada barang yang disetujui untuk penerimaan barang ini');
             }
 
-            // Update status approval stock ke uploaded
-            foreach ($approvalStocks as $stock) {
-                $stock->status = 'uploaded';
-                $stock->save();
+            // Update status barcode ke uploaded
+            foreach ($barcodes as $barcode) {
+                $barcode->status = Barcode::STATUS_UPLOADED;
+                $barcode->save();
             }
 
             $detailItems = [];
@@ -1082,9 +911,9 @@ class PenerimaanBarangController extends Controller
                     'items' => $itemDetails
                 ]);
 
-                foreach ($approvalStocks as $approval) {
-                    $approval->status = 'approved';
-                    $approval->save();
+                foreach ($barcodes as $barcode) {
+                    $barcode->status = Barcode::STATUS_APPROVED;
+                    $barcode->save();
                 }
 
                 $penerimaan->delete();
@@ -1200,9 +1029,9 @@ class PenerimaanBarangController extends Controller
                     'error_message' => $errorMessage
                 ]);
 
-                foreach ($approvalStocks as $approval) {
-                    $approval->status = 'approved';
-                    $approval->save();
+                foreach ($barcodes as $barcode) {
+                    $barcode->status = Barcode::STATUS_APPROVED;
+                    $barcode->save();
                 }
 
                 $penerimaan->delete();
@@ -1222,10 +1051,10 @@ class PenerimaanBarangController extends Controller
                 'file' => $e->getFile()
             ]);
 
-            if (isset($approvalStocks)) {
-                foreach ($approvalStocks as $approval) {
-                    $approval->status = 'approved';
-                    $approval->save();
+            if (isset($barcodes)) {
+                foreach ($barcodes as $barcode) {
+                    $barcode->status = Barcode::STATUS_APPROVED;
+                    $barcode->save();
                 }
             }
 

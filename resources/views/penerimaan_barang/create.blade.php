@@ -75,18 +75,6 @@
                             class="border border-gray-300 rounded px-2 py-1 w-full max-w-[300px] bg-[#f3f4f6]"
                             required readonly />
 
-                        <!-- Form Kode Customer -->
-                        <label for="kode_customer" class="text-gray-800 font-medium flex items-center">
-                            Kode Customer <span class="text-red-600 ml-1">*</span>
-                        </label>
-                        <input
-                            id="kode_customer"
-                            name="kode_customer"
-                            type="text"
-                            value="{{ $kodeCustomer ?? '' }}"
-                            class="border border-gray-300 rounded px-2 py-1 w-full max-w-[300px] bg-[#f3f4f6]"
-                            required readonly />
-
                         <!-- Form Pemasok -->
                         <label for="vendor" class="text-gray-800 font-medium flex items-center">
                             Terima dari <span class="text-red-600 ml-1">*</span>
