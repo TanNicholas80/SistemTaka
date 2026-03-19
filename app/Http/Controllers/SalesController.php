@@ -31,12 +31,12 @@ class SalesController extends Controller
         $baseUrl = $branch->url_accurate ?? 'https://iris.accurate.id';
         $baseUrl = rtrim($baseUrl, '/');
         $apiPath = '/accurate/api';
-        
+
         // Jika url_accurate sudah termasuk path /accurate/api, gunakan langsung
         if (strpos($baseUrl, '/accurate/api') !== false) {
             return $baseUrl . '/' . ltrim($endpoint, '/');
         }
-        
+
         return $baseUrl . $apiPath . '/' . ltrim($endpoint, '/');
     }
 
@@ -93,14 +93,14 @@ class SalesController extends Controller
 
             // Fetch halaman pertama
             $firstPageResponse = Http::withoutVerifying()->withHeaders([
-                'Authorization'  => 'Bearer ' . $apiToken,
+                'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
             ])->get($listApiUrl, ['sp.page' => 1, 'sp.pageSize' => 20]);
 
             Log::info('Accurate SO list first page response:', [
                 'status' => $firstPageResponse->status(),
-                'body'   => $firstPageResponse->json(),
+                'body' => $firstPageResponse->json(),
             ]);
 
             if ($firstPageResponse->successful()) {
@@ -120,7 +120,7 @@ class SalesController extends Controller
                         for ($page = 2; $page <= $totalPages; $page++) {
                             $promises[$page] = $client->getAsync($listApiUrl, [
                                 'headers' => [
-                                    'Authorization'  => 'Bearer ' . $apiToken,
+                                    'Authorization' => 'Bearer ' . $apiToken,
                                     'X-Api-Signature' => $signature,
                                     'X-Api-Timestamp' => $timestamp,
                                 ],
@@ -151,11 +151,12 @@ class SalesController extends Controller
 
                         foreach ($allSalesOrderIds as $soItem) {
                             $soId = $soItem['id'] ?? null;
-                            if (!$soId) continue;
+                            if (!$soId)
+                                continue;
 
                             $detailPromises[$soId] = $detailClient->getAsync($detailApiUrl, [
                                 'headers' => [
-                                    'Authorization'  => 'Bearer ' . $apiToken,
+                                    'Authorization' => 'Bearer ' . $apiToken,
                                     'X-Api-Signature' => $signature,
                                     'X-Api-Timestamp' => $timestamp,
                                 ],
@@ -178,7 +179,10 @@ class SalesController extends Controller
                         }
                     }
 
-                    Log::info('Data sales order dari API berhasil diambil, total: ' . count($salesOrders));
+                    // User ingin menampilkan semua data SO tanpa filter status
+                    $salesOrders = array_values($salesOrders);
+
+                    Log::info('Data sales order dari API berhasil diambil dan difilter (ONPROCESS/WAITING), total: ' . count($salesOrders));
                 }
             } else {
                 Log::error('Gagal fetch SO list dari Accurate', ['status' => $firstPageResponse->status(), 'body' => $firstPageResponse->body()]);
@@ -200,13 +204,19 @@ class SalesController extends Controller
             }
         }
 
+        foreach ($salesOrders as &$so) {
+            $percent = (float) ($so['percentShipped'] ?? 0);
+            $so['is_partially_delivered'] = $percent > 0 && $percent < 100;
+        }
+        unset($so);
+
         // Simpan ke cache
         Cache::put($cacheKey, [
-            'salesOrders'  => $salesOrders,
+            'salesOrders' => $salesOrders,
             'errorMessage' => $errorMessage,
         ], $cacheDuration * 60);
 
-        Log::info('Data sales order disimpan ke cache');
+        Log::info('Data sales order disimpan ke cache dengan info partial delivery');
 
         return view('sales_cashier.index', compact('salesOrders', 'errorMessage'));
     }
@@ -240,7 +250,8 @@ class SalesController extends Controller
                 ]);
             }
 
-            if (empty($promises)) continue;
+            if (empty($promises))
+                continue;
 
             // Jalankan batch promise secara paralel
             $results = Utils::settle($promises)->wait();
@@ -360,8 +371,8 @@ class SalesController extends Controller
                     'X-Api-Signature' => $signature,
                     'X-Api-Timestamp' => $timestamp,
                 ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
-                    'number' => $kasirPenjualan->npj,
-                ]);
+                            'number' => $kasirPenjualan->npj,
+                        ]);
 
                 if ($response->successful()) {
                     $json = $response->json();
@@ -423,7 +434,8 @@ class SalesController extends Controller
                 $kasirPenjualan = $cachedData['kasirPenjualan'] ?? $kasirPenjualan;
                 $accurateDetail = $cachedData['accurateDetail'] ?? null;
                 $accurateDetailItems = $cachedData['accurateDetailItems'] ?? [];
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
                 Log::info("Menampilkan detail sales order {$npj} dari cache karena API gagal.");
             }
         }
@@ -825,8 +837,8 @@ class SalesController extends Controller
                     'X-Api-Signature' => $signature,
                     'X-Api-Timestamp' => $timestamp,
                 ])->post($this->buildApiUrl($branch, 'customer/detail.do'), [
-                    'customerNo' => $customerNo
-                ]);
+                            'customerNo' => $customerNo
+                        ]);
 
                 // Cek apakah response berhasil
                 if (!$response->successful()) {
@@ -977,10 +989,10 @@ class SalesController extends Controller
                         'X-Api-Signature' => $signature,
                         'X-Api-Timestamp' => $timestamp,
                     ])->get($this->buildApiUrl($branch, 'item/list.do'), [
-                        'fields' => 'name,no,unit1,unitPrice',
-                        'sp.pageSize' => $pageSize,
-                        'sp.page' => $page,
-                    ]);
+                                'fields' => 'name,no,unit1,unitPrice',
+                                'sp.pageSize' => $pageSize,
+                                'sp.page' => $page,
+                            ]);
 
                     if (!$response->successful()) {
                         Log::error("getBarcodeAjax: Gagal mengambil data dari Accurate API halaman {$page}. Status: {$response->status()}, Body: {$response->body()}");
@@ -1139,21 +1151,21 @@ class SalesController extends Controller
             (filter_var($requestData['total_termasuk_pajak'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE) ?? false) : false;
 
         $validator = Validator::make($requestData, [
-            'npj'                   => 'required|string|max:255|unique:kasir_penjualans,npj',
-            'tanggal'               => 'required|date',
-            'customer'              => 'required|string|max:255',
-            'pay_term'              => 'nullable|string',
-            'alamat'                => 'nullable|string',
-            'keterangan'            => 'nullable|string',
-            'kena_pajak'            => 'nullable|boolean',
-            'total_termasuk_pajak'  => 'nullable|boolean',
-            'diskon_keseluruhan'    => 'nullable|numeric|min:0',
-            'detailItems'           => 'required|array|min:1',
+            'npj' => 'required|string|max:255|unique:kasir_penjualans,npj',
+            'tanggal' => 'required|date',
+            'customer' => 'required|string|max:255',
+            'pay_term' => 'nullable|string',
+            'alamat' => 'nullable|string',
+            'keterangan' => 'nullable|string',
+            'kena_pajak' => 'nullable|boolean',
+            'total_termasuk_pajak' => 'nullable|boolean',
+            'diskon_keseluruhan' => 'nullable|numeric|min:0',
+            'detailItems' => 'required|array|min:1',
             'detailItems.*.barcode' => 'required|string|max:10',
-            'detailItems.*.kode'      => 'required|string',
+            'detailItems.*.kode' => 'required|string',
             'detailItems.*.kuantitas' => 'required|string',
-            'detailItems.*.harga'     => 'required|numeric|min:0',
-            'detailItems.*.diskon'    => 'nullable|numeric|min:0',
+            'detailItems.*.harga' => 'required|numeric|min:0',
+            'detailItems.*.diskon' => 'nullable|numeric|min:0',
         ], [
             // NPJ validation messages
             'npj.required' => 'Nomor Penjualan (NPJ) wajib diisi.',
@@ -1207,8 +1219,8 @@ class SalesController extends Controller
             $detailItemsForAccurate = [];
             foreach ($validatedData['detailItems'] as $item) {
                 $accurateItem = [
-                    "itemNo"    => $item['kode'],
-                    "quantity"  => $item['kuantitas'],
+                    "itemNo" => $item['kode'],
+                    "quantity" => $item['kuantitas'],
                     "unitPrice" => $item['harga'],
                 ];
 
@@ -1232,10 +1244,10 @@ class SalesController extends Controller
 
             // Siapkan data untuk API Accurate dengan mengecek nilai null
             $postDataForAccurate = [
-                "customerNo"        => $validatedData['customer'],
-                "transDate"         => date('d/m/Y', strtotime($validatedData['tanggal'])),
-                "number"            => $validatedData['npj'],
-                "detailItem"        => $detailItemsForAccurate,
+                "customerNo" => $validatedData['customer'],
+                "transDate" => date('d/m/Y', strtotime($validatedData['tanggal'])),
+                "number" => $validatedData['npj'],
+                "detailItem" => $detailItemsForAccurate,
             ];
 
             // Set syarat bayar: gunakan yang diinput atau default C.O.D jika kosong
@@ -1283,7 +1295,7 @@ class SalesController extends Controller
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
-                'Content-Type'  => 'application/json',
+                'Content-Type' => 'application/json',
             ])->post($this->buildApiUrl($branch, 'sales-order/save.do'), $postDataForAccurate);
 
             // 4. Validasi response dari API Accurate
@@ -1319,10 +1331,10 @@ class SalesController extends Controller
             foreach ($validatedData['detailItems'] as $item) {
                 DetailItemPenjualan::create([
                     'barcode' => $item['barcode'],
-                    'npj'     => $validatedData['npj'],
-                    'qty'     => $item['kuantitas'],
-                    'harga'   => $item['harga'],
-                    'diskon'  => $item['diskon'] ?? null, // Gunakan null jika diskon tidak ada
+                    'npj' => $validatedData['npj'],
+                    'qty' => $item['kuantitas'],
+                    'harga' => $item['harga'],
+                    'diskon' => $item['diskon'] ?? null, // Gunakan null jika diskon tidak ada
                 ]);
 
                 // --- LOGIKA PENGURANGAN STOK ---

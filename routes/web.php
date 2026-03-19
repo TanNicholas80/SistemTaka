@@ -13,7 +13,6 @@ use App\Http\Controllers\FakturPenjualanController;
 use App\Http\Controllers\HasilStockOpnameController;
 use App\Http\Controllers\PackingListController;
 use App\Http\Controllers\PelangganController;
-use App\Http\Controllers\PemasokController;
 use App\Http\Controllers\PenerimaanBarangController;
 use App\Http\Controllers\PengirimanPesananController;
 use App\Http\Controllers\PerintahStockOpnameController;
@@ -21,7 +20,6 @@ use App\Http\Controllers\PesananPembelianController;
 use App\Http\Controllers\ReturPembelianController;
 use App\Http\Controllers\ReturPenjualanController;
 use App\Http\Controllers\SalesController;
-use App\Http\Controllers\SatuanBarangController;
 use App\Http\Controllers\SuratJalanController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\TempScanController;
@@ -49,9 +47,6 @@ Route::middleware(['auth'])->group(function () {
     // Barang Master - Full Access
     Route::get('/barang-master', [BarangAccurateController::class, 'index'])->name('barang_master.index');
 
-    // Satuan Barang - Full Access
-    Route::get('/satuan-barang', [SatuanBarangController::class, 'index'])->name('satuan_barang.index');
-
     // Pesanan Pembelian - Full Access
     Route::get('/pesanan-pembelian', [PesananPembelianController::class, 'index'])->name('pesanan_pembelian.index');
     Route::get('/pesanan-pembelian/detail/{number}', [PesananPembelianController::class, 'show'])->name('pesanan_pembelian.detail');
@@ -61,9 +56,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/penerimaan-barang/create', [PenerimaanBarangController::class, 'create'])->name('penerimaan-barang.create');
     Route::get('/penerimaan-barang/{npb}', [PenerimaanBarangController::class, 'show'])->name('penerimaan-barang.show');
     Route::get('/penerimaan-barang/{npb}/{namaBarang}', [PenerimaanBarangController::class, 'showApproval'])->name('penerimaan-barang.showApproval');
-
-    // Pemasok - Full Access
-    Route::get('/pemasok', [PemasokController::class, 'index'])->name('pemasok.index');
 
     // Pelanggan - Full Access
     Route::get('/pelanggan', [PelangganController::class, 'index'])->name('pelanggan.index');
@@ -169,9 +161,9 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('packing-list', PackingListController::class);
     Route::get('/packing-list/detail/{id}', [PackingListController::class, 'show'])->name('packing_list_detail');
 
-    Route::get('/faktur', [FakturController::class, 'index'])->name('faktur.index');
-    Route::get('/faktur/{no_billing}', [FakturController::class, 'show'])->name('faktur.show');
+    // Route::get('/faktur', [FakturController::class, 'index'])->name('faktur.index');
+    // Route::get('/faktur/{no_billing}', [FakturController::class, 'show'])->name('faktur.show');
 
-    Route::get('/surat-jalan', [SuratJalanController::class, 'index'])->name('surat_jalan.index');
-    Route::get('/surat-jalan/{no_billing}', [SuratJalanController::class, 'show'])->name('surat_jalan.show');
+    // Route::get('/surat-jalan', [SuratJalanController::class, 'index'])->name('surat_jalan.index');
+    // Route::get('/surat-jalan/{no_billing}', [SuratJalanController::class, 'show'])->name('surat_jalan.show');
 });
