@@ -272,7 +272,15 @@ class TempScanController extends Controller
         
         $keteranganParts = explode('/', $barcode->keterangan);
         $aliasName = trim($keteranganParts[0] ?? '');
-        
+
+        // Format material_code: 12 digit terakhir - kode_warna (untuk matching dengan item Accurate)
+        $rawMc = preg_replace('/\D/', '', $barcode->material_code ?? '');
+        $mc12 = $rawMc !== '' ? substr($rawMc, -12) : '';
+        $kw = trim($barcode->kode_warna ?? '');
+        $materialCodeFormatted = ($mc12 && $kw) ? $mc12 . ' - ' . $kw : $mc12;
+
+        $length = (float) str_replace(',', '.', $barcode->length ?? 0);
+
         return response()->json([
             'status' => 'success',
             'message' => "Barcode berhasil divalidasi.",
@@ -281,6 +289,8 @@ class TempScanController extends Controller
                 'kode_barang' => $barcode->kode_barang,
                 'keterangan' => $barcode->keterangan,
                 'alias_nama' => $aliasName,
+                'material_code_formatted' => $materialCodeFormatted,
+                'length' => $length,
                 'panjang_mlc' => (float) $barcode->panjang_mlc
             ]
         ]);
