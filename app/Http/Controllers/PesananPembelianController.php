@@ -14,6 +14,19 @@ use Illuminate\Support\Facades\Log;
 
 class PesananPembelianController extends Controller
 {
+    private function buildApiurl($branch, $endpoint)
+    {
+        $baseUrl = $branch->url_accurate ?? 'https://iris.accurate.id';
+        $baseUrl = rtrim($baseUrl, '/');
+        $apiPath = '/accurate/api';
+
+        if (strpos($baseUrl, '/accurate/api') !== false) {
+            return $baseUrl . '/' . ltrim($endpoint, '/');
+        }
+
+        return $baseUrl . $apiPath . '/' . ltrim($endpoint, '/');
+    }
+
     public function index(Request $request)
     {
         // Validasi cabang aktif
@@ -51,10 +64,9 @@ class PesananPembelianController extends Controller
 
         $apiToken = $branch->accurate_api_token;
         $signatureSecret = $branch->accurate_signature_secret;
-        $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
-        $apiUrl = $baseUrl . '/purchase-order/list.do';
+        $apiUrl = $this->buildApiUrl($branch, 'purchase-order/list.do');
         $fields = 'transDate,number,statusName,vendor,totalAmount,id';
 
         $pesananPembelian = [];
@@ -62,7 +74,7 @@ class PesananPembelianController extends Controller
         $hasApiError = false;
 
         try {
-            $firstPageResponse = Http::withHeaders([
+            $firstPageResponse = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -105,7 +117,8 @@ class PesananPembelianController extends Controller
                 }
             } else {
                 Log::error('Gagal mengambil daftar pesanan pembelian', ['response' => $firstPageResponse->body()]);
-                if ($firstPageResponse->status() == 429) $hasApiError = true;
+                if ($firstPageResponse->status() == 429)
+                    $hasApiError = true;
             }
         } catch (Exception $e) {
             Log::error('Exception saat mengambil pesanan pembelian: ' . $e->getMessage());
@@ -119,9 +132,11 @@ class PesananPembelianController extends Controller
             if (Cache::has($cacheKey)) {
                 $cachedData = Cache::get($cacheKey);
                 $pesananPembelian = $cachedData['pesananPembelian'] ?? [];
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
             } else {
-                if (is_null($errorMessage)) $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache.';
+                if (is_null($errorMessage))
+                    $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache.';
             }
         }
 
@@ -158,13 +173,12 @@ class PesananPembelianController extends Controller
 
         $apiToken = $branch->accurate_api_token;
         $signatureSecret = $branch->accurate_signature_secret;
-        $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
-        $detailApiUrl = $baseUrl . '/purchase-order/detail.do?number=' . $number;
+        $detailApiUrl = $this->buildApiUrl($branch, 'purchase-order/detail.do?number=' . $number);
 
         try {
-            $response = Http::withHeaders([
+            $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -195,7 +209,8 @@ class PesananPembelianController extends Controller
             if (Cache::has($cacheKey)) {
                 $cachedData = Cache::get($cacheKey);
                 $detail = $cachedData['detail'] ?? null;
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
                 Log::info("Menampilkan detail {$number} dari cache karena API gagal.");
             }
         }
