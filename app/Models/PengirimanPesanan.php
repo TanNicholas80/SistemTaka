@@ -127,15 +127,20 @@ class PengirimanPesanan extends Model
                 return "{$prefix}00001";
             }
 
-            // Validasi credentials API Accurate dari Branch
-            if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
-                Log::warning('Kredensial API Accurate untuk cabang belum diatur saat generate no_pengiriman, menggunakan default');
+            // Validasi credentials API Accurate dari user login
+            $user = Auth::user();
+            if (
+                !$user ||
+                !$user->accurate_api_token ||
+                !$user->accurate_signature_secret
+            ) {
+                Log::warning('Kredensial API Accurate user belum diatur saat generate no_pengiriman, menggunakan default');
                 return "{$prefix}00001";
             }
 
-            // Get API credentials from branch (auto-decrypted by model accessors)
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            // Get API credentials from user (auto-decrypted by model accessors)
+            $apiToken = $user->accurate_api_token;
+            $signatureSecret = $user->accurate_signature_secret;
 
             $maxIter = 0;
 
