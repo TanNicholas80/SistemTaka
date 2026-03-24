@@ -59,7 +59,11 @@
                                     <tbody>
                                         @forelse ($salesOrders as $so)
                                             <tr>
-                                                <td>{{ $so['number'] ?? '-' }}</td>
+                                                <td>
+                                                    <a href="{{ route('cashier.detail', $so['number']) }}">
+                                                        {{ $so['number'] ?? '-' }}
+                                                    </a>
+                                                </td>
                                                 <td>{{ !empty($so['transDate']) ? \Carbon\Carbon::createFromFormat('d/m/Y', $so['transDate'])->format('d-m-Y') : '-' }}
                                                 </td>
                                                 <td>{{ $so['customer']['contactInfo']['name'] ?? ($so['customer']['name'] ?? '-') }}

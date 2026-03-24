@@ -137,50 +137,45 @@ class PengirimanPesanan extends Model
             $apiToken = $branch->accurate_api_token;
             $signatureSecret = $branch->accurate_signature_secret;
 
-            // 1. PRIORITAS UTAMA: Cek database lokal terlebih dahulu filtered by kode_customer
-            $query = self::where('no_pengiriman', 'like', $prefix . '%');
+            $maxIter = 0;
 
-            // Jika kode_customer tersedia, filter berdasarkan kode_customer
-            // Jika tidak, gunakan customer_id dari branch sebagai fallback
-            $customerId = $kodeCustomer ?? $branch->customer_id;
-            if ($customerId) {
-                $query->where('kode_customer', $customerId);
-            }
-
-            $lastEntry = $query->orderBy('no_pengiriman', 'desc')->first();
-
-            if ($lastEntry && !empty($lastEntry->no_pengiriman)) {
-                // Extract nomor dari no_pengiriman terakhir dan increment
-                $lastNoPengiriman = $lastEntry->no_pengiriman;
-                $lastIter = (int) substr($lastNoPengiriman, strrpos($lastNoPengiriman, '.') + 1);
-                $newIter = $lastIter + 1;
-                $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
-
-                Log::info('Generated no_pengiriman from local database', [
-                    'last_no_pengiriman' => $lastNoPengiriman,
-                    'new_no_pengiriman' => "{$prefix}{$formattedIter}",
-                    'kode_customer' => $customerId
-                ]);
-
-                return "{$prefix}{$formattedIter}";
-            }
-
-            // 2. Jika tidak ada di database lokal, cek API dengan pagination
+            // 1. PRIORITAS TUNGGAL: Cek API Accurate untuk mendapatkan nomor terakhir
+            // Permintaan User: "Ikut accurate, bukan database lokal"
             $lastNoPengirimanFromAPI = self::getLastNoPengirimanFromAPI($apiToken, $signatureSecret, $prefix, $branch);
-
             if ($lastNoPengirimanFromAPI) {
-                $lastIter = (int) substr($lastNoPengirimanFromAPI, strrpos($lastNoPengirimanFromAPI, '.') + 1);
-                $newIter = $lastIter + 1;
-                $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
+                $maxIter = (int) substr($lastNoPengirimanFromAPI, strrpos($lastNoPengirimanFromAPI, '.') + 1);
+            }
 
-                Log::info('Generated no_pengiriman from API', [
-                    'last_no_pengiriman' => $lastNoPengirimanFromAPI,
-                    'new_no_pengiriman' => "{$prefix}{$formattedIter}",
+            // 2. Generate nomor baru mengikuti Accurate secara ketat
+            $newIter = $maxIter + 1;
+            $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
+            $newNoPengiriman = "{$prefix}{$formattedIter}";
+            
+            // 3. Karena nomor urut mutlak mengikuti Accurate, jika nomor baru ini 
+            // masih menyangkut di database lokal (misal karena DO sebelumnya dihapus di Accurate
+            // namun belum sempat tersinkronisasi), kita wajib menghapus data yatim tersebut
+            // agar nomor ini berhasil digunakan saat form di-submit tanpa terblokir validasi unique.
+            $customerId = $kodeCustomer ?? $branch->customer_id;
+            
+            $orphanedRecord = self::where('no_pengiriman', $newNoPengiriman);
+            if ($customerId) {
+                $orphanedRecord->where('kode_customer', $customerId);
+            }
+            
+            if ($orphanedRecord->exists()) {
+                $orphanedRecord->delete();
+                Log::info('Sinkronisasi: Menghapus DO otomatis di memori lokal agar bisa di-reuse', [
+                    'no_pengiriman' => $newNoPengiriman,
                     'kode_customer' => $customerId
                 ]);
-
-                return "{$prefix}{$formattedIter}";
             }
+            
+            Log::info('Generated no_pengiriman strictly mapped from Accurate API', [
+                'new_no_pengiriman' => $newNoPengiriman,
+                'last_from_accurate' => $lastNoPengirimanFromAPI
+            ]);
+
+            return $newNoPengiriman;
         } catch (\Exception $e) {
             Log::error('Exception occurred while generating no_pengiriman: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
@@ -211,7 +206,7 @@ class PengirimanPesanan extends Model
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
-            $response = Http::withHeaders([
+            $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,

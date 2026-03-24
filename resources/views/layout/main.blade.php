@@ -305,7 +305,7 @@
                                 <p>Persediaan <i class="right fas fa-angle-left"></i></p>
                             </a>
                             <ul class="nav nav-treeview">
-                                <li class="nav-item">
+                                {{-- <li class="nav-item">
                                     <a href="{{ route('perintah_stock_opname.index') }}"
                                         class="nav-link {{ Request::is('perintah-stock-opname*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
@@ -318,7 +318,7 @@
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Hasil Stock Opname</p>
                                     </a>
-                                </li>
+                                </li> --}}
                                 <li class="nav-item">
                                     <a href="{{ route('barang_master.index') }}"
                                         class="nav-link {{ Request::is('barang-master*') ? 'active' : '' }}">
@@ -356,7 +356,7 @@
 
                                 <li class="nav-item">
                                     <a href="{{ route('cashier.index') }}"
-                                        class="nav-link {{ Request::routeIs('cashier.index') ? 'active' : '' }}">
+                                        class="nav-link {{ Request::routeIs('cashier.*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Pesanan Penjualan</p>
                                     </a>

@@ -55,7 +55,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/penerimaan-barang', [PenerimaanBarangController::class, 'index'])->name('penerimaan-barang.index');
     Route::get('/penerimaan-barang/create', [PenerimaanBarangController::class, 'create'])->name('penerimaan-barang.create');
     Route::get('/penerimaan-barang/{npb}', [PenerimaanBarangController::class, 'show'])->name('penerimaan-barang.show');
-    Route::get('/penerimaan-barang/{npb}/{namaBarang}', [PenerimaanBarangController::class, 'showApproval'])->name('penerimaan-barang.showApproval');
 
     // Pelanggan - Full Access
     Route::get('/pelanggan', [PelangganController::class, 'index'])->name('pelanggan.index');
@@ -160,6 +159,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('packing-list', PackingListController::class);
     Route::get('/packing-list/detail/{id}', [PackingListController::class, 'show'])->name('packing_list_detail');
+
+    Route::patch('/packing-list/{id}/approve', [PackingListController::class, 'approve'])
+        ->name('packing-list.approve');
 
     // Route::get('/faktur', [FakturController::class, 'index'])->name('faktur.index');
     // Route::get('/faktur/{no_billing}', [FakturController::class, 'show'])->name('faktur.show');

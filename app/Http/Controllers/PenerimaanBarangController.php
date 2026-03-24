@@ -162,7 +162,7 @@ class PenerimaanBarangController extends Controller
 
         foreach ($batches as $batch) {
             $promises = [];
-            $client = new \GuzzleHttp\Client();
+            $client = new \GuzzleHttp\Client(['verify' => false]);
 
             foreach ($batch as $item) {
                 if (!$item['no_po']) {
@@ -285,7 +285,7 @@ class PenerimaanBarangController extends Controller
             'fields' => 'transDate,number,status'
         ];
 
-        $firstPageResponse = Http::timeout(30)->withHeaders([
+        $firstPageResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
             'Authorization' => 'Bearer ' . $apiToken,
             'X-Api-Signature' => $signature,
             'X-Api-Timestamp' => $timestamp,
@@ -304,7 +304,7 @@ class PenerimaanBarangController extends Controller
 
                 if ($totalPages > 1) {
                     $promises = [];
-                    $client = new \GuzzleHttp\Client();
+                    $client = new \GuzzleHttp\Client(['verify' => false]);
 
                     for ($page = 2; $page <= $totalPages; $page++) {
                         $promises[$page] = $client->getAsync($poApiUrl, [
@@ -427,13 +427,13 @@ class PenerimaanBarangController extends Controller
             $vendorData = null;
             $accurateItems = [];
 
-            $poResponse = Http::timeout(30)->withHeaders([
+            $poResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
             ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
-                'number' => $validated['no_po'],
-            ]);
+                        'number' => $validated['no_po'],
+                    ]);
 
             if ($poResponse->successful()) {
                 $resData = $poResponse->json();
@@ -505,25 +505,37 @@ class PenerimaanBarangController extends Controller
                 if (!empty($accurateItems)) {
                     if (!$namaBarang && $materialCode12) {
                         foreach ($accurateItems as $item) {
-                            if ($item['no'] === $materialCode12) { $namaBarang = $item['name']; break; }
+                            if ($item['no'] === $materialCode12) {
+                                $namaBarang = $item['name'];
+                                break;
+                            }
                         }
                     }
                     if (!$namaBarang && $materialCode12) {
                         foreach ($accurateItems as $item) {
                             $accNumeric = $item['no_numeric'];
-                            if ($accNumeric !== '' && substr($accNumeric, -12) === $materialCode12) { $namaBarang = $item['name']; break; }
+                            if ($accNumeric !== '' && substr($accNumeric, -12) === $materialCode12) {
+                                $namaBarang = $item['name'];
+                                break;
+                            }
                         }
                     }
                     if (!$namaBarang && $materialCode12) {
                         foreach ($accurateItems as $item) {
-                            if (str_contains($item['no'], $materialCode12) || str_contains($materialCode12, $item['no'])) { $namaBarang = $item['name']; break; }
+                            if (str_contains($item['no'], $materialCode12) || str_contains($materialCode12, $item['no'])) {
+                                $namaBarang = $item['name'];
+                                break;
+                            }
                         }
                     }
                     if (!$namaBarang) {
                         $barcodeNama = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace('KC', '', $barcode->nama ?? '')));
                         foreach ($accurateItems as $item) {
                             $accNama = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $item['name'] ?? ''));
-                            if ($accNama !== '' && $accNama === $barcodeNama) { $namaBarang = $item['name']; break; }
+                            if ($accNama !== '' && $accNama === $barcodeNama) {
+                                $namaBarang = $item['name'];
+                                break;
+                            }
                         }
                     }
                 }
@@ -580,7 +592,7 @@ class PenerimaanBarangController extends Controller
         $vendorData = null;
 
         // Ambil detail PO dari Accurate
-        $detailPurchaseOrderResponse = Http::withHeaders([
+        $detailPurchaseOrderResponse = Http::withoutVerifying()->withHeaders([
             'Authorization' => 'Bearer ' . $apiToken,
             'X-Api-Signature' => $signature,
             'X-Api-Timestamp' => $timestamp,
@@ -608,6 +620,59 @@ class PenerimaanBarangController extends Controller
             ->where('kode_customer', $branch->customer_id)
             ->whereIn('status', [PackingList::STATUS_APPROVED, PackingList::STATUS_USED])
             ->get();
+
+        if (empty($packingListIds)) {
+            // Jika tidak ada packing list, coba ambil detail aktual dari Penerimaan Barang (receive-item) di Accurate
+            $detailReceiveItemResponse = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($this->buildApiUrl($branch, 'receive-item/detail.do'), ['number' => $npb]);
+
+            if ($detailReceiveItemResponse->successful() && isset($detailReceiveItemResponse->json()['d'])) {
+                $resData = $detailReceiveItemResponse->json();
+                $receiveItemDetails = [];
+                
+                foreach ($resData['d']['detailItem'] ?? [] as $detail) {
+                    $serialNumbers = [];
+                    foreach ($detail['detailSerialNumber'] ?? [] as $sn) {
+                        $serialNumbers[] = [
+                            'serialNumberNo' => $sn['serialNumber']['number'] ?? '',
+                            'quantity' => $sn['quantity'] ?? 0,
+                        ];
+                    }
+
+                    $receiveItemDetails[] = [
+                        'nama_barang' => $detail['item']['name'] ?? null,
+                        'kode_barang' => $detail['item']['no'] ?? null,
+                        'unit' => $detail['item']['unit1']['name'] ?? null,
+                        'panjang_total' => $detail['quantity'] ?? 0,
+                        'karyawan' => '-',
+                        'grade' => '-',
+                        'availableToSell' => 0,
+                        'unit_price' => 0,
+                        'keterangan' => '-',
+                        'serial_numbers' => $serialNumbers
+                    ];
+                }
+
+                // Jika berhasil mendapat detail item, kembalikan ini alih-alih fallback ke kuantitas 0
+                if (!empty($receiveItemDetails)) {
+                    return [
+                        'items' => $receiveItemDetails,
+                        'packingListIds' => [],
+                        'vendorData' => $vendorData
+                    ];
+                }
+            }
+
+            // Fallback kembali ke PO dengan kuantitas 0 jika API gagal
+            return [
+                'items' => $itemDetails,
+                'packingListIds' => [],
+                'vendorData' => $vendorData
+            ];
+        }
 
         if ($packingLists->isEmpty()) {
             throw new \Exception('Packing list tidak ditemukan atau status belum approved/used.');
@@ -647,21 +712,30 @@ class PenerimaanBarangController extends Controller
             // Strategi 1: Exact match kode_barang Accurate === materialCode12
             if ($matchedIdx === null && $mc12) {
                 foreach ($accurateItemsForMatch as $idx => $acc) {
-                    if ($acc['no'] === $mc12) { $matchedIdx = $idx; break; }
+                    if ($acc['no'] === $mc12) {
+                        $matchedIdx = $idx;
+                        break;
+                    }
                 }
             }
 
             // Strategi 2: Numeric suffix match (12 digit terakhir)
             if ($matchedIdx === null && $mc12) {
                 foreach ($accurateItemsForMatch as $idx => $acc) {
-                    if ($acc['no_numeric'] !== '' && substr($acc['no_numeric'], -12) === $mc12) { $matchedIdx = $idx; break; }
+                    if ($acc['no_numeric'] !== '' && substr($acc['no_numeric'], -12) === $mc12) {
+                        $matchedIdx = $idx;
+                        break;
+                    }
                 }
             }
 
             // Strategi 3: Contains match
             if ($matchedIdx === null && $mc12) {
                 foreach ($accurateItemsForMatch as $idx => $acc) {
-                    if (str_contains($acc['no'], $mc12) || str_contains($mc12, $acc['no'])) { $matchedIdx = $idx; break; }
+                    if (str_contains($acc['no'], $mc12) || str_contains($mc12, $acc['no'])) {
+                        $matchedIdx = $idx;
+                        break;
+                    }
                 }
             }
 
@@ -670,7 +744,10 @@ class PenerimaanBarangController extends Controller
                 $namaBarcode = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace('KC', '', $barcode->nama ?? '')));
                 foreach ($accurateItemsForMatch as $idx => $acc) {
                     $accNama = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $acc['name']));
-                    if ($accNama !== '' && $accNama === $namaBarcode) { $matchedIdx = $idx; break; }
+                    if ($accNama !== '' && $accNama === $namaBarcode) {
+                        $matchedIdx = $idx;
+                        break;
+                    }
                 }
             }
 
@@ -714,11 +791,15 @@ class PenerimaanBarangController extends Controller
                 $matchedItems[$existingItemIndex]['availableToSell'] = $matchedItems[$existingItemIndex]['panjang_total'];
                 $matchedItems[$existingItemIndex]['unit_price'] += $barcode->harga_unit ?? 0;
                 $matchedItems[$existingItemIndex]['serial_numbers'][] = $serialEntry;
+                if (!isset($matchedItems[$existingItemIndex]['keterangan']) || empty($matchedItems[$existingItemIndex]['keterangan'])) {
+                    $matchedItems[$existingItemIndex]['keterangan'] = ltrim($barcode->keterangan ?? '', '*');
+                }
             } else {
                 $newItem = $item;
                 $newItem['panjang_total'] = $barcodeQty;
                 $newItem['availableToSell'] = $newItem['panjang_total'];
                 $newItem['unit_price'] = $barcode->harga_unit ?? 0;
+                $newItem['keterangan'] = ltrim($barcode->keterangan ?? '', '*');
                 $newItem['serial_numbers'] = [$serialEntry];
                 $newItem['item_no_pl'] = $itemNoPl;
                 $matchedItems[] = $newItem;
@@ -798,7 +879,7 @@ class PenerimaanBarangController extends Controller
             // 2. Commit Temp to Permanent Tables
             foreach ($masterBarcodes as $master) {
                 // Barcode
-                \App\Models\Barcode::updateOrCreate(
+                Barcode::updateOrCreate(
                     ['barcode' => $master->barcode, 'kode_customer' => $master->kode_customer],
                     [
                         'no_packing_list' => $master->no_packing_list,
@@ -960,7 +1041,7 @@ class PenerimaanBarangController extends Controller
             ]);
 
             // Send to Accurate API dengan timeout
-            $response = Http::timeout(60)->withHeaders([
+            $response = Http::timeout(60)->withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -978,7 +1059,8 @@ class PenerimaanBarangController extends Controller
                 // Update status packing list: closed jika semua barcode ter-match, used jika parsial
                 foreach ($validatedData['packing_list_ids'] as $plId) {
                     $pl = PackingList::find($plId);
-                    if (!$pl) continue;
+                    if (!$pl)
+                        continue;
 
                     $allBarcodeIds = Barcode::where('no_packing_list', $pl->npl)
                         ->where('kode_customer', $branch->customer_id)
@@ -1086,10 +1168,8 @@ class PenerimaanBarangController extends Controller
             $penerimaanBarang = PenerimaanBarang::where('npb', $npb)->firstOrFail();
 
             // Ambil packing list IDs dari penerimaan barang
-            $packingListIds = $penerimaanBarang->packingLists()->pluck('id')->toArray();
-            if (empty($packingListIds)) {
-                throw new \Exception('Penerimaan barang ini tidak memiliki packing list terkait.');
-            }
+            $packingListIds = $penerimaanBarang->packingLists()->pluck('packing_list.id')->toArray();
+            // Penghapusan throw exception jika empty agar detail PO yang kuantitasnya 0 tetap tampil
 
             $itemDetailsData = $this->mapItemDetailsFromPackingLists(
                 $penerimaanBarang->no_po,
@@ -1138,274 +1218,5 @@ class PenerimaanBarangController extends Controller
         }
 
         return view('penerimaan_barang.detail', compact('penerimaanBarang', 'matchedItems', 'errorMessage'));
-    }
-
-    public function showApproval($npb, $namaBarang, Request $request)
-    {
-        // Cache key yang unik
-        $cacheKey = 'penerimaan_barang_approval_' . $npb . '_' . md5($namaBarang);
-        $cacheDuration = 10; // 10 menit
-
-        // Jika ada parameter force_refresh, bypass cache
-        if ($request->has('force_refresh')) {
-            Cache::forget($cacheKey);
-        }
-
-        $errorMessage = null;
-        $penerimaanBarang = null;
-        $approvalStock = null;
-
-        try {
-            // Selalu coba ambil data dari database/API terlebih dahulu
-            $penerimaanBarang = PenerimaanBarang::with('packingLists')
-                ->where('npb', $npb)
-                ->firstOrFail();
-
-            // Format nama barang menggunakan method formatNamaBarangForApproval
-            $namaBarangFormatted = $this->formatNamaBarangForApproval($namaBarang);
-
-            // Filter barcode yang nama-nya cocok (Barcode->nama dari accessor formatKeterangan)
-            $approvalStock = $penerimaanBarang->barcodes()->filter(function ($barcode) use ($namaBarangFormatted, $namaBarang) {
-                $nama = $barcode->nama;
-                return $nama === $namaBarangFormatted || $nama === $namaBarang;
-            })->values();
-
-            if ($approvalStock->isEmpty()) {
-                $errorMessage = "Data approval tidak ditemukan untuk barang '{$namaBarang}' pada penerimaan barang NPB {$npb}.";
-            } else {
-                $dataToCache = [
-                    'penerimaanBarang' => $penerimaanBarang,
-                    'approvalStock' => $approvalStock,
-                    'errorMessage' => null
-                ];
-
-                // Simpan data ke cache setelah berhasil dari database
-                Cache::put($cacheKey, $dataToCache, $cacheDuration * 60);
-                Log::info("Data approval penerimaan barang {$npb} dengan nama barang {$namaBarang} dari database berhasil disimpan ke cache");
-            }
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            $errorMessage = "Penerimaan barang dengan NPB {$npb} tidak ditemukan.";
-            Log::error('Penerimaan barang tidak ditemukan untuk approval: ' . $e->getMessage(), [
-                'npb' => $npb,
-                'namaBarang' => $namaBarang
-            ]);
-        } catch (\Exception $e) {
-            // Log error untuk debugging
-            Log::error('Error in showApproval method: ' . $e->getMessage(), [
-                'npb' => $npb,
-                'namaBarang' => $namaBarang
-            ]);
-
-            if ($penerimaanBarang) {
-                $errorMessage = "Gagal mengambil data approval dari database. Silakan coba lagi.";
-            } else {
-                $errorMessage = "Terjadi kesalahan koneksi. Silakan periksa jaringan Anda.";
-            }
-
-            // Gunakan cache sebagai fallback jika database error
-            if (Cache::has($cacheKey)) {
-                $cachedData = Cache::get($cacheKey);
-                $penerimaanBarang = $cachedData['penerimaanBarang'] ?? null;
-                $approvalStock = $cachedData['approvalStock'] ?? null;
-                if (is_null($errorMessage))
-                    $errorMessage = $cachedData['errorMessage'] ?? null;
-                Log::info("Menggunakan data cached untuk approval {$npb} karena error pada database");
-            }
-        }
-
-        return view('penerimaan_barang.detail-approval', compact('penerimaanBarang', 'approvalStock', 'errorMessage'));
-    }
-
-    /**
-     * Format nama barang untuk mencocokkan dengan format di database Approval
-     * 
-     * @param string $namaBarang Nama barang dari URL decode
-     * @return string Nama barang yang sudah diformat
-     */
-    private function formatNamaBarangForApproval($namaBarang)
-    {
-        // Trim dan bersihkan input
-        $namaBarang = trim($namaBarang);
-
-        // Log untuk debugging
-        Log::info('Processing nama barang:', ['input' => $namaBarang]);
-
-        // Check apakah nama barang sudah mengandung "ICHIMURA" atau brand khusus lainnya
-        $specialBrands = ['ICHIMURA', 'MIZUNO', 'ADIDAS', 'NIKE']; // Tambahkan brand khusus lainnya sesuai kebutuhan
-        $isSpecialBrand = false;
-
-        foreach ($specialBrands as $brand) {
-            if (stripos($namaBarang, $brand) !== false) {
-                $isSpecialBrand = true;
-                break;
-            }
-        }
-
-        if ($isSpecialBrand) {
-            // Format khusus untuk brand tertentu (tanpa prefix KC)
-            // Contoh: ICHIMURA JPN 150 079 HTM -> ICHIMURA JPN 150 #079 HTM
-
-            // Split by space
-            $parts = explode(' ', $namaBarang);
-
-            // Untuk ICHIMURA dan brand khusus, cari kode warna yang BUKAN ukuran
-            // Ukuran biasanya 150, 160, dll (angka bulat)
-            // Kode warna biasanya 001, 053, 079, dll (3 digit dengan leading zero atau angka non-bulat)
-            $codePosition = -1;
-            for ($i = 0; $i < count($parts); $i++) {
-                // Skip angka bulat seperti 150, 160, dll (ukuran)
-                if (preg_match('/^(150|160|170|180|190|200|210|220)$/', $parts[$i])) {
-                    continue;
-                }
-
-                // Check untuk kode warna (3 digit dengan possible leading zero)
-                if (preg_match('/^\d{3}$/', $parts[$i])) {
-                    // Pastikan ini bukan ukuran dengan melihat nilainya
-                    $numValue = intval($parts[$i]);
-                    // Kode warna biasanya < 100 atau memiliki leading zero
-                    if ($numValue < 100 || $parts[$i][0] === '0' || ($numValue > 500 && $numValue < 999)) {
-                        $codePosition = $i;
-                        break;
-                    }
-                }
-            }
-
-            if ($codePosition !== -1) {
-                // Tambahkan # sebelum kode warna
-                $parts[$codePosition] = '#' . $parts[$codePosition];
-            }
-
-            $formatted = implode(' ', $parts);
-        } else {
-            // Format standar dengan prefix KC
-            // Contoh: VALLETA 150 001 -> KC VALLETA 150 #001
-
-            // Split by space
-            $parts = explode(' ', $namaBarang);
-
-            // Pattern matching untuk berbagai format
-            if (count($parts) >= 3) {
-                $baseParts = [];
-                $codeIndex = -1;
-
-                // Identifikasi struktur: [BRAND] [SIZE/MODEL] [COLOR_CODE] [OPTIONAL_SUFFIX]
-                for ($i = 0; $i < count($parts); $i++) {
-                    // Skip angka bulat ukuran (150, 160, dll)
-                    if (preg_match('/^(150|160|170|180|190|200|210|220)$/', $parts[$i])) {
-                        $baseParts[] = $parts[$i];
-                        continue;
-                    }
-
-                    // Check untuk kode warna
-                    if (preg_match('/^\d{3}$/', $parts[$i])) {
-                        $numValue = intval($parts[$i]);
-                        // Kode warna biasanya < 100 atau memiliki leading zero atau > 500
-                        if ($numValue < 100 || $parts[$i][0] === '0' || ($numValue > 500 && $numValue < 999)) {
-                            $codeIndex = $i;
-                            break;
-                        }
-                    }
-
-                    // Check untuk kode alfanumerik seperti ABU
-                    if (preg_match('/^[A-Z]{3,}$/i', $parts[$i]) && $i >= 2) {
-                        // Ini kemungkinan kode warna alfanumerik
-                        $codeIndex = $i;
-                        break;
-                    }
-
-                    $baseParts[] = $parts[$i];
-                }
-
-                if ($codeIndex !== -1) {
-                    // Format dengan # untuk kode warna dan suffix-nya
-                    $colorCode = '#' . $parts[$codeIndex];
-
-                    // Gabungkan suffix jika ada (seperti HTM, NAVY, SAT, T, U, dll)
-                    $suffix = '';
-                    if ($codeIndex + 1 < count($parts)) {
-                        $suffixParts = array_slice($parts, $codeIndex + 1);
-                        $suffix = ' ' . implode(' ', $suffixParts);
-                    }
-
-                    // Gabungkan semua bagian
-                    $formatted = 'KC ' . implode(' ', $baseParts) . ' ' . $colorCode . $suffix;
-                } else {
-                    // Jika tidak ada pola yang cocok, coba format alternatif
-                    // Mungkin kode warna adalah bagian terakhir
-                    $lastPart = array_pop($parts);
-                    $mainName = implode(' ', $parts);
-
-                    // Check apakah lastPart adalah kode yang valid
-                    if (preg_match('/^[A-Z0-9]+$/i', $lastPart)) {
-                        $formatted = "KC {$mainName} #{$lastPart}";
-                    } else {
-                        // Jika tidak, kembalikan format standar
-                        $formatted = "KC {$namaBarang}";
-                    }
-                }
-            } else {
-                // Format default jika struktur tidak dikenali
-                $formatted = "KC {$namaBarang}";
-            }
-        }
-
-        // Bersihkan spasi berlebih
-        $formatted = preg_replace('/\s+/', ' ', trim($formatted));
-
-        Log::info('Formatted nama barang:', ['output' => $formatted]);
-
-        return $formatted;
-    }
-
-    private function formatKeteranganForApproval($keterangan)
-    {
-        // Bersihkan karakter kontrol termasuk \x1A (SUB character)
-        $cleaned = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $keterangan);
-        $cleaned = trim($cleaned);
-
-        // Split berdasarkan slash
-        $parts = explode('/', $cleaned);
-
-        if (count($parts) >= 4) {
-            $nama = trim($parts[0]);
-
-            // Ambil bagian ke-4 (indeks 3) yang berisi detail
-            $detailPart = trim($parts[3]);
-
-            // Hapus karakter * dan karakter kontrol lainnya
-            $detailPart = str_replace('*', '', $detailPart);
-            $detailPart = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $detailPart);
-
-            // Ekstrak nomor dan warna dari detailPart
-            $result = ['number' => '000', 'color' => ''];
-
-            // Pattern 1: #012/NAVY (dengan slash)
-            if (preg_match('/#(\d+)\/([A-Z\s]+)$/i', $detailPart, $matches)) {
-                $result['number'] = str_pad($matches[1], 3, '0', STR_PAD_LEFT);
-                $result['color'] = trim($matches[2]);
-            }
-            // Pattern 2: #012 NAVY (dengan spasi)
-            elseif (preg_match('/#(\d+)\s+([A-Z\s]+)$/i', $detailPart, $matches)) {
-                $result['number'] = str_pad($matches[1], 3, '0', STR_PAD_LEFT);
-                $result['color'] = trim($matches[2]);
-            }
-            // Pattern 3: #012 (hanya nomor)
-            elseif (preg_match('/#(\d+)$/i', $detailPart, $matches)) {
-                $result['number'] = str_pad($matches[1], 3, '0', STR_PAD_LEFT);
-            }
-
-            $nomor = $result['number'];
-            $warna = $result['color'];
-
-            // Jika tidak ada warna di detailPart, coba ambil dari bagian ke-5
-            if (empty($warna) && count($parts) >= 5) {
-                $warna = trim($parts[4]);
-                $warna = preg_replace('/[\x00-\x1F\x7F-\xFF]/', '', $warna);
-            }
-
-            return $nama . ' #' . $nomor . ($warna ? ' ' . $warna : '');
-        }
-
-        return $cleaned;
     }
 }

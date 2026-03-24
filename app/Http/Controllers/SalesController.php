@@ -321,256 +321,72 @@ class SalesController extends Controller
 
     public function show($npj, Request $request)
     {
-        // Validasi cabang aktif
         $activeBranchId = session('active_branch');
-        if (!$activeBranchId) {
+        if (!$activeBranchId)
             return back()->with('error', 'Cabang belum dipilih.');
-        }
 
         $branch = Branch::find($activeBranchId);
-        if (!$branch) {
+        if (!$branch)
             return back()->with('error', 'Cabang tidak valid.');
-        }
 
-        // Validasi kredensial Accurate
         if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
-        // Cache key yang unik untuk detail sales order per cabang
         $cacheKey = 'sales_order_detail_' . $activeBranchId . '_' . $npj;
-        $cacheDuration = 10; // 10 menit
+        $cacheDuration = 10;
 
-        // Jika ada parameter force_refresh, bypass cache
         if ($request->has('force_refresh')) {
             Cache::forget($cacheKey);
         }
 
         $errorMessage = null;
-        $kasirPenjualan = null;
         $accurateDetail = null;
         $accurateDetailItems = [];
 
+        // Cek cache dulu
+        if (Cache::has($cacheKey) && !$request->has('force_refresh')) {
+            $cachedData = Cache::get($cacheKey);
+            $accurateDetail = $cachedData['accurateDetail'] ?? null;
+            $accurateDetailItems = $cachedData['accurateDetailItems'] ?? [];
+            $errorMessage = $cachedData['errorMessage'] ?? null;
+            return view('sales_cashier.detail', compact('accurateDetail', 'accurateDetailItems', 'errorMessage'));
+        }
+
         try {
-            // Ambil data kasir penjualan dengan relasi detail items berdasarkan kode_customer
-            $kasirPenjualan = KasirPenjualan::with('detailItems')
-                ->where('npj', $npj)
-                ->where('kode_customer', $branch->customer_id)
-                ->firstOrFail();
+            $apiToken = $branch->accurate_api_token;
+            $signatureSecret = $branch->accurate_signature_secret;
+            $timestamp = Carbon::now()->toIso8601String();
+            $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
-            // Fetch detail dari API Accurate jika NPJ tersedia
-            if ($kasirPenjualan->npj) {
-                // Ambil kredensial Accurate dari branch
-                $apiToken = $branch->accurate_api_token;
-                $signatureSecret = $branch->accurate_signature_secret;
-                $timestamp = Carbon::now()->toIso8601String();
-                $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
-
-                $response = Http::withHeaders([
-                    'Authorization' => 'Bearer ' . $apiToken,
-                    'X-Api-Signature' => $signature,
-                    'X-Api-Timestamp' => $timestamp,
-                ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
-                            'number' => $kasirPenjualan->npj,
-                        ]);
-
-                if ($response->successful()) {
-                    $json = $response->json();
-
-                    // Ambil semua data 'd' tanpa filter
-                    if (isset($json['d'])) {
-                        $accurateDetail = $json['d'];
-
-                        // Ekstrak detail items dari API
-                        if (isset($json['d']['detailItem']) && is_array($json['d']['detailItem'])) {
-                            $accurateDetailItems = $json['d']['detailItem'];
-                        }
-
-                        $dataToCache = [
-                            'kasirPenjualan' => $kasirPenjualan,
-                            'accurateDetail' => $accurateDetail,
-                            'accurateDetailItems' => $accurateDetailItems,
-                            'errorMessage' => null
-                        ];
-
-                        // Cache the successful result
-                        Cache::put($cacheKey, $dataToCache, $cacheDuration * 60);
-                        Log::info("Data Accurate untuk sales order {$npj} berhasil diambil dari API dan disimpan ke cache");
-                    } else {
-                        $errorMessage = "Data detail untuk NPJ {$npj} tidak ditemukan.";
-                    }
-                } else {
-                    Log::error('API detail request failed', [
-                        'status' => $response->status(),
-                        'body' => $response->body(),
+            $response = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($this->buildApiUrl($branch, 'sales-order/detail.do'), [
+                        'number' => $npj
                     ]);
 
-                    if ($response->status() == 404) {
-                        $errorMessage = "Sales order dengan NPJ {$npj} tidak ditemukan.";
-                    } else {
-                        $errorMessage = "Gagal mengambil data dari server. Silakan coba lagi.";
-                    }
-                }
+            if ($response->successful() && isset($response->json()['d'])) {
+                $accurateDetail = $response->json()['d'];
+                $accurateDetailItems = $accurateDetail['detailItem'] ?? [];
+
+                Cache::put($cacheKey, [
+                    'accurateDetail' => $accurateDetail,
+                    'accurateDetailItems' => $accurateDetailItems,
+                    'errorMessage' => null
+                ], $cacheDuration * 60);
+
+            } else {
+                $errorMessage = "Gagal mengambil data SO {$npj} dari Accurate.";
             }
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            $errorMessage = "Data kasir penjualan dengan NPJ {$npj} tidak ditemukan.";
-            Log::error('Kasir penjualan tidak ditemukan: ' . $e->getMessage(), ['npj' => $npj]);
+
         } catch (\Exception $e) {
-            // Log error jika gagal fetch dari API
-            Log::error('Exception saat mengambil detail sales order: ' . $e->getMessage(), [
-                'npj' => $npj,
-                'kasir_penjualan' => $kasirPenjualan ? $kasirPenjualan->toArray() : null
-            ]);
-
-            if ($kasirPenjualan) {
-                $errorMessage = "Gagal mengambil detail dari server Accurate. Silakan coba lagi.";
-            } else {
-                $errorMessage = "Terjadi kesalahan koneksi. Silakan periksa jaringan Anda.";
-            }
-
-            // Try to use cached data if available sebagai fallback
-            if (Cache::has($cacheKey)) {
-                $cachedData = Cache::get($cacheKey);
-                $kasirPenjualan = $cachedData['kasirPenjualan'] ?? $kasirPenjualan;
-                $accurateDetail = $cachedData['accurateDetail'] ?? null;
-                $accurateDetailItems = $cachedData['accurateDetailItems'] ?? [];
-                if (is_null($errorMessage))
-                    $errorMessage = $cachedData['errorMessage'] ?? null;
-                Log::info("Menampilkan detail sales order {$npj} dari cache karena API gagal.");
-            }
+            Log::error('Exception saat mengambil detail SO: ' . $e->getMessage(), ['npj' => $npj]);
+            $errorMessage = "Terjadi kesalahan koneksi. Silakan coba lagi.";
         }
 
-        // Helper function untuk menghitung total harga dengan diskon
-        $calculateTotalWithDiscount = function ($harga, $qty, $diskon) {
-            $subtotal = $harga * $qty;
-
-            if ($diskon && $diskon > 0) {
-                // Jika diskon antara 0-100, anggap sebagai persentase
-                if ($diskon <= 100) {
-                    $diskonAmount = $subtotal * ($diskon / 100);
-                    return $subtotal - $diskonAmount;
-                }
-                // Jika diskon di atas 100, anggap sebagai nominal
-                else {
-                    return max(0, $subtotal - $diskon); // Pastikan tidak negatif
-                }
-            }
-
-            return $subtotal;
-        };
-
-        // Merge data berdasarkan nama yang sama dari Barcode
-        $mergedItems = [];
-        $detailBarcodeMappings = []; // Untuk show detail per barcode
-
-        foreach ($kasirPenjualan->detailItems as $detailItem) {
-            // Cari data Barcode berdasarkan barcode dan kode_customer
-            $approvalStock = Barcode::where('barcode', $detailItem->barcode)
-                ->where('kode_customer', $branch->customer_id)
-                ->first();
-
-            // Hitung total harga sebelum dan sesudah diskon
-            $subtotalSebelumDiskon = $detailItem->harga * $detailItem->qty;
-            $totalHargaSetelahDiskon = $calculateTotalWithDiscount(
-                $detailItem->harga,
-                $detailItem->qty,
-                $detailItem->diskon
-            );
-            $nominalDiskon = $subtotalSebelumDiskon - $totalHargaSetelahDiskon;
-
-            if ($approvalStock) {
-                $itemName = $approvalStock->nama;
-
-                // Simpan mapping untuk detail barcode
-                $detailBarcodeMappings[] = [
-                    'barcode' => $detailItem->barcode,
-                    'nama' => $itemName,
-                    'qty' => $detailItem->qty,
-                    'harga' => $detailItem->harga,
-                    'diskon' => $detailItem->diskon,
-                    'subtotal_sebelum_diskon' => $subtotalSebelumDiskon,
-                    'nominal_diskon' => $nominalDiskon,
-                    'total_harga' => $totalHargaSetelahDiskon,
-                    'approval_stock' => $approvalStock
-                ];
-
-                // Merge berdasarkan nama yang sama
-                if (isset($mergedItems[$itemName])) {
-                    // Jika nama sudah ada, merge kuantitas dan total harga
-                    $mergedItems[$itemName]['total_qty'] += $detailItem->qty;
-                    $mergedItems[$itemName]['subtotal_sebelum_diskon'] += $subtotalSebelumDiskon;
-                    $mergedItems[$itemName]['total_nominal_diskon'] += $nominalDiskon;
-                    $mergedItems[$itemName]['total_harga'] += $totalHargaSetelahDiskon;
-                    $mergedItems[$itemName]['barcodes'][] = $detailItem->barcode;
-                } else {
-                    // Jika nama belum ada, buat entry baru
-                    $mergedItems[$itemName] = [
-                        'nama' => $itemName,
-                        'total_qty' => $detailItem->qty,
-                        'harga_satuan' => $detailItem->harga,
-                        'diskon' => $detailItem->diskon, // Ambil diskon dari yang pertama
-                        'subtotal_sebelum_diskon' => $subtotalSebelumDiskon,
-                        'total_nominal_diskon' => $nominalDiskon,
-                        'total_harga' => $totalHargaSetelahDiskon,
-                        'barcodes' => [$detailItem->barcode],
-                        'approval_stock' => $approvalStock
-                    ];
-                }
-            } else {
-                // Jika Barcode tidak ditemukan, tetap tampilkan data dari DetailItemPenjualan
-                $itemName = 'Item dengan barcode: ' . $detailItem->barcode;
-
-                $detailBarcodeMappings[] = [
-                    'barcode' => $detailItem->barcode,
-                    'nama' => $itemName,
-                    'qty' => $detailItem->qty,
-                    'harga' => $detailItem->harga,
-                    'diskon' => $detailItem->diskon,
-                    'subtotal_sebelum_diskon' => $subtotalSebelumDiskon,
-                    'nominal_diskon' => $nominalDiskon,
-                    'total_harga' => $totalHargaSetelahDiskon,
-                    'approval_stock' => null
-                ];
-
-                if (isset($mergedItems[$itemName])) {
-                    $mergedItems[$itemName]['total_qty'] += $detailItem->qty;
-                    $mergedItems[$itemName]['subtotal_sebelum_diskon'] += $subtotalSebelumDiskon;
-                    $mergedItems[$itemName]['total_nominal_diskon'] += $nominalDiskon;
-                    $mergedItems[$itemName]['total_harga'] += $totalHargaSetelahDiskon;
-                    $mergedItems[$itemName]['barcodes'][] = $detailItem->barcode;
-                } else {
-                    $mergedItems[$itemName] = [
-                        'nama' => $itemName,
-                        'total_qty' => $detailItem->qty,
-                        'harga_satuan' => $detailItem->harga,
-                        'diskon' => $detailItem->diskon,
-                        'subtotal_sebelum_diskon' => $subtotalSebelumDiskon,
-                        'total_nominal_diskon' => $nominalDiskon,
-                        'total_harga' => $totalHargaSetelahDiskon,
-                        'barcodes' => [$detailItem->barcode],
-                        'approval_stock' => null
-                    ];
-                }
-            }
-        }
-
-        // Hitung persentase diskon efektif untuk merged items
-        foreach ($mergedItems as $key => &$item) {
-            if ($item['subtotal_sebelum_diskon'] > 0) {
-                $item['persentase_diskon_efektif'] = ($item['total_nominal_diskon'] / $item['subtotal_sebelum_diskon']) * 100;
-            } else {
-                $item['persentase_diskon_efektif'] = 0;
-            }
-        }
-
-        return view('sales_cashier.detail', compact(
-            'kasirPenjualan',
-            'accurateDetail',
-            'accurateDetailItems',
-            'mergedItems',
-            'detailBarcodeMappings',
-            'errorMessage'
-        ));
+        return view('sales_cashier.detail', compact('accurateDetail', 'accurateDetailItems', 'errorMessage'));
     }
 
     public function create(Request $request)
