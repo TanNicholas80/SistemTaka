@@ -194,24 +194,26 @@
                                 </div>
                             </div>
                         </div>
-                        <table class="w-full border-collapse border border-gray-400 text-xs text-center">
-                            <thead class="bg-[#607d8b] text-white">
-                                <tr>
-                                    <th class="border border-gray-400 w-8 px-1 py-1">No</th>
-                                    <th class="border border-gray-400 px-2 py-1 text-left">Nama Barang</th>
-                                    <th class="border border-gray-400 px-2 py-1">Kode Barang</th>
-                                    <th class="border border-gray-400 px-2 py-1">Barcode</th>
-                                    <th class="border border-gray-400 px-2 py-1">Kuantitas</th>
-                                </tr>
-                            </thead>
-                            <tbody id="table-barang-body" class="bg-white">
-                                <tr>
-                                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="5">
-                                        Belum ada data
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="max-h-[360px] overflow-y-auto overflow-x-auto">
+                            <table class="w-full border-collapse border border-gray-400 text-xs text-center">
+                                <thead class="bg-[#607d8b] text-white sticky top-0 z-10">
+                                    <tr>
+                                        <th class="border border-gray-400 w-8 px-1 py-1">No</th>
+                                        <th class="border border-gray-400 px-2 py-1 text-left">Nama Barang</th>
+                                        <th class="border border-gray-400 px-2 py-1">Kode Barang</th>
+                                        <th class="border border-gray-400 px-2 py-1">Barcode</th>
+                                        <th class="border border-gray-400 px-2 py-1">Kuantitas</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-barang-body" class="bg-white">
+                                    <tr>
+                                        <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="5">
+                                            Belum ada data
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -285,9 +287,9 @@
                     </div>
 
                     <!-- Table serial numbers -->
-                    <div class="border rounded overflow-hidden max-h-52 overflow-y-auto">
+                    <div class="border rounded max-h-52 overflow-y-auto overflow-x-auto">
                         <table class="w-full text-sm">
-                            <thead class="bg-[#607d8b] text-white sticky top-0">
+                            <thead class="bg-[#607d8b] text-white sticky top-0 z-10">
                                 <tr>
                                     <th class="px-2 py-1.5 w-10"></th>
                                     <th class="px-2 py-1.5 w-10 text-center">Print</th>
@@ -738,6 +740,8 @@
             charField6: item.charField6 || '',
             name: item.name || item.nama_barang || '',
             nameWithIndentStrip: item.nameWithIndentStrip || '',
+            no: item.kode_barang || '',
+            itemUnitName: item.uom || '',
         };
 
         const labelPayload = [{
@@ -786,6 +790,8 @@
             charField6: item.charField6 || '',
             name: item.name || item.nama_barang || '',
             nameWithIndentStrip: item.nameWithIndentStrip || '',
+            no: item.kode_barang || '',
+            itemUnitName: item.uom || '',
         };
 
         const labelPayload = item.serial_numbers.map(sn => ({

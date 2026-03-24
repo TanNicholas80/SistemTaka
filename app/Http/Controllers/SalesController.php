@@ -10,6 +10,7 @@ use Exception;
 use GuzzleHttp\Promise\Utils;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -54,7 +55,7 @@ class SalesController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -84,8 +85,8 @@ class SalesController extends Controller
         $hasApiError = false;
 
         try {
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -333,7 +334,7 @@ class SalesController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -361,8 +362,8 @@ class SalesController extends Controller
             // Fetch detail dari API Accurate jika NPJ tersedia
             if ($kasirPenjualan->npj) {
                 // Ambil kredensial Accurate dari branch
-                $apiToken = $branch->accurate_api_token;
-                $signatureSecret = $branch->accurate_signature_secret;
+                $apiToken = Auth::user()->accurate_api_token;
+                $signatureSecret = Auth::user()->accurate_signature_secret;
                 $timestamp = Carbon::now()->toIso8601String();
                 $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -587,13 +588,13 @@ class SalesController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
         // Ambil kredensial Accurate dari branch
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -815,7 +816,7 @@ class SalesController extends Controller
             }
 
             // Validasi kredensial Accurate
-            if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+            if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.'
@@ -823,8 +824,8 @@ class SalesController extends Controller
             }
 
             // Ambil kredensial Accurate dari branch
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -935,7 +936,7 @@ class SalesController extends Controller
             }
 
             // Validasi kredensial Accurate
-            if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+            if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.'
@@ -970,8 +971,8 @@ class SalesController extends Controller
             }
 
             // Ambil data dari API Accurate dengan pagination menggunakan kredensial dari branch
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1137,7 +1138,7 @@ class SalesController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -1286,8 +1287,8 @@ class SalesController extends Controller
             }
 
             // 3. Kirim data ke API Accurate menggunakan kredensial dari branch
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 

@@ -52,6 +52,7 @@ return new class extends Migration
             $table->string('pcs')->nullable();
             $table->string('sample')->nullable();
             $table->string('kodisi_kain')->nullable();
+            $table->string('special_treatment')->nullable();
             $table->timestamps();
         });
     }

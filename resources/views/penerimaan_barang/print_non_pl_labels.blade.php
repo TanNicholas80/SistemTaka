@@ -8,56 +8,58 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
             margin: 0;
-            padding: 0;
+            padding-top: 1.6mm;
+            padding-bottom: 0mm;
             font-family: Arial, sans-serif;
-            width: 80mm;
+            width: 65mm;
         }
         .labels-wrap {
-            width: 80mm;
+            width: 65mm;
         }
         .label {
-            width: 80mm;
-            border: 1px solid #000;
+            width: 65mm;
             border-top: none;
             box-sizing: border-box;
-            padding: 2mm;
+            padding: 1.5mm;
             display: table;
-            table-layout: fixed;
+            table-layout: auto;
             page-break-inside: avoid;
             break-inside: avoid;
         }
-        .label:first-child { border-top: 1px solid #000; }
         .left {
-            width: 25mm;
+            width: 21mm;
             display: table-cell;
             vertical-align: middle;
             text-align: center;
         }
         .qr {
-            width: 23mm;
-            height: 23mm;
+            width: 16mm;
+            height: 16mm;
             object-fit: contain;
         }
         .barcode-text {
-            margin-top: 1mm;
-            font-size: 9px;
+            margin-top: 0.8mm;
+            font-size: 11px;
             font-weight: bold;
             text-align: center;
             word-break: break-all;
         }
         .right {
             display: table-cell;
-            vertical-align: middle;
-            width: 52mm;
+            vertical-align: start;
+            width: 41mm;
             font-size: 11px;
-            line-height: 1.15;
-            padding-left: 2mm;
+            line-height: 1.1;
+            padding-left: 1.5mm;
         }
         .line {
-            margin-bottom: 0.8mm;
+            margin-bottom: 0.5mm;
             word-break: break-word;
             font-weight: bold;
             text-transform: uppercase;
+        }
+        .line:last-child {
+            margin-bottom: 0;
         }
     </style>
 </head>

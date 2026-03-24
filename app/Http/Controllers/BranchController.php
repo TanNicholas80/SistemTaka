@@ -28,10 +28,6 @@ class BranchController extends Controller
             'customer_id' => ['required', 'string', 'max:255', 'unique:branches,customer_id'],
             'photo'       => ['nullable', 'image', 'max:2048'],
             'url_accurate' => ['nullable', 'string', 'max:255'],
-            'auth_accurate' => ['nullable', 'string'],
-            'session_accurate' => ['nullable', 'string'],
-            'accurate_api_token' => ['nullable', 'string'],
-            'accurate_signature_secret' => ['nullable', 'string'],
         ]);
 
         if ($request->hasFile('photo')) {
@@ -57,10 +53,6 @@ class BranchController extends Controller
             'customer_id' => ['required', 'string', 'max:255', 'unique:branches,customer_id,' . $branch->id],
             'photo'       => ['nullable', 'image', 'max:2048'],
             'url_accurate' => ['nullable', 'string', 'max:255'],
-            'auth_accurate' => ['nullable', 'string'],
-            'session_accurate' => ['nullable', 'string'],
-            'accurate_api_token' => ['nullable', 'string'],
-            'accurate_signature_secret' => ['nullable', 'string'],
         ]);
 
         if ($request->hasFile('photo')) {
@@ -120,10 +112,6 @@ class BranchController extends Controller
                 'active_branch' => $branchId,
                 'active_branch_name' => $branch->name,
                 'url_accurate' => $branch->url_accurate,
-                'auth_accurate' => $branch->auth_accurate,
-                'session_accurate' => $branch->session_accurate,
-                'accurate_api_token' => $branch->accurate_api_token,
-                'accurate_signature_secret' => $branch->accurate_signature_secret,
             ]);
             $successMessage = 'Berhasil memilih Toko ' . $branch->name . '.';
         } else {

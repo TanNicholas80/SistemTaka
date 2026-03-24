@@ -106,7 +106,7 @@ class PenerimaanBarangController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -144,8 +144,8 @@ class PenerimaanBarangController extends Controller
         if ($penerimaanBarang->isNotEmpty()) {
             try {
                 // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-                $apiToken = $branch->accurate_api_token;
-                $signatureSecret = $branch->accurate_signature_secret;
+                $apiToken = Auth::user()->accurate_api_token;
+                $signatureSecret = Auth::user()->accurate_signature_secret;
                 $timestamp = Carbon::now()->toIso8601String();
                 $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -301,13 +301,13 @@ class PenerimaanBarangController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             throw new \Exception('Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
         // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -432,7 +432,7 @@ class PenerimaanBarangController extends Controller
             return back()->with('error', 'Cabang tidak valid.');
         }
 
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -473,14 +473,14 @@ class PenerimaanBarangController extends Controller
         $activeBranchId = session('active_branch');
         $branch = Branch::find($activeBranchId);
 
-        if (!$branch || !$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return response()->json(['error' => true, 'message' => 'Konfigurasi cabang tidak valid.'], 400);
         }
 
         try {
             // 1. Ambil vendor + detail item dari Accurate PO
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -728,12 +728,12 @@ class PenerimaanBarangController extends Controller
             throw new \Exception('Cabang tidak valid.');
         }
 
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             throw new \Exception('Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1029,7 +1029,7 @@ class PenerimaanBarangController extends Controller
      * Endpoint: print label Non PL (server-side QR + server-side PDF).
      *
      * Frontend mengirim payload:
-     * - item: data charField1/2/4/5/6 + name/nameWithIndentStrip
+     * - item: data charField1/2/4/5/6 + name/nameWithIndentStrip + no/kode_barang + itemUnitName/uom (opsional)
      * - labels: array berisi barcode + quantity (hasil input user)
      */
     public function printNonPlLabelsPdf(Request $request)
@@ -1043,6 +1043,10 @@ class PenerimaanBarangController extends Controller
             'item.charField6' => 'nullable|string',
             'item.name' => 'nullable|string',
             'item.nameWithIndentStrip' => 'nullable|string',
+            'item.no' => 'nullable|string',
+            'item.kode_barang' => 'nullable|string',
+            'item.itemUnitName' => 'nullable|string',
+            'item.uom' => 'nullable|string',
             'labels' => 'required|array|min:1|max:200',
             'labels.*.barcode' => 'required|string',
             'labels.*.quantity' => 'required|numeric|min:0.001',
@@ -1050,22 +1054,81 @@ class PenerimaanBarangController extends Controller
 
         $item = $validated['item'];
         $labels = $validated['labels'];
+        $itemForLabel = $item;
+
+        // Prioritaskan brand dari Accurate item/detail.do berdasarkan no item.
+        $itemNo = trim((string) ($item['no'] ?? $item['kode_barang'] ?? ''));
+        if ($itemNo !== '') {
+            $activeBranchId = session('active_branch');
+            $branch = Branch::find($activeBranchId);
+
+            if ($branch && Auth::check() && Auth::user()->accurate_api_token && Auth::user()->accurate_signature_secret) {
+                try {
+                    $apiToken = Auth::user()->accurate_api_token;
+                    $signatureSecret = Auth::user()->accurate_signature_secret;
+                    $timestamp = Carbon::now()->toIso8601String();
+                    $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+                    $headers = [
+                        'Authorization' => 'Bearer ' . $apiToken,
+                        'X-Api-Signature' => $signature,
+                        'X-Api-Timestamp' => $timestamp,
+                    ];
+
+                    // Endpoint item/detail.do menerima body form: no=<itemNo>
+                    $itemDetailResponse = Http::timeout(30)
+                        ->withHeaders($headers)
+                        ->asForm()
+                        ->post($this->buildApiUrl($branch, 'item/detail.do'), [
+                            'no' => $itemNo,
+                        ]);
+
+                    // Fallback jika endpoint dikonfigurasi sebagai query parameter (GET).
+                    if (!$itemDetailResponse->successful()) {
+                        $itemDetailResponse = Http::timeout(30)
+                            ->withHeaders($headers)
+                            ->get($this->buildApiUrl($branch, 'item/detail.do'), [
+                                'no' => $itemNo,
+                            ]);
+                    }
+
+                    if ($itemDetailResponse->successful()) {
+                        $itemDetail = $itemDetailResponse->json();
+                        $brandFromApi = trim((string) data_get($itemDetail, 'd.itemBrand.nameWithIndentStrip', ''));
+                        if ($brandFromApi !== '') {
+                            $itemForLabel['nameWithIndentStrip'] = $brandFromApi;
+                        }
+                    } else {
+                        Log::warning('Gagal ambil brand dari item/detail.do untuk print label Non PL', [
+                            'item_no' => $itemNo,
+                            'status' => $itemDetailResponse->status(),
+                            'body' => $itemDetailResponse->body(),
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Exception saat ambil brand dari item/detail.do untuk print label Non PL', [
+                        'item_no' => $itemNo,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
 
         $type = strtoupper(trim((string) ($item['charField1'] ?? '')));
 
         $printLayouts = [
-            'JARIK' => ['heightMm' => 35, 'qrSizePx' => 240],
-            'SARUNG' => ['heightMm' => 30, 'qrSizePx' => 240],
-            'PRINTING' => ['heightMm' => 45, 'qrSizePx' => 240],
-            'KNITTING' => ['heightMm' => 40, 'qrSizePx' => 240],
-            'DENIM' => ['heightMm' => 32, 'qrSizePx' => 240],
-            'DYEING' => ['heightMm' => 50, 'qrSizePx' => 240],
-            'DEFAULT' => ['heightMm' => 40, 'qrSizePx' => 240],
+            'JARIK' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'SARUNG' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'PRINTING' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'KNITTING' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'DENIM' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'DYEING' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'DEFAULT' => ['heightMm' => 25, 'qrSizePx' => 190],
         ];
 
         $layout = $printLayouts[$type] ?? $printLayouts['DEFAULT'];
 
-        $paperWidthMm = 80;
+        $paperWidthMm = 65;
         $labelHeightMm = (float) $layout['heightMm'];
         // Tinggi kertas per label (jangan dikalikan), agar dompdf mem-break halaman otomatis.
         $paperHeightMm = $labelHeightMm;
@@ -1085,28 +1148,32 @@ class PenerimaanBarangController extends Controller
 
         $buildRightLines = function (array $itemData, array $sn) use ($type, $formatQty): array {
             $qtyText = $formatQty($sn['quantity'] ?? 0);
+            $unitText = trim((string) ($itemData['itemUnitName'] ?? $itemData['uom'] ?? ''));
             $name = (string) ($itemData['name'] ?? '');
             $brand = (string) ($itemData['nameWithIndentStrip'] ?? '');
             $cf2 = (string) ($itemData['charField2'] ?? '');
             $cf4 = (string) ($itemData['charField4'] ?? '');
             $cf5 = (string) ($itemData['charField5'] ?? '');
             $cf6 = (string) ($itemData['charField6'] ?? '');
+            // Jadikan quantity + unit dalam satu baris agar tampil sejajar di label.
+            $qtyUnitLine = trim($qtyText . ' ' . $unitText);
+            $qtyAndUnit = $qtyUnitLine !== '' ? [$qtyUnitLine] : [];
 
             switch ($type) {
                 case 'JARIK':
-                    return [$brand, $cf6, $qtyText];
+                    return array_merge([$brand, $cf6], $qtyAndUnit);
                 case 'SARUNG':
-                    return [$name, $qtyText];
+                    return array_merge([$name], $qtyAndUnit);
                 case 'PRINTING':
-                    return [$brand, $cf6, $cf4, $cf5, $qtyText];
+                    return array_merge([$brand, $cf6, $cf4, $cf5], $qtyAndUnit);
                 case 'KNITTING':
-                    return [$name, $cf4, $cf5, $qtyText];
+                    return array_merge([$name, $cf4, $cf5], $qtyAndUnit);
                 case 'DENIM':
-                    return [$brand, $cf5, $qtyText];
+                    return array_merge([$brand, $cf5], $qtyAndUnit);
                 case 'DYEING':
-                    return [$brand, $cf2, $cf4, $cf5, $qtyText];
+                    return array_merge([$brand, $cf2, $cf4, $cf5], $qtyAndUnit);
                 default:
-                    return [$brand ?: $name, $qtyText];
+                    return array_merge([$brand ?: $name], $qtyAndUnit);
             }
         };
 
@@ -1122,7 +1189,7 @@ class PenerimaanBarangController extends Controller
 
             $labelsView[] = [
                 'barcode' => $barcode,
-                'rightLines' => $buildRightLines($item, $sn),
+                'rightLines' => $buildRightLines($itemForLabel, $sn),
                 'qrSrc' => $qrSrc,
             ];
         }
@@ -1156,7 +1223,7 @@ class PenerimaanBarangController extends Controller
             return back()->with('error', 'Cabang tidak valid.');
         }
 
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -1312,8 +1379,8 @@ class PenerimaanBarangController extends Controller
                 }
 
                 // Ambil vendor dari Accurate PO
-                $apiToken = $branch->accurate_api_token;
-                $signatureSecret = $branch->accurate_signature_secret;
+                $apiToken = Auth::user()->accurate_api_token;
+                $signatureSecret = Auth::user()->accurate_signature_secret;
                 $tsVendor = Carbon::now()->toIso8601String();
                 $sigVendor = hash_hmac('sha256', $tsVendor, $signatureSecret);
 
@@ -1425,8 +1492,8 @@ class PenerimaanBarangController extends Controller
             }
 
             // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1637,9 +1704,9 @@ class PenerimaanBarangController extends Controller
                         $branch = Branch::where('customer_id', $penerimaanBarang->kode_customer)->first();
                     }
 
-                    if ($branch && $branch->accurate_api_token && $branch->accurate_signature_secret) {
-                        $apiToken = $branch->accurate_api_token;
-                        $signatureSecret = $branch->accurate_signature_secret;
+                    if ($branch && Auth::check() && Auth::user()->accurate_api_token && Auth::user()->accurate_signature_secret) {
+                        $apiToken = Auth::user()->accurate_api_token;
+                        $signatureSecret = Auth::user()->accurate_signature_secret;
                         $timestamp = Carbon::now()->toIso8601String();
                         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 

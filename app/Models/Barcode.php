@@ -60,6 +60,7 @@ class Barcode extends Model
         'status',
         'id_pb',
         'item_flag',
+        'special_treatment',
     ];
 
     protected $casts = [
@@ -277,6 +278,7 @@ class Barcode extends Model
                 'status',
                 'id_pb',
                 'item_flag',
+                'special_treatment',
             ])
             ->logOnlyDirty() // Hanya log perubahan yang benar-benar terjadi
             ->dontSubmitEmptyLogs() // Jangan submit log kosong

@@ -52,6 +52,7 @@ return new class extends Migration
             $table->string('pcs')->nullable();
             $table->string('sample')->nullable();
             $table->string('kodisi_kain')->nullable();
+            $table->string('special_treatment')->nullable();
             $table->enum('status', ['approved', 'uploaded'])->default('approved');
             $table->string('id_pb')->nullable();
             $table->enum('item_flag', ['pembelian', 'retur_pembelian', 'penjualan', 'retur_penjualan', 'stock_opname', 'penyesuaian_stock'])->default('pembelian');
