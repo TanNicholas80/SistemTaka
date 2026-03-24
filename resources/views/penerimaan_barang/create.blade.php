@@ -20,6 +20,21 @@
                     <input type="hidden" id="form_submitted" name="form_submitted" value="0">
 
                     <div class="grid grid-cols-[150px_1fr] gap-y-4 gap-x-4 text-sm items-start">
+                        <!-- Mode Selector -->
+                        <label class="text-gray-800 font-medium flex items-center">
+                            Mode <span class="text-red-600 ml-1">*</span>
+                        </label>
+                        <div class="flex items-center gap-6">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="mode" value="packing_list" class="mode-radio accent-blue-600" checked>
+                                <span class="font-medium text-gray-700">Packing List</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="mode" value="non_packing_list" class="mode-radio accent-blue-600">
+                                <span class="font-medium text-gray-700">Non Packing List</span>
+                            </label>
+                        </div>
+
                         <!-- Form Nomor PO -->
                         <label for="no_po" class="text-gray-800 font-medium flex items-center">
                             Nomor PO <span class="text-red-600 ml-1">*</span>
@@ -100,28 +115,30 @@
                             class="border border-gray-300 rounded px-2 py-1 max-w-[300px] w-full"
                             required />
 
-                        <!-- Form Packing List (Multiple) -->
-                        <label class="text-gray-800 font-medium flex items-center">
-                            Packing List <span class="text-red-600 ml-1">*</span>
-                            <span class="ml-1"
-                                data-toggle="tooltip"
-                                data-placement="top"
-                                title="Pilih packing list yang sudah berstatus approved"
-                                style="cursor: help;">
-                                <i class="fas fa-info-circle"></i>
-                            </span>
-                        </label>
-                        <div class="max-w-md border border-gray-300 rounded px-2 py-2 bg-white max-h-40 overflow-y-auto">
-                            @php $plList = $packingLists ?? collect(); @endphp
-                            @forelse($plList as $pl)
-                                <label class="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
-                                    <input type="checkbox" name="packing_list_ids[]" value="{{ $pl->id }}" class="packing-list-cb rounded">
-                                    <span>{{ $pl->npl }}</span>
-                                    <span class="text-xs text-gray-500">({{ \Carbon\Carbon::parse($pl->tanggal)->format('d-m-Y') }})</span>
-                                </label>
-                            @empty
-                                <p class="text-gray-500 text-sm py-2">Tidak ada packing list dengan status approved.</p>
-                            @endforelse
+                        <!-- Form Packing List (Multiple) - Hanya tampil saat mode Packing List -->
+                        <div id="packing-list-section" class="contents">
+                            <label class="text-gray-800 font-medium flex items-center">
+                                Packing List <span class="text-red-600 ml-1">*</span>
+                                <span class="ml-1"
+                                    data-toggle="tooltip"
+                                    data-placement="top"
+                                    title="Pilih packing list yang sudah berstatus approved"
+                                    style="cursor: help;">
+                                    <i class="fas fa-info-circle"></i>
+                                </span>
+                            </label>
+                            <div class="max-w-md border border-gray-300 rounded px-2 py-2 bg-white max-h-40 overflow-y-auto">
+                                @php $plList = $packingLists ?? collect(); @endphp
+                                @forelse($plList as $pl)
+                                    <label class="flex items-center gap-2 py-1 hover:bg-gray-50 cursor-pointer">
+                                        <input type="checkbox" name="packing_list_ids[]" value="{{ $pl->id }}" class="packing-list-cb rounded">
+                                        <span>{{ $pl->npl }}</span>
+                                        <span class="text-xs text-gray-500">({{ \Carbon\Carbon::parse($pl->tanggal)->format('d-m-Y') }})</span>
+                                    </label>
+                                @empty
+                                    <p class="text-gray-500 text-sm py-2">Tidak ada packing list dengan status approved.</p>
+                                @endforelse
+                            </div>
                         </div>
 
                         <!-- Buttons -->
@@ -155,39 +172,7 @@
                     </div>
                 @endif
 
-                <!-- Bagian Upload & Validasi Barcode (Sembunyi by Default) -->
-                <div id="barcode-validation-section" class="m-2 p-4 border border-blue-300 bg-blue-50 rounded hidden">
-                    <h3 class="font-bold text-blue-800 mb-2"><i class="fas fa-barcode mr-2"></i>Tahap Validasi Barcode Fisik</h3>
-                    
-                    <!-- Upload TXT -->
-                    <div id="upload-txt-container" class="mb-4">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">1. Upload File Master Barcode (TXT)</label>
-                        <div class="flex items-center gap-2">
-                            <input type="file" id="txt_file" name="txt_file" accept=".txt,.csv" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white w-full max-w-md">
-                            <button type="button" id="btn-upload-txt" onclick="uploadMasterTxt()" class="bg-indigo-600 text-white px-4 py-1.5 rounded hover:bg-indigo-700 text-sm font-medium shadow-sm transition-all"><i class="fas fa-upload mr-1"></i> Upload & Proses</button>
-                        </div>
-                        <p class="text-xs text-gray-500 mt-1">Atau biarkan kosong lalu tekan Upload untuk menggunakan file TXT default jika tersedia di server.</p>
-                    </div>
-
-                    <!-- Scan Fisik -->
-                    <div id="scan-physical-container" class="hidden">
-                        <label class="block text-sm font-medium text-gray-700 mb-1">2. Scan Barcode Fisik</label>
-                        <div class="flex items-center gap-2 mb-2">
-                            <input type="text" id="scan_barcode_input" class="border border-green-400 rounded px-3 py-2 text-sm bg-white w-full max-w-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent" placeholder="Arahkan kursor kesini, lalu Scan Barcode..." autocomplete="off">
-                            <button type="button" id="btn-reset-scan" onclick="resetScan()" class="bg-red-500 text-white px-3 py-2 rounded hover:bg-red-600 text-sm font-medium shadow-sm transition-all"><i class="fas fa-trash-alt mr-1"></i> Reset Data Temporary</button>
-                        </div>
-                        <div class="bg-white p-3 rounded border border-blue-200 mt-3 shadow-inner">
-                            <p class="text-sm font-medium text-gray-800 flex items-center justify-between">
-                                <span>Status Validasi Master & Fisik:</span>
-                                <span id="scan-status-text" class="text-xl font-bold text-blue-600 px-3 py-1 bg-blue-100 rounded">0 / 0 Barcode Cocok</span>
-                            </p>
-                            <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                                <div id="scan-progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
-                            </div>
-                        </div>
-                        <p id="scan-success-message" class="text-sm font-bold text-green-600 mt-2 hidden"><i class="fas fa-check-circle mr-1"></i> Validasi 100% Selesai! Silakan tekan tombol Save di atas.</p>
-                    </div>
-                </div>
+                <!-- Tahap validasi barcode fisik (upload TXT + scan) dihapus -->
 
                 <!-- Table container -->
                 <div class="p-2 flex flex-col gap-4">
@@ -209,24 +194,26 @@
                                 </div>
                             </div>
                         </div>
-                        <table class="w-full border-collapse border border-gray-400 text-xs text-center">
-                            <thead class="bg-[#607d8b] text-white">
-                                <tr>
-                                    <th class="border border-gray-400 w-8 px-1 py-1">No</th>
-                                    <th class="border border-gray-400 px-2 py-1 text-left">Nama Barang</th>
-                                    <th class="border border-gray-400 px-2 py-1">Kode Barang</th>
-                                    <th class="border border-gray-400 px-2 py-1">Barcode</th>
-                                    <th class="border border-gray-400 px-2 py-1">Kuantitas</th>
-                                </tr>
-                            </thead>
-                            <tbody id="table-barang-body" class="bg-white">
-                                <tr>
-                                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="5">
-                                        Belum ada data
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                        <div class="max-h-[360px] overflow-y-auto overflow-x-auto">
+                            <table class="w-full border-collapse border border-gray-400 text-xs text-center">
+                                <thead class="bg-[#607d8b] text-white sticky top-0 z-10">
+                                    <tr>
+                                        <th class="border border-gray-400 w-8 px-1 py-1">No</th>
+                                        <th class="border border-gray-400 px-2 py-1 text-left">Nama Barang</th>
+                                        <th class="border border-gray-400 px-2 py-1">Kode Barang</th>
+                                        <th class="border border-gray-400 px-2 py-1">Barcode</th>
+                                        <th class="border border-gray-400 px-2 py-1">Kuantitas</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-barang-body" class="bg-white">
+                                    <tr>
+                                        <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="5">
+                                            Belum ada data
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -234,8 +221,115 @@
     </div>
 </div>
 
+<!-- Modal Non Packing List - Detail Item -->
+<div id="non-pl-modal" class="fixed inset-0 z-50 hidden">
+    <!-- Overlay dibuat lebih ringan agar form di belakang masih terlihat -->
+    <div class="fixed inset-0 bg-white/30 backdrop-blur-[1px]" onclick="closeNonPlModal()"></div>
+    <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg pointer-events-auto max-h-[90vh] flex flex-col">
+            <!-- Header -->
+            <div class="bg-[#2c3e50] text-white px-4 py-3 rounded-t-lg flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-edit"></i>
+                    <span class="font-semibold text-sm">Rincian Barang</span>
+                </div>
+                <button type="button" onclick="closeNonPlModal()" class="text-white hover:text-gray-300 text-lg leading-none">&times;</button>
+            </div>
+
+            <!-- Tabs -->
+            <div class="flex border-b">
+                <div id="tab-rincian" class="px-4 py-2 text-sm cursor-pointer text-red-600 border-b-2 border-red-600 font-semibold" onclick="switchModalTab('rincian')">Rincian Barang</div>
+                <div id="tab-seri" class="px-4 py-2 text-sm cursor-pointer text-gray-500 hover:text-gray-700" onclick="switchModalTab('seri')">No Seri/Produksi</div>
+            </div>
+
+            <!-- Tab Content: Rincian Barang -->
+            <div id="content-rincian" class="p-4 overflow-y-auto flex-1">
+                <div class="space-y-3 text-sm">
+                    <div class="flex items-start gap-3">
+                        <label class="w-28 text-gray-600 font-medium pt-1">Kode #</label>
+                        <span id="modal-kode-barang" class="text-red-600 font-semibold"></span>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <label class="w-28 text-gray-600 font-medium pt-1">Nama Barang *</label>
+                        <input id="modal-nama-barang" type="text" class="flex-1 border rounded px-2 py-1 bg-gray-50" readonly>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <label class="w-28 text-gray-600 font-medium pt-1">Kuantitas *</label>
+                        <div class="flex items-center gap-2">
+                            <input id="modal-kuantitas" type="text" class="w-24 border rounded px-2 py-1 bg-gray-50 text-right" readonly>
+                            <span id="modal-unit" class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-medium">METER</span>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <label class="w-28 text-gray-600 font-medium pt-1">Gudang *</label>
+                        <span id="modal-gudang" class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded font-medium">GUDANG STOK</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content: No Seri/Produksi -->
+            <div id="content-seri" class="p-4 overflow-y-auto flex-1 hidden">
+                <div class="space-y-3 text-sm">
+                    <!-- Input kuantitas per barcode -->
+                    <div class="flex items-center gap-3">
+                        <label class="w-20 text-gray-600 font-medium">Kuantitas</label>
+                        <input id="modal-sn-qty-input" type="number" step="0.001" min="0.001" placeholder="Qty per barcode" class="w-24 border rounded px-2 py-1 text-right" onkeypress="if(event.key==='Enter'){event.preventDefault();addSerialNumber();}">
+                    </div>
+                    <!-- Input barcode (auto-generate) -->
+                    <div class="flex items-center gap-3">
+                        <label class="w-20 text-gray-600 font-medium">Nomor #</label>
+                        <div class="flex-1 flex items-center gap-2">
+                            <input type="text" class="flex-1 border rounded px-2 py-1 bg-gray-100 text-gray-500" placeholder="Auto-generate dari sistem" readonly>
+                            <button type="button" id="btn-add-sn" onclick="addSerialNumber()" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm whitespace-nowrap">
+                                <i class="fas fa-plus mr-1"></i>Generate
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Table serial numbers -->
+                    <div class="border rounded max-h-52 overflow-y-auto overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-[#607d8b] text-white sticky top-0 z-10">
+                                <tr>
+                                    <th class="px-2 py-1.5 w-10"></th>
+                                    <th class="px-2 py-1.5 w-10 text-center">Print</th>
+                                    <th class="px-2 py-1.5 text-left">Nomor #</th>
+                                    <th class="px-2 py-1.5 text-right">Kuantitas</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modal-sn-tbody">
+                                <tr><td colspan="4" class="px-2 py-4 text-center text-gray-400 border-b">Belum ada serial number</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="flex justify-end pt-2">
+                        <button
+                            type="button"
+                            onclick="bulkPrintNonPlSerial()"
+                            class="bg-purple-600 text-white px-4 py-1.5 rounded hover:bg-purple-700 text-sm font-medium whitespace-nowrap"
+                        >
+                            <i class="fas fa-print mr-2"></i>Bulk Print
+                        </button>
+                    </div>
+
+                    <!-- Summary -->
+                    <p id="modal-sn-summary" class="text-sm text-gray-600">0 No Seri/Produksi, Jumlah 0</p>
+                </div>
+            </div>
+
+            <!-- Footer buttons -->
+            <div class="px-4 py-3 border-t flex items-center justify-between">
+                <button type="button" onclick="clearItemSerialNumbers()" class="border border-gray-300 text-gray-700 px-4 py-1.5 rounded hover:bg-gray-100 text-sm">Hapus</button>
+                <button type="button" onclick="closeNonPlModal()" class="bg-blue-600 text-white px-6 py-1.5 rounded hover:bg-blue-700 text-sm font-medium">Lanjut</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     const nomor_po = JSON.parse(`{!! addslashes(json_encode($purchase_order)) !!}`);
+    const printNonPlPdfEndpoint = "{{ route('penerimaan-barang.non-pl.print-pdf') }}";
 
     console.log('Nomor PO data:', nomor_po);
 
@@ -246,8 +340,14 @@
         no_terima: '',
         vendor: '',
         tanggal: '',
+        mode: 'packing_list',
         packing_list_ids: []
     };
+
+    // Non Packing List state
+    let nonPlItems = [];
+    let nonPlKodeCustomer = '';
+    let currentModalItemIndex = -1;
 
     // Flag untuk mencegah form submit tidak diinginkan
     let isFormLocked = false;
@@ -263,11 +363,13 @@
         const noTerimaInput = document.getElementById('no_terima');
         const vendorInput = document.getElementById('vendor');
         const tanggalInput = document.getElementById('tanggal');
+        const selectedMode = document.querySelector('input[name="mode"]:checked')?.value || 'packing_list';
         const packingListCheckboxes = document.querySelectorAll('.packing-list-cb:checked');
 
         const packingListIds = Array.from(packingListCheckboxes).map(cb => cb.value);
 
         console.log('Lanjut button clicked');
+        console.log('Mode:', selectedMode);
         console.log('No PO:', noPOInput.value);
         console.log('NPB:', npbInput.value);
         console.log('No Terima:', noTerimaInput?.value);
@@ -275,12 +377,18 @@
         console.log('Tanggal:', tanggalInput.value);
         console.log('Packing List IDs:', packingListIds);
 
-        // Validasi form
-        if (!noPOInput.value.trim() || !npbInput.value.trim() || !tanggalInput.value.trim() || packingListIds.length === 0) {
+        // Validasi form - packing list hanya wajib jika mode = packing_list
+        const baseFieldsMissing = !noPOInput.value.trim() || !npbInput.value.trim() || !tanggalInput.value.trim();
+        const packingListMissing = selectedMode === 'packing_list' && packingListIds.length === 0;
+
+        if (baseFieldsMissing || packingListMissing) {
+            const msg = packingListMissing
+                ? 'Harap lengkapi No PO, Tanggal, dan pilih minimal satu packing list!'
+                : 'Harap lengkapi No PO dan Tanggal!';
             Swal.fire({
                 icon: 'warning',
                 title: 'Field Tidak Lengkap',
-                text: 'Harap lengkapi No PO, Tanggal, dan pilih minimal satu packing list!',
+                text: msg,
                 timer: 3000,
                 timerProgressBar: true,
                 showConfirmButton: false,
@@ -296,7 +404,8 @@
         formData.no_terima = noTerimaInput.value;
         formData.vendor = vendorInput.value;
         formData.tanggal = tanggalInput.value;
-        formData.packing_list_ids = packingListIds;
+        formData.mode = selectedMode;
+        formData.packing_list_ids = selectedMode === 'packing_list' ? packingListIds : [];
 
         console.log('Form data saved temporarily:', formData);
 
@@ -311,7 +420,7 @@
         isFormLocked = true;
 
         // Panggil function untuk mengambil detail PO
-        fetchDetailPO(formData.no_po, formData.npb, formData.packing_list_ids)
+        fetchDetailPO(formData.no_po, formData.npb, formData.packing_list_ids, formData.mode)
             .then(() => {
                 console.log('Detail PO berhasil dimuat');
                 // Setelah berhasil, tombol Save akan ditampilkan di setFormReadonly(true)
@@ -329,7 +438,7 @@
     }
 
     // Function untuk mengambil detail PO dari packing list dengan AJAX
-    function fetchDetailPO(noPO, npb, packingListIds) {
+    function fetchDetailPO(noPO, npb, packingListIds, mode) {
         return new Promise((resolve, reject) => {
             // Tampilkan loading indicator
             const tableBody = document.getElementById('table-barang-body');
@@ -339,7 +448,10 @@
             const data = new FormData();
             data.append('no_po', noPO);
             data.append('npb', npb);
-            packingListIds.forEach(id => data.append('packing_list_ids[]', id));
+            data.append('mode', mode || 'packing_list');
+            if (mode === 'packing_list') {
+                packingListIds.forEach(id => data.append('packing_list_ids[]', id));
+            }
 
             // Tambahkan CSRF token
             data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
@@ -369,17 +481,37 @@
                     if (data.vendor && data.vendor.vendorNo) {
                         const vendorInput = document.getElementById('vendor');
                         vendorInput.value = data.vendor.vendorNo;
-
-                        // PENTING: Update formData.vendor setelah mendapat data dari server
                         formData.vendor = data.vendor.vendorNo;
                         console.log('Vendor updated in formData:', formData.vendor);
                     }
 
-                    // Tampilkan data barang di tabel
-                    updateBarangTable(data.barang);
-
-                    // Tampilkan bagian Validasi Barcode BUKAN tombol Save
-                    document.getElementById('barcode-validation-section').classList.remove('hidden');
+                    if (data.mode === 'non_packing_list') {
+                        // Simpan ke nonPlItems state
+                        nonPlKodeCustomer = data.kode_customer || '';
+                        nonPlItems = (data.barang || []).map(item => ({
+                            kode_barang: item.kode_barang,
+                            nama_barang: item.nama_barang,
+                            name: item.name || item.nama_barang || '',
+                            charField1: item.charField1 || '',
+                            charField2: item.charField2 || '',
+                            charField4: item.charField4 || '',
+                            charField5: item.charField5 || '',
+                            charField6: item.charField6 || '',
+                            nameWithIndentStrip: item.nameWithIndentStrip || '',
+                            kuantitas: item.kuantitas || 0,
+                            unit_price: item.unit_price || 0,
+                            uom: item.uom || 'METER',
+                            serial_numbers: [],
+                        }));
+                        updateNonPlTable();
+                        // Tombol Save tampil setelah semua item complete
+                        checkNonPlComplete();
+                    } else {
+                        // Mode packing_list: tidak lagi butuh upload TXT / scan fisik.
+                        // Setelah detail barang dimuat, tombol Save langsung bisa dipakai.
+                        updateBarangTable(data.barang);
+                        document.getElementById('save-btn').classList.remove('hidden');
+                    }
 
                     resolve(data);
                 })
@@ -463,6 +595,366 @@
         }
     }
 
+    // ===================== NON PACKING LIST FUNCTIONS =====================
+
+    function updateNonPlTable() {
+        const tableBody = document.getElementById('table-barang-body');
+        tableBody.innerHTML = '';
+
+        if (nonPlItems.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="border border-gray-400 px-2 py-3 text-center"><i class="fas fa-info-circle mr-2"></i>Tidak ada item yang memenuhi syarat</td></tr>';
+            return;
+        }
+
+        nonPlItems.forEach((item, index) => {
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-blue-50 cursor-pointer transition-colors';
+            row.title = 'Double-click untuk atur serial number';
+            row.addEventListener('dblclick', () => openNonPlModal(index));
+
+            const totalAssigned = item.serial_numbers.reduce((s, sn) => s + (parseFloat(sn.quantity) || 0), 0);
+            const isComplete = totalAssigned >= item.kuantitas && item.serial_numbers.length > 0;
+
+            row.innerHTML = `
+                <td class="border border-gray-400 px-1 py-3 text-center align-top">${index + 1}</td>
+                <td class="border border-gray-400 px-2 py-3 text-left align-top">${item.nama_barang || '-'}</td>
+                <td class="border border-gray-400 px-2 py-3 align-top">${item.kode_barang || '-'}</td>
+                <td class="border border-gray-400 px-2 py-3 align-top text-center">
+                    ${isComplete
+                        ? '<span class="text-green-600 font-semibold"><i class="fas fa-check-circle mr-1"></i>' + item.serial_numbers.length + ' SN</span>'
+                        : '<span class="text-orange-500"><i class="fas fa-exclamation-circle mr-1"></i>Belum</span>'}
+                </td>
+                <td class="border border-gray-400 px-2 py-3 align-top font-semibold text-right">${item.kuantitas}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function checkNonPlComplete() {
+        const allComplete = nonPlItems.length > 0 && nonPlItems.every(item => {
+            const totalAssigned = item.serial_numbers.reduce((s, sn) => s + (parseFloat(sn.quantity) || 0), 0);
+            return totalAssigned >= item.kuantitas && item.serial_numbers.length > 0;
+        });
+
+        const saveBtn = document.getElementById('save-btn');
+        if (allComplete) {
+            saveBtn.classList.remove('hidden');
+        } else {
+            saveBtn.classList.add('hidden');
+        }
+    }
+
+    // --- MODAL FUNCTIONS ---
+
+    function openNonPlModal(itemIndex) {
+        currentModalItemIndex = itemIndex;
+        const item = nonPlItems[itemIndex];
+        if (!item) return;
+
+        document.getElementById('modal-kode-barang').textContent = item.kode_barang + ' - ' + (item.nama_barang || '');
+        document.getElementById('modal-nama-barang').value = item.nama_barang || '';
+        document.getElementById('modal-kuantitas').value = item.kuantitas;
+        document.getElementById('modal-unit').textContent = item.uom || 'METER';
+        document.getElementById('modal-gudang').textContent = 'GUDANG STOK';
+
+        switchModalTab('rincian');
+        renderModalSerialNumbers();
+        document.getElementById('non-pl-modal').classList.remove('hidden');
+    }
+
+    function closeNonPlModal() {
+        document.getElementById('non-pl-modal').classList.add('hidden');
+        currentModalItemIndex = -1;
+        updateNonPlTable();
+        checkNonPlComplete();
+    }
+
+    function switchModalTab(tab) {
+        const rincianTab = document.getElementById('tab-rincian');
+        const seriTab = document.getElementById('tab-seri');
+        const rincianContent = document.getElementById('content-rincian');
+        const seriContent = document.getElementById('content-seri');
+
+        const activeClass = 'text-red-600 border-b-2 border-red-600 font-semibold';
+        const inactiveClass = 'text-gray-500 hover:text-gray-700';
+
+        if (tab === 'rincian') {
+            rincianTab.className = 'px-4 py-2 text-sm cursor-pointer ' + activeClass;
+            seriTab.className = 'px-4 py-2 text-sm cursor-pointer ' + inactiveClass;
+            rincianContent.classList.remove('hidden');
+            seriContent.classList.add('hidden');
+        } else {
+            seriTab.className = 'px-4 py-2 text-sm cursor-pointer ' + activeClass;
+            rincianTab.className = 'px-4 py-2 text-sm cursor-pointer ' + inactiveClass;
+            seriContent.classList.remove('hidden');
+            rincianContent.classList.add('hidden');
+            document.getElementById('modal-sn-qty-input').focus();
+        }
+    }
+
+    function renderModalSerialNumbers() {
+        if (currentModalItemIndex < 0) return;
+        const item = nonPlItems[currentModalItemIndex];
+        const tbody = document.getElementById('modal-sn-tbody');
+        tbody.innerHTML = '';
+
+        if (item.serial_numbers.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="px-2 py-4 text-center text-gray-400 border-b">Belum ada serial number</td></tr>';
+        } else {
+            item.serial_numbers.forEach((sn, snIdx) => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b hover:bg-gray-50';
+                tr.innerHTML = `
+                    <td class="px-2 py-2 text-center w-10">
+                        <button type="button" onclick="removeSerialNumber(${snIdx})" class="bg-red-700 text-white text-xs px-2 py-1 rounded hover:bg-red-800">X</button>
+                    </td>
+                    <td class="px-2 py-2 text-center w-10">
+                        <button type="button" onclick="printNonPlSerial(${snIdx})" class="bg-gray-800 text-white text-xs px-2 py-1 rounded hover:bg-gray-900" title="Print label">
+                            <i class="fas fa-print"></i>
+                        </button>
+                    </td>
+                    <td class="px-2 py-2 font-mono">${sn.barcode}</td>
+                    <td class="px-2 py-2 text-right">
+                        <input type="number" step="0.001" min="0.001" value="${sn.quantity}" class="w-20 text-right border rounded px-1 py-0.5 text-sm" onchange="updateSnQty(${snIdx}, this.value)">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        const totalQty = item.serial_numbers.reduce((s, sn) => s + (parseFloat(sn.quantity) || 0), 0);
+        document.getElementById('modal-sn-summary').textContent = `${item.serial_numbers.length} No Seri/Produksi, Jumlah ${totalQty % 1 === 0 ? totalQty : totalQty.toFixed(3)}`;
+    }
+
+    function printNonPlSerial(snIdx) {
+        if (currentModalItemIndex < 0) return;
+        const item = nonPlItems[currentModalItemIndex];
+        if (!item?.serial_numbers?.[snIdx]) return;
+
+        const sn = item.serial_numbers[snIdx];
+        const itemPayload = {
+            charField1: item.charField1 || '',
+            charField2: item.charField2 || '',
+            charField4: item.charField4 || '',
+            charField5: item.charField5 || '',
+            charField6: item.charField6 || '',
+            name: item.name || item.nama_barang || '',
+            nameWithIndentStrip: item.nameWithIndentStrip || '',
+            no: item.kode_barang || '',
+            itemUnitName: item.uom || '',
+        };
+
+        const labelPayload = [{
+            barcode: sn.barcode,
+            quantity: sn.quantity
+        }];
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        fetch(printNonPlPdfEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify({
+                item: itemPayload,
+                labels: labelPayload
+            })
+        })
+            .then(res => {
+                if (!res.ok) {
+                    return res.text().then(t => { throw new Error(t || 'Gagal generate PDF'); });
+                }
+                return res.blob();
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire({ icon: 'error', title: 'Error Print', text: err.message || 'Gagal generate PDF', timer: 3500, showConfirmButton: false, toast: true, position: 'top-end' });
+            });
+    }
+
+    function bulkPrintNonPlSerial() {
+        if (currentModalItemIndex < 0) return;
+        const item = nonPlItems[currentModalItemIndex];
+        if (!item?.serial_numbers || item.serial_numbers.length === 0) return;
+
+        const itemPayload = {
+            charField1: item.charField1 || '',
+            charField2: item.charField2 || '',
+            charField4: item.charField4 || '',
+            charField5: item.charField5 || '',
+            charField6: item.charField6 || '',
+            name: item.name || item.nama_barang || '',
+            nameWithIndentStrip: item.nameWithIndentStrip || '',
+            no: item.kode_barang || '',
+            itemUnitName: item.uom || '',
+        };
+
+        const labelPayload = item.serial_numbers.map(sn => ({
+            barcode: sn.barcode,
+            quantity: sn.quantity
+        }));
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        fetch(printNonPlPdfEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify({
+                item: itemPayload,
+                labels: labelPayload
+            })
+        })
+            .then(res => {
+                if (!res.ok) {
+                    return res.text().then(t => { throw new Error(t || 'Gagal generate PDF'); });
+                }
+                return res.blob();
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                window.open(url, '_blank');
+            })
+            .catch(err => {
+                console.error(err);
+                Swal.fire({ icon: 'error', title: 'Error Bulk Print', text: err.message || 'Gagal generate PDF', timer: 3500, showConfirmButton: false, toast: true, position: 'top-end' });
+            });
+    }
+
+    function addSerialNumber() {
+        if (currentModalItemIndex < 0) return;
+        const item = nonPlItems[currentModalItemIndex];
+        const qtyInput = document.getElementById('modal-sn-qty-input');
+        const qty = parseFloat(qtyInput.value);
+
+        if (!qty || qty <= 0) {
+            Swal.fire({ icon: 'warning', title: 'Kuantitas tidak valid', text: 'Masukkan kuantitas > 0', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
+            return;
+        }
+
+        const assigned = item.serial_numbers.reduce((s, sn) => s + (parseFloat(sn.quantity) || 0), 0);
+        const itemQty = parseFloat(item.kuantitas) || 0;
+        const nextTotal = assigned + qty;
+        // toleransi kecil untuk floating point
+        if (itemQty > 0 && nextTotal > itemQty + 1e-9) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Kuantitas Melebihi',
+                text: `Total kuantitas serial (${nextTotal.toFixed(3)}) melebihi kuantitas item (${itemQty}).`,
+                timer: 3500,
+                showConfirmButton: false,
+                toast: true,
+                position: 'top-end'
+            });
+            return;
+        }
+
+        const btn = document.getElementById('btn-add-sn');
+        const origText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        btn.disabled = true;
+
+        const data = new FormData();
+        data.append('kode_customer', nonPlKodeCustomer);
+        data.append('quantity', qty);
+        data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+
+        fetch('{{ route("penerimaan-barang.generate-barcode-non-pl") }}', {
+            method: 'POST',
+            body: data,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(r => r.json())
+        .then(result => {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+
+            if (result.success) {
+                item.serial_numbers.push({
+                    barcode: result.barcode,
+                    quantity: result.quantity,
+                    reservation_token: result.token,
+                });
+                renderModalSerialNumbers();
+                qtyInput.value = '';
+                qtyInput.focus();
+            } else {
+                Swal.fire({ icon: 'error', title: 'Gagal', text: result.message || 'Gagal generate barcode', timer: 3000, showConfirmButton: false, toast: true, position: 'top-end' });
+            }
+        })
+        .catch(err => {
+            btn.innerHTML = origText;
+            btn.disabled = false;
+            console.error(err);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Terjadi kesalahan jaringan.', timer: 3000, showConfirmButton: false, toast: true, position: 'top-end' });
+        });
+    }
+
+    function removeSerialNumber(snIdx) {
+        if (currentModalItemIndex < 0) return;
+        nonPlItems[currentModalItemIndex].serial_numbers.splice(snIdx, 1);
+        renderModalSerialNumbers();
+    }
+
+    function updateSnQty(snIdx, newVal) {
+        if (currentModalItemIndex < 0) return;
+        const item = nonPlItems[currentModalItemIndex];
+        const qty = parseFloat(newVal) || 0;
+        if (qty <= 0) return;
+
+        const prevQty = parseFloat(item.serial_numbers[snIdx]?.quantity) || 0;
+        const assignedOther = item.serial_numbers.reduce((s, sn, i) => {
+            if (i === snIdx) return s;
+            return s + (parseFloat(sn.quantity) || 0);
+        }, 0);
+
+        const itemQty = parseFloat(item.kuantitas) || 0;
+        const nextTotal = assignedOther + qty;
+        if (itemQty > 0 && nextTotal > itemQty + 1e-9) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Kuantitas Melebihi',
+                text: `Total kuantitas serial (${nextTotal.toFixed(3)}) melebihi kuantitas item (${itemQty}).`,
+                timer: 3500,
+                showConfirmButton: false,
+                toast: true,
+                position: 'top-end'
+            });
+
+            // Revert nilai di state dan UI
+            item.serial_numbers[snIdx].quantity = prevQty;
+            renderModalSerialNumbers();
+            return;
+        }
+
+        item.serial_numbers[snIdx].quantity = qty;
+        renderModalSerialNumbers();
+    }
+
+    function clearItemSerialNumbers() {
+        if (currentModalItemIndex < 0) return;
+        Swal.fire({
+            title: 'Hapus semua serial number?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Ya, Hapus',
+            cancelButtonText: 'Batal'
+        }).then(r => {
+            if (r.isConfirmed) {
+                nonPlItems[currentModalItemIndex].serial_numbers = [];
+                renderModalSerialNumbers();
+            }
+        });
+    }
+
+    // ===================== END NON PACKING LIST FUNCTIONS =====================
+
     // Function untuk handle tombol Save (menggunakan form submit biasa)
     function handleSaveClick(event) {
         event.preventDefault();
@@ -512,15 +1004,36 @@
 
                 const form = document.getElementById('penerimaanForm');
                 if (form) {
+                    // Tambahkan hidden input mode
+                    let modeInput = form.querySelector('input[name="mode"][type="hidden"]');
+                    if (!modeInput) {
+                        modeInput = document.createElement('input');
+                        modeInput.type = 'hidden';
+                        modeInput.name = 'mode';
+                        form.appendChild(modeInput);
+                    }
+                    modeInput.value = formData.mode;
+
                     // Hapus packing_list_ids hidden lama (jika ada), tambahkan yang terpilih
                     form.querySelectorAll('input[name="packing_list_ids[]"][type="hidden"]').forEach(el => el.remove());
-                    formData.packing_list_ids.forEach(id => {
-                        const inp = document.createElement('input');
-                        inp.type = 'hidden';
-                        inp.name = 'packing_list_ids[]';
-                        inp.value = id;
-                        form.appendChild(inp);
-                    });
+                    // Hapus non_pl_items hidden lama
+                    form.querySelectorAll('input[name="non_pl_items"][type="hidden"]').forEach(el => el.remove());
+
+                    if (formData.mode === 'packing_list') {
+                        formData.packing_list_ids.forEach(id => {
+                            const inp = document.createElement('input');
+                            inp.type = 'hidden';
+                            inp.name = 'packing_list_ids[]';
+                            inp.value = id;
+                            form.appendChild(inp);
+                        });
+                    } else if (formData.mode === 'non_packing_list') {
+                        const nonPlInput = document.createElement('input');
+                        nonPlInput.type = 'hidden';
+                        nonPlInput.name = 'non_pl_items';
+                        nonPlInput.value = JSON.stringify(nonPlItems);
+                        form.appendChild(nonPlInput);
+                    }
                 }
 
                 // Set hidden input untuk menandai bahwa form sudah siap disubmit
@@ -633,6 +1146,7 @@
         const vendorInput = document.getElementById('vendor');
         const tanggalInput = document.getElementById('tanggal');
         const packingListCbs = document.querySelectorAll('.packing-list-cb');
+        const modeRadios = document.querySelectorAll('.mode-radio');
         const dropdownNoPO = document.getElementById('dropdown-no-po');
         const searchBtnNoPO = document.getElementById('no-po-search-btn');
         const lanjutBtn = document.getElementById('lanjut-btn');
@@ -652,6 +1166,7 @@
             tanggalInput.readOnly = true;
 
             packingListCbs.forEach(cb => { cb.disabled = true; });
+            modeRadios.forEach(r => { r.disabled = true; });
 
             if (dropdownNoPO) dropdownNoPO.classList.add('hidden');
             if (searchBtnNoPO) searchBtnNoPO.style.display = 'none';
@@ -680,6 +1195,7 @@
             tanggalInput.readOnly = false;
 
             packingListCbs.forEach(cb => { cb.disabled = false; });
+            modeRadios.forEach(r => { r.disabled = false; });
 
             if (searchBtnNoPO) searchBtnNoPO.style.display = 'block';
 
@@ -710,6 +1226,18 @@
         }
     });
 
+    // Toggle packing list section berdasarkan mode
+    function togglePackingListSection(mode) {
+        const section = document.getElementById('packing-list-section');
+        if (mode === 'non_packing_list') {
+            section.style.display = 'none';
+            // Uncheck semua checkbox packing list
+            document.querySelectorAll('.packing-list-cb').forEach(cb => { cb.checked = false; });
+        } else {
+            section.style.display = 'contents';
+        }
+    }
+
     // Initialize form on page load
     document.addEventListener('DOMContentLoaded', () => {
         const noPOInput = document.getElementById('no_po');
@@ -723,6 +1251,19 @@
         console.log('Vendor Input:', vendorInput);
         // Initialize tooltips
         $('[data-toggle="tooltip"]').tooltip();
+
+        // Event listener untuk mode radio buttons
+        document.querySelectorAll('.mode-radio').forEach(radio => {
+            radio.addEventListener('change', function() {
+                togglePackingListSection(this.value);
+                formData.mode = this.value;
+                console.log('Mode changed to:', this.value);
+            });
+        });
+
+        // Initialize mode dari state awal
+        const initialMode = document.querySelector('input[name="mode"]:checked')?.value || 'packing_list';
+        togglePackingListSection(initialMode);
 
         if (searchBtnPO) {
             searchBtnPO.addEventListener('click', handleSearchPOClick);
@@ -817,16 +1358,6 @@
         const searchInput = document.getElementById('search-barang');
         const tableBody = document.getElementById('table-barang-body');
         const errorContainer = document.getElementById('laravel-errors');
-        const scanInput = document.getElementById('scan_barcode_input');
-
-        if (scanInput) {
-            scanInput.addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handlePhysicalScan(this.value);
-                }
-            });
-        }
 
         if (errorContainer) {
             // Cek untuk session 'error'
@@ -977,210 +1508,6 @@
         console.log('All PO dropdown shown');
     }
 
-    // --- FUNGSI VALIDASI BARCODE (TEMP) ---
-
-    // 1. Upload Master TXT
-    function uploadMasterTxt() {
-        if (!formData.no_po) {
-            Swal.fire('Error', 'Nomor PO belum dipilih.', 'error');
-            return;
-        }
-
-        const fileInput = document.getElementById('txt_file');
-        const btnUpload = document.getElementById('btn-upload-txt');
-        const originText = btnUpload.innerHTML;
-
-        const data = new FormData();
-        data.append('no_po', formData.no_po);
-        data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-        
-        if (fileInput.files.length > 0) {
-            data.append('txt_file', fileInput.files[0]);
-        }
-
-        btnUpload.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Memproses...';
-        btnUpload.disabled = true;
-
-        fetch('{{ route("temp_scan.upload_txt") }}', {
-            method: 'POST',
-            body: data,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => response.json())
-        .then(result => {
-            btnUpload.innerHTML = originText;
-            btnUpload.disabled = false;
-
-            if (result.success) {
-                Swal.fire('Berhasil', result.message, 'success');
-                
-                // Switch view to Scanning Input
-                document.getElementById('upload-txt-container').classList.add('hidden');
-                document.getElementById('scan-physical-container').classList.remove('hidden');
-                document.getElementById('scan_barcode_input').focus();
-                
-                // Fetch initial scan state
-                refreshScanStats();
-            } else {
-                Swal.fire('Gagal', result.message || 'Gagal memproses file.', 'error');
-            }
-        })
-        .catch(error => {
-            btnUpload.innerHTML = originText;
-            btnUpload.disabled = false;
-            console.error(error);
-            Swal.fire('Error', 'Terjadi kesalahan jaringan/server.', 'error');
-        });
-    }
-
-    // 2. Physical Scan Check
-    function handlePhysicalScan(barcodeVal) {
-        if (!barcodeVal.trim()) return;
-        
-        const scanInput = document.getElementById('scan_barcode_input');
-        
-        // Block until request done to prevent double scanning
-        scanInput.disabled = true;
-
-        const data = new FormData();
-        data.append('no_po', formData.no_po);
-        data.append('barcode', barcodeVal);
-        data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-
-        fetch('{{ route("temp_scan.scan_physical") }}', {
-            method: 'POST',
-            body: data,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => response.json())
-        .then(result => {
-            scanInput.value = '';
-            scanInput.disabled = false;
-            scanInput.focus();
-
-            if (result.success) {
-                // Update text & progress
-                updateScanUI(result.scanned_count, result.master_count, result.is_perfect_match);
-                
-                // SweetAlert toast for quick feedback
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Cocok!',
-                    text: result.message,
-                    timer: 1000,
-                    showConfirmButton: false,
-                    toast: true,
-                    position: 'top-end'
-                });
-
-                if (result.is_perfect_match) {
-                    onPerfectMatch();
-                }
-            } else {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Tidak Cocok / Gagal',
-                    text: result.message,
-                    timer: 3000,
-                    showConfirmButton: false,
-                    toast: true,
-                    position: 'top-end'
-                });
-                
-                // Play error sound could be added here
-            }
-        })
-        .catch(error => {
-            scanInput.value = '';
-            scanInput.disabled = false;
-            scanInput.focus();
-            console.error(error);
-            Swal.fire('Error', 'Terjadi kesalahan sistem.', 'error');
-        });
-    }
-
-    // 3. Reset Scan
-    function resetScan() {
-        if (!formData.no_po) return;
-
-        Swal.fire({
-            title: 'Reset Validasi?',
-            text: 'Ini akan menghapus semua Master Data dan Riwayat Scan yang belum disimpan. Anda yakin?',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Ya, Reset',
-            cancelButtonText: 'Batal'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                const data = new FormData();
-                data.append('no_po', formData.no_po);
-                data.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
-
-                fetch('{{ route("temp_scan.flush") }}', {
-                    method: 'POST',
-                    body: data,
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                })
-                .then(r => r.json())
-                .then(res => {
-                    if (res.success) {
-                        Swal.fire('Tereset!', 'Silakan mulai dari awal (Upload TXT).', 'success');
-                        
-                        document.getElementById('scan-physical-container').classList.add('hidden');
-                        document.getElementById('upload-txt-container').classList.remove('hidden');
-                        document.getElementById('txt_file').value = '';
-                        document.getElementById('save-btn').classList.add('hidden');
-                        document.getElementById('scan-success-message').classList.add('hidden');
-                        updateScanUI(0, 0, false);
-                    }
-                });
-            }
-        });
-    }
-
-    // Helper UI Updates
-    function refreshScanStats() {
-        fetch(`{{ url('penerimaan-barang/temp/scanned-items') }}?no_po=${encodeURIComponent(formData.no_po)}`, {
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        })
-        .then(r => r.json())
-        .then(res => {
-            if (res.success) {
-                const isPerfect = (res.scanned_count === res.master_count) && (res.master_count > 0);
-                updateScanUI(res.scanned_count, res.master_count, isPerfect);
-                
-                if (isPerfect) onPerfectMatch();
-            }
-        });
-    }
-
-    function updateScanUI(scanned, master, isPerfect) {
-        document.getElementById('scan-status-text').textContent = `${scanned} / ${master} Barcode Cocok`;
-        
-        let percentage = master > 0 ? (scanned / master) * 100 : 0;
-        const progress = document.getElementById('scan-progress-bar');
-        progress.style.width = percentage + '%';
-        
-        if (percentage >= 100) {
-            progress.classList.replace('bg-blue-600', 'bg-green-500');
-            document.getElementById('scan-status-text').classList.replace('text-blue-600', 'text-green-600');
-            document.getElementById('scan-status-text').classList.replace('bg-blue-100', 'bg-green-100');
-        } else {
-            progress.classList.replace('bg-green-500', 'bg-blue-600');
-            document.getElementById('scan-status-text').classList.replace('text-green-600', 'text-blue-600');
-            document.getElementById('scan-status-text').classList.replace('bg-green-100', 'bg-blue-100');
-        }
-    }
-
-    function onPerfectMatch() {
-        document.getElementById('scan_barcode_input').disabled = true;
-        document.getElementById('scan_barcode_input').placeholder = "Validasi selesai...";
-        document.getElementById('scan-success-message').classList.remove('hidden');
-        document.getElementById('save-btn').classList.remove('hidden');
-    }
+    // Tahap validasi barcode fisik (upload TXT + scan) sudah tidak digunakan.
 </script>
 @endsection

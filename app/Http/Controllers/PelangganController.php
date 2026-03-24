@@ -8,6 +8,7 @@ use Exception;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Promise\Utils;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -28,7 +29,7 @@ class PelangganController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -59,8 +60,8 @@ class PelangganController extends Controller
         }
 
         // Get the auth and session tokens from the configuration
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);

@@ -130,7 +130,7 @@
                                         <tr>
                                             <th>Nama Item</th>
                                             <th>Kode Item</th>
-                                            <th>Kuantitas (MLC)</th>
+                                            <th>Kuantitas</th>
                                             <th>Satuan</th>
                                             <th>@Harga</th>
                                             <th>Diskon</th>
@@ -142,7 +142,9 @@
                                         <tr>
                                             <td>{{ $item['item']['name'] }}</td>
                                             <td>{{ $item['item']['no'] }}</td>
-                                            <td>{{ $item['quantity'] }}</td>
+                                            <td>
+                                                {{ rtrim(rtrim(number_format((float)($item['quantity'] ?? 0), 3, ',', '.'), '0'), ',') }}
+                                            </td>
                                             <td>{{ $item['itemUnit']['name'] }}</td>
                                             <td>{{ 'Rp. ' . number_format((float)($item['unitPrice'] ?? 0), 0, ',', '.') }}</td>
                                             <td>{{ 'Rp. ' . number_format((float)($item['itemCashDiscount'] ?? 0), 0, ',', '.') }}</td>

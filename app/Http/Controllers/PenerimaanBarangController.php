@@ -6,6 +6,8 @@ use App\Models\Barcode;
 use App\Models\PackingList;
 use App\Models\PenerimaanBarang;
 use App\Models\Branch;
+use App\Models\BarcodeNonPL;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 use GuzzleHttp\Promise\Utils;
 use Illuminate\Http\Request;
@@ -15,9 +17,59 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class PenerimaanBarangController extends Controller
 {
+    private const NONPL_RESERVATION_TTL_SECONDS = 1800; // 30 menit
+
+    private function nonPlReservationCacheKey(string $token): string
+    {
+        return 'nonpl_reservation:' . $token;
+    }
+    /**
+     * Normalisasi UOM dari Accurate / Barcode menjadi "YD" atau "M".
+     */
+    private function normalizeUom(?string $uom): string
+    {
+        $u = strtoupper(trim((string) $uom));
+        $u = preg_replace('/\s+/', ' ', $u);
+
+        if ($u === 'YD' || $u === 'YARD' || $u === 'YARDS') {
+            return 'YD';
+        }
+        if ($u === 'M' || $u === 'MTR' || $u === 'METER' || $u === 'METRE') {
+            return 'M';
+        }
+
+        // fallback: kalau format aneh, kembalikan as-is agar tidak konversi sembarangan
+        return $u;
+    }
+
+    /**
+     * Konversi length berdasarkan UOM target (Accurate) vs UOM sumber (barcode).
+     * Aturan bisnis:
+     * - Jika target M tapi barcode YD => length * 0.9
+     * - Jika target YD tapi barcode M => length / 0.9
+     * - Jika sama => no conversion
+     */
+    private function convertLengthByUom(float $length, string $targetUom, string $sourceUom): float
+    {
+        $t = $this->normalizeUom($targetUom);
+        $s = $this->normalizeUom($sourceUom);
+
+        if ($t === $s) {
+            return $length;
+        }
+        if ($t === 'M' && $s === 'YD') {
+            return $length * 0.9;
+        }
+        if ($t === 'YD' && $s === 'M') {
+            return $length / 0.9;
+        }
+        return $length;
+    }
     /**
      * Membangun URL API dari url_accurate branch
      * 
@@ -54,7 +106,7 @@ class PenerimaanBarangController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -92,8 +144,8 @@ class PenerimaanBarangController extends Controller
         if ($penerimaanBarang->isNotEmpty()) {
             try {
                 // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-                $apiToken = $branch->accurate_api_token;
-                $signatureSecret = $branch->accurate_signature_secret;
+                $apiToken = Auth::user()->accurate_api_token;
+                $signatureSecret = Auth::user()->accurate_signature_secret;
                 $timestamp = Carbon::now()->toIso8601String();
                 $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -249,13 +301,13 @@ class PenerimaanBarangController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             throw new \Exception('Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
         // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -380,7 +432,7 @@ class PenerimaanBarangController extends Controller
             return back()->with('error', 'Cabang tidak valid.');
         }
 
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -403,24 +455,32 @@ class PenerimaanBarangController extends Controller
 
     public function getDetailPo(Request $request)
     {
-        $validated = $request->validate([
+        $mode = $request->input('mode', 'packing_list');
+
+        $rules = [
             'no_po' => 'required|string',
             'npb' => 'required|string',
-            'packing_list_ids' => 'required|array',
-            'packing_list_ids.*' => 'integer|exists:packing_list,id',
-        ]);
+            'mode' => 'sometimes|in:packing_list,non_packing_list',
+        ];
+
+        if ($mode === 'packing_list') {
+            $rules['packing_list_ids'] = 'required|array';
+            $rules['packing_list_ids.*'] = 'integer|exists:packing_list,id';
+        }
+
+        $validated = $request->validate($rules);
 
         $activeBranchId = session('active_branch');
         $branch = Branch::find($activeBranchId);
 
-        if (!$branch || !$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return response()->json(['error' => true, 'message' => 'Konfigurasi cabang tidak valid.'], 400);
         }
 
         try {
             // 1. Ambil vendor + detail item dari Accurate PO
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -443,11 +503,13 @@ class PenerimaanBarangController extends Controller
                 foreach ($resData['d']['detailItem'] ?? [] as $detail) {
                     $itemNo = $detail['item']['no'] ?? null;
                     $itemName = $detail['item']['name'] ?? null;
+                    $uomAcc = $detail['itemUnit']['name'] ?? ($detail['item']['unit1']['name'] ?? null);
                     if ($itemNo) {
                         $accurateItems[] = [
                             'no' => $itemNo,
                             'name' => $itemName,
                             'no_numeric' => preg_replace('/\D/', '', $itemNo),
+                            'uom' => $this->normalizeUom($uomAcc),
                         ];
                     }
                 }
@@ -455,13 +517,103 @@ class PenerimaanBarangController extends Controller
 
             Log::info('Accurate items for PO matching', [
                 'no_po' => $validated['no_po'],
+                'mode' => $mode,
                 'items' => collect($accurateItems)->map(fn($i) => $i['no'] . ' => ' . $i['name'])->toArray(),
             ]);
 
-            // 2. Ambil barcode dari packing list yang dipilih
+            // Mode Non Packing List: filter berdasarkan charField1 item atau vendor category
+            if ($mode === 'non_packing_list') {
+                $rawDetails = $resData['d']['detailItem'] ?? [];
+                $allowedCharField1 = ['JARIK', 'SARUNG', 'PRINTING', 'KNITTING', 'DENIM', 'DYEING'];
+
+                // Cek apakah ada item dengan charField1 SARUNG/JARIK
+                $hasMatchingCharField = false;
+                foreach ($rawDetails as $detail) {
+                    $cf1 = strtoupper(trim($detail['item']['charField1'] ?? ''));
+                    if (in_array($cf1, $allowedCharField1)) {
+                        $hasMatchingCharField = true;
+                        break;
+                    }
+                }
+
+                // Jika tidak ada item yang match charField1, cek vendor category
+                $vendorCategoryAllowed = false;
+                if (!$hasMatchingCharField && $vendorData && $vendorData['vendorNo']) {
+                    $vendorDetailResponse = Http::timeout(30)->withHeaders([
+                        'Authorization' => 'Bearer ' . $apiToken,
+                        'X-Api-Signature' => $signature,
+                        'X-Api-Timestamp' => $timestamp,
+                    ])->get($this->buildApiUrl($branch, 'vendor/detail.do'), [
+                        'vendorNo' => $vendorData['vendorNo'],
+                    ]);
+
+                    if ($vendorDetailResponse->successful()) {
+                        $vendorResData = $vendorDetailResponse->json();
+                        $categoryName = strtoupper(trim($vendorResData['d']['category']['name'] ?? ''));
+                        $allowedCategories = ['GRUP', 'LOKAL'];
+                        $vendorCategoryAllowed = in_array($categoryName, $allowedCategories);
+
+                        Log::info('Vendor category check for Non PL', [
+                            'vendorNo' => $vendorData['vendorNo'],
+                            'category_name' => $categoryName,
+                            'allowed' => $vendorCategoryAllowed,
+                        ]);
+                    }
+                }
+
+                // Filter item: charField1 match ATAU vendor category match (semua item)
+                $barangList = [];
+                foreach ($rawDetails as $detail) {
+                    $itemNo = $detail['item']['no'] ?? null;
+                    $itemName = $detail['item']['name'] ?? null;
+                    $cf1 = strtoupper(trim($detail['item']['charField1'] ?? ''));
+                    $qty = (float) ($detail['quantity'] ?? 0);
+                    $unitPrice = (float) ($detail['unitPrice'] ?? 0);
+                    $uomAcc = $detail['itemUnit']['name'] ?? ($detail['item']['unit1']['name'] ?? 'METER');
+
+                    if (!$itemNo) continue;
+
+                    $itemAllowed = in_array($cf1, $allowedCharField1) || $vendorCategoryAllowed;
+                    if (!$itemAllowed) continue;
+
+                    $nameWithIndentStrip = $detail['item']['nameWithIndentStrip'] ?? null;
+
+                    $barangList[] = [
+                        // Data untuk tampilan tabel/non-PL header
+                        'nama_barang' => $itemName,
+                        'name' => $itemName,
+                        'kode_barang' => $itemNo,
+                        'kuantitas' => $qty,
+                        'unit_price' => $unitPrice,
+                        'uom' => $uomAcc,
+                        // Data untuk format print label (berdasarkan charField1)
+                        'charField1' => $cf1,
+                        'charField2' => trim((string) ($detail['item']['charField2'] ?? '')),
+                        'charField4' => trim((string) ($detail['item']['charField4'] ?? '')),
+                        'charField5' => trim((string) ($detail['item']['charField5'] ?? '')),
+                        'charField6' => trim((string) ($detail['item']['charField6'] ?? '')),
+                        'nameWithIndentStrip' => is_string($nameWithIndentStrip)
+                            ? $nameWithIndentStrip
+                            : (string) ($nameWithIndentStrip ?? $itemName ?? ''),
+                    ];
+                }
+
+                if (empty($barangList)) {
+                    throw new \Exception('Tidak ada item yang memenuhi syarat (charField1 atau vendor category GRUP/LOKAL).');
+                }
+
+                return response()->json([
+                    'barang' => $barangList,
+                    'vendor' => $vendorData,
+                    'mode' => 'non_packing_list',
+                    'kode_customer' => $branch->customer_id,
+                ]);
+            }
+
+            // 2. Ambil barcode dari packing list yang dipilih (mode packing_list)
             $packingLists = PackingList::whereIn('id', $validated['packing_list_ids'])
                 ->where('kode_customer', $branch->customer_id)
-                ->whereIn('status', [PackingList::STATUS_APPROVED, PackingList::STATUS_USED])
+                ->where('status', PackingList::STATUS_APPROVED)
                 ->get();
 
             if ($packingLists->isEmpty()) {
@@ -472,7 +624,8 @@ class PenerimaanBarangController extends Controller
             $barcodes = Barcode::whereIn('no_packing_list', $nplList)
                 ->where('kode_customer', $branch->customer_id)
                 ->whereIn('status', [Barcode::STATUS_APPROVED, Barcode::STATUS_UPLOADED])
-                ->orderBy('keterangan', 'asc')
+                // `keterangan` adalah alias model (longtext), tidak bisa dipakai untuk ORDER BY SQL
+                ->orderBy('longtext', 'asc')
                 ->get();
 
             if ($barcodes->isEmpty()) {
@@ -484,8 +637,7 @@ class PenerimaanBarangController extends Controller
 
             foreach ($barcodes as $barcode) {
                 $length = (float) str_replace(',', '.', $barcode->length ?? 0);
-                $uom = strtoupper(trim($barcode->uom ?? ''));
-                $kuantitas = ($uom === 'YD') ? round($length * 0.9) : $length;
+                $barcodeUom = $this->normalizeUom($barcode->uom ?? '');
 
                 $rawMaterialCode = preg_replace('/\D/', '', $barcode->material_code ?? '');
                 $materialCode12 = $rawMaterialCode !== '' ? substr($rawMaterialCode, -12) : '';
@@ -501,6 +653,7 @@ class PenerimaanBarangController extends Controller
 
                 // Matching nama_barang dari Accurate via beberapa strategi
                 $namaBarang = null;
+                $targetUom = '';
 
                 if (!empty($accurateItems)) {
                     if (!$namaBarang && $materialCode12) {
@@ -544,6 +697,13 @@ class PenerimaanBarangController extends Controller
                     $namaBarang = $barcode->keterangan;
                 }
 
+                // Kuantitas harus mengikuti UOM Accurate (jika diketahui)
+                $effectiveLength = $length;
+                if ($targetUom === 'YD' || $targetUom === 'M') {
+                    $effectiveLength = $this->convertLengthByUom($length, $targetUom, $barcodeUom);
+                }
+                $kuantitas = round($effectiveLength, 2);
+
                 $barangList[] = [
                     'nama_barang' => $namaBarang,
                     'kode_barang' => $kodeBarang,
@@ -555,6 +715,7 @@ class PenerimaanBarangController extends Controller
             return response()->json([
                 'barang' => $barangList,
                 'vendor' => $vendorData,
+                'mode' => 'packing_list',
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -579,12 +740,12 @@ class PenerimaanBarangController extends Controller
             throw new \Exception('Cabang tidak valid.');
         }
 
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             throw new \Exception('Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -601,10 +762,12 @@ class PenerimaanBarangController extends Controller
         if ($detailPurchaseOrderResponse->successful()) {
             $resData = $detailPurchaseOrderResponse->json();
             foreach ($resData['d']['detailItem'] ?? [] as $detail) {
+                $uomAcc = $detail['itemUnit']['name'] ?? ($detail['item']['unit1']['name'] ?? null);
                 $itemDetails[] = [
                     'nama_barang' => $detail['item']['name'] ?? null,
                     'kode_barang' => $detail['item']['no'] ?? null,
                     'unit' => $detail['item']['unit1']['name'] ?? null,
+                    'uom_acc' => $this->normalizeUom($uomAcc),
                     'panjang_total' => 0,
                     'availableToSell' => 0,
                     'unit_price' => 0,
@@ -615,10 +778,10 @@ class PenerimaanBarangController extends Controller
             }
         }
 
-        // Ambil packing list (approved atau used) dan barcodes-nya
+        // Ambil packing list (approved) dan barcodes-nya
         $packingLists = PackingList::whereIn('id', $packingListIds)
             ->where('kode_customer', $branch->customer_id)
-            ->whereIn('status', [PackingList::STATUS_APPROVED, PackingList::STATUS_USED])
+            ->where('status', PackingList::STATUS_APPROVED)
             ->get();
 
         if (empty($packingListIds)) {
@@ -675,7 +838,7 @@ class PenerimaanBarangController extends Controller
         }
 
         if ($packingLists->isEmpty()) {
-            throw new \Exception('Packing list tidak ditemukan atau status belum approved/used.');
+            throw new \Exception('Packing list tidak ditemukan atau status belum approved.');
         }
 
         $nplList = $packingLists->pluck('npl')->toArray();
@@ -699,6 +862,7 @@ class PenerimaanBarangController extends Controller
                 'no' => $itemNo,
                 'name' => $item['nama_barang'] ?? '',
                 'no_numeric' => preg_replace('/\D/', '', $itemNo),
+                'uom_acc' => $item['uom_acc'] ?? '',
             ];
         }
 
@@ -761,6 +925,7 @@ class PenerimaanBarangController extends Controller
             }
 
             $item = $itemDetails[$matchedIdx];
+            $targetUom = $accurateItemsForMatch[$matchedIdx]['uom_acc'] ?? ($item['uom_acc'] ?? '');
 
             if ($updateIdPb) {
                 $barcode->update(['id_pb' => $npb]);
@@ -769,8 +934,12 @@ class PenerimaanBarangController extends Controller
             $matchedBarcodeIds[] = $barcode->id;
 
             $length = (float) str_replace(',', '.', $barcode->length ?? 0);
-            $uom = strtoupper(trim($barcode->uom ?? ''));
-            $barcodeQty = ($uom === 'YD') ? round($length * 0.9) : $length;
+            $barcodeUom = $this->normalizeUom($barcode->uom ?? '');
+            $effectiveLength = $length;
+            if ($targetUom === 'YD' || $targetUom === 'M') {
+                $effectiveLength = $this->convertLengthByUom($length, $targetUom, $barcodeUom);
+            }
+            $barcodeQty = round($effectiveLength, 2);
 
             $kw = trim($barcode->kode_warna ?? '');
             $itemNoPl = ($mc12 && $kw) ? $mc12 . ' - ' . $kw : ($mc12 ?: $barcode->kode_barang);
@@ -817,6 +986,311 @@ class PenerimaanBarangController extends Controller
         ];
     }
 
+    /**
+     * AJAX endpoint: reserve barcode baru untuk mode Non Packing List (tanpa insert ke DB).
+     */
+    public function generateBarcodeNonPL(Request $request)
+    {
+        $request->validate([
+            'kode_customer' => 'required|string',
+            'quantity' => 'required|numeric|min:0.001',
+            'count' => 'sometimes|integer|min:1|max:50',
+        ]);
+
+        try {
+            $count = (int) ($request->input('count', 1));
+            $qty = (float) $request->quantity;
+
+            $reserved = DB::transaction(function () use ($request, $count) {
+                $kodeCustomer = (string) $request->kode_customer;
+                $prefix = BarcodeNonPL::prefixForCustomer($kodeCustomer);
+
+                // Gunakan tabel counter khusus agar tidak perlu insert placeholder ke barcode_non_p_l_s
+                $row = DB::table('barcode_non_pl_counters')
+                    ->where('kode_customer', $kodeCustomer)
+                    ->lockForUpdate()
+                    ->first();
+
+                $lastSeq = 0;
+                if ($row) {
+                    $lastSeq = (int) ($row->last_seq ?? 0);
+                } else {
+                    DB::table('barcode_non_pl_counters')->insert([
+                        'kode_customer' => $kodeCustomer,
+                        'prefix' => $prefix,
+                        'last_seq' => 0,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                $start = $lastSeq + 1;
+                $end = $lastSeq + $count;
+
+                DB::table('barcode_non_pl_counters')
+                    ->where('kode_customer', $kodeCustomer)
+                    ->update([
+                        'prefix' => $prefix,
+                        'last_seq' => $end,
+                        'updated_at' => now(),
+                    ]);
+
+                $barcodes = [];
+                for ($seq = $start; $seq <= $end; $seq++) {
+                    $barcodes[] = BarcodeNonPL::formatBarcode($kodeCustomer, $seq);
+                }
+
+                return [
+                    'kode_customer' => $kodeCustomer,
+                    'prefix' => $prefix,
+                    'barcodes' => $barcodes,
+                ];
+            });
+
+            $token = (string) Str::uuid();
+            Cache::put(
+                $this->nonPlReservationCacheKey($token),
+                [
+                    'kode_customer' => $reserved['kode_customer'],
+                    'prefix' => $reserved['prefix'],
+                    'barcodes' => $reserved['barcodes'],
+                    'user_id' => Auth::id(),
+                    'issued_at' => now()->toIso8601String(),
+                ],
+                self::NONPL_RESERVATION_TTL_SECONDS
+            );
+
+            return response()->json([
+                'success' => true,
+                'token' => $token,
+                // kompatibilitas: frontend saat ini ambil field `barcode`
+                'barcode' => $reserved['barcodes'][0] ?? null,
+                'barcodes' => $reserved['barcodes'],
+                'quantity' => $qty,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * Endpoint: generate QR code untuk Non Packing List.
+     * QR meng-encode teks hanya `barcode` (bukan qty), agar sesuai kebutuhan print.
+     */
+    public function qrcodeNonPl(Request $request)
+    {
+        $barcode = (string) $request->query('barcode', '');
+        $size = (int) $request->query('size', 180);
+
+        if ($barcode === '') {
+            abort(400, 'Barcode is required.');
+        }
+
+        // Batasi ukuran agar tidak terlalu berat saat bulk print
+        $size = max(120, min(500, $size));
+
+        $cacheKey = 'qrcode_non_pl:' . md5($barcode . ':' . $size);
+
+        $qrSvg = Cache::remember($cacheKey, now()->addMinutes(60), function () use ($barcode, $size) {
+            // Gunakan format SVG agar tidak butuh extension `imagick`.
+            return QrCode::format('svg')->size($size)->generate($barcode);
+        });
+
+        return response($qrSvg, 200, [
+            'Content-Type' => 'image/svg+xml',
+            // Cache browser juga untuk mempercepat bulk print
+            'Cache-Control' => 'public, max-age=86400',
+        ]);
+    }
+
+    /**
+     * Endpoint: print label Non PL (server-side QR + server-side PDF).
+     *
+     * Frontend mengirim payload:
+     * - item: data charField1/2/4/5/6 + name/nameWithIndentStrip + no/kode_barang + itemUnitName/uom (opsional)
+     * - labels: array berisi barcode + quantity (hasil input user)
+     */
+    public function printNonPlLabelsPdf(Request $request)
+    {
+        $validated = $request->validate([
+            'item' => 'required|array',
+            'item.charField1' => 'nullable|string',
+            'item.charField2' => 'nullable|string',
+            'item.charField4' => 'nullable|string',
+            'item.charField5' => 'nullable|string',
+            'item.charField6' => 'nullable|string',
+            'item.name' => 'nullable|string',
+            'item.nameWithIndentStrip' => 'nullable|string',
+            'item.no' => 'nullable|string',
+            'item.kode_barang' => 'nullable|string',
+            'item.itemUnitName' => 'nullable|string',
+            'item.uom' => 'nullable|string',
+            'labels' => 'required|array|min:1|max:200',
+            'labels.*.barcode' => 'required|string',
+            'labels.*.quantity' => 'required|numeric|min:0.001',
+        ]);
+
+        $item = $validated['item'];
+        $labels = $validated['labels'];
+        $itemForLabel = $item;
+
+        // Prioritaskan brand dari Accurate item/detail.do berdasarkan no item.
+        $itemNo = trim((string) ($item['no'] ?? $item['kode_barang'] ?? ''));
+        if ($itemNo !== '') {
+            $activeBranchId = session('active_branch');
+            $branch = Branch::find($activeBranchId);
+
+            if ($branch && Auth::check() && Auth::user()->accurate_api_token && Auth::user()->accurate_signature_secret) {
+                try {
+                    $apiToken = Auth::user()->accurate_api_token;
+                    $signatureSecret = Auth::user()->accurate_signature_secret;
+                    $timestamp = Carbon::now()->toIso8601String();
+                    $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+                    $headers = [
+                        'Authorization' => 'Bearer ' . $apiToken,
+                        'X-Api-Signature' => $signature,
+                        'X-Api-Timestamp' => $timestamp,
+                    ];
+
+                    // Endpoint item/detail.do menerima body form: no=<itemNo>
+                    $itemDetailResponse = Http::timeout(30)
+                        ->withHeaders($headers)
+                        ->asForm()
+                        ->post($this->buildApiUrl($branch, 'item/detail.do'), [
+                            'no' => $itemNo,
+                        ]);
+
+                    // Fallback jika endpoint dikonfigurasi sebagai query parameter (GET).
+                    if (!$itemDetailResponse->successful()) {
+                        $itemDetailResponse = Http::timeout(30)
+                            ->withHeaders($headers)
+                            ->get($this->buildApiUrl($branch, 'item/detail.do'), [
+                                'no' => $itemNo,
+                            ]);
+                    }
+
+                    if ($itemDetailResponse->successful()) {
+                        $itemDetail = $itemDetailResponse->json();
+                        $brandFromApi = trim((string) data_get($itemDetail, 'd.itemBrand.nameWithIndentStrip', ''));
+                        if ($brandFromApi !== '') {
+                            $itemForLabel['nameWithIndentStrip'] = $brandFromApi;
+                        }
+                    } else {
+                        Log::warning('Gagal ambil brand dari item/detail.do untuk print label Non PL', [
+                            'item_no' => $itemNo,
+                            'status' => $itemDetailResponse->status(),
+                            'body' => $itemDetailResponse->body(),
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Exception saat ambil brand dari item/detail.do untuk print label Non PL', [
+                        'item_no' => $itemNo,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        $type = strtoupper(trim((string) ($item['charField1'] ?? '')));
+
+        $printLayouts = [
+            'JARIK' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'SARUNG' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'PRINTING' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'KNITTING' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'DENIM' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'DYEING' => ['heightMm' => 25, 'qrSizePx' => 190],
+            'DEFAULT' => ['heightMm' => 25, 'qrSizePx' => 190],
+        ];
+
+        $layout = $printLayouts[$type] ?? $printLayouts['DEFAULT'];
+
+        $paperWidthMm = 65;
+        $labelHeightMm = (float) $layout['heightMm'];
+        // Tinggi kertas per label (jangan dikalikan), agar dompdf mem-break halaman otomatis.
+        $paperHeightMm = $labelHeightMm;
+        $mmToPoints = static fn(float $mm): float => $mm * 72 / 25.4;
+        $paperWidthPt = $mmToPoints($paperWidthMm);
+        $paperHeightPt = $mmToPoints($paperHeightMm);
+
+        $token = (string) Str::uuid();
+
+        $formatQty = function ($qty): string {
+            $n = (float) $qty;
+            if (abs($n - round($n)) < 1e-9) {
+                return (string) (int) round($n);
+            }
+            return rtrim(rtrim(number_format($n, 3, '.', ''), '0'), '.');
+        };
+
+        $buildRightLines = function (array $itemData, array $sn) use ($type, $formatQty): array {
+            $qtyText = $formatQty($sn['quantity'] ?? 0);
+            $unitText = trim((string) ($itemData['itemUnitName'] ?? $itemData['uom'] ?? ''));
+            $name = (string) ($itemData['name'] ?? '');
+            $brand = (string) ($itemData['nameWithIndentStrip'] ?? '');
+            $cf2 = (string) ($itemData['charField2'] ?? '');
+            $cf4 = (string) ($itemData['charField4'] ?? '');
+            $cf5 = (string) ($itemData['charField5'] ?? '');
+            $cf6 = (string) ($itemData['charField6'] ?? '');
+            // Jadikan quantity + unit dalam satu baris agar tampil sejajar di label.
+            $qtyUnitLine = trim($qtyText . ' ' . $unitText);
+            $qtyAndUnit = $qtyUnitLine !== '' ? [$qtyUnitLine] : [];
+
+            switch ($type) {
+                case 'JARIK':
+                    return array_merge([$brand, $cf6], $qtyAndUnit);
+                case 'SARUNG':
+                    return array_merge([$name], $qtyAndUnit);
+                case 'PRINTING':
+                    return array_merge([$brand, $cf6, $cf4, $cf5], $qtyAndUnit);
+                case 'KNITTING':
+                    return array_merge([$name, $cf4, $cf5], $qtyAndUnit);
+                case 'DENIM':
+                    return array_merge([$brand, $cf5], $qtyAndUnit);
+                case 'DYEING':
+                    return array_merge([$brand, $cf2, $cf4, $cf5], $qtyAndUnit);
+                default:
+                    return array_merge([$brand ?: $name], $qtyAndUnit);
+            }
+        };
+
+        $labelsView = [];
+
+        foreach ($labels as $sn) {
+            $barcode = (string) ($sn['barcode'] ?? '');
+
+            // Gunakan format SVG agar tidak butuh extension `imagick`.
+            $qrSvg = QrCode::format('svg')->size((int) $layout['qrSizePx'])->generate($barcode);
+            // Gunakan data URL agar dompdf bisa langsung render tanpa akses file lokal.
+            $qrSrc = 'data:image/svg+xml;base64,' . base64_encode($qrSvg);
+
+            $labelsView[] = [
+                'barcode' => $barcode,
+                'rightLines' => $buildRightLines($itemForLabel, $sn),
+                'qrSrc' => $qrSrc,
+            ];
+        }
+
+        $data = [
+            'type' => $type,
+            'layout' => $layout,
+            'labels' => $labelsView,
+            'labelHeightMm' => $labelHeightMm,
+        ];
+
+        $pdf = Pdf::loadView('penerimaan_barang.print_non_pl_labels', $data)
+            ->setPaper([0, 0, $paperWidthPt, $paperHeightPt])
+            ->setOptions([
+                'isRemoteEnabled' => true,
+            ]);
+
+        return $pdf->stream('print-non-pl-' . $token . '.pdf');
+    }
+
     public function store(Request $request)
     {
         // Validasi cabang aktif
@@ -830,21 +1304,31 @@ class PenerimaanBarangController extends Controller
             return back()->with('error', 'Cabang tidak valid.');
         }
 
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
         Log::info('Received form data:', $request->all());
 
-        $validator = Validator::make($request->all(), [
+        $mode = $request->input('mode', 'packing_list');
+
+        $rules = [
             'no_po' => 'required|string|max:255',
             'vendor' => 'required|string|max:255',
             'no_terima' => 'required|string|max:255|unique:penerimaan_barangs,no_terima',
             'npb' => 'required|string|max:255|unique:penerimaan_barangs,npb',
             'tanggal' => 'required|date',
-            'packing_list_ids' => 'required|array',
-            'packing_list_ids.*' => 'integer|exists:packing_list,id',
-        ], [
+            'mode' => 'sometimes|in:packing_list,non_packing_list',
+        ];
+
+        if ($mode === 'packing_list') {
+            $rules['packing_list_ids'] = 'required|array';
+            $rules['packing_list_ids.*'] = 'integer|exists:packing_list,id';
+        } elseif ($mode === 'non_packing_list') {
+            $rules['non_pl_items'] = 'required|string';
+        }
+
+        $validator = Validator::make($request->all(), $rules, [
             'no_po.required' => 'No PO harus diisi',
             'vendor.required' => 'Vendor harus diisi',
             'no_terima.required' => 'No Terima harus diisi (wajib untuk Accurate).',
@@ -865,57 +1349,10 @@ class PenerimaanBarangController extends Controller
 
         try {
             $validatedData = $validator->validated();
-            $userId = Auth::id();
-
-            // 1. Verify Temp Barcodes first
-            $masterBarcodes = \App\Models\TempMasterBarcode::where('no_po', $validatedData['no_po'])->where('user_id', $userId)->get();
-            $scannedCount = \App\Models\TempScannedBarcode::where('no_po', $validatedData['no_po'])->where('user_id', $userId)->count();
-
-            if ($masterBarcodes->isEmpty() || $masterBarcodes->count() !== $scannedCount) {
-                DB::rollBack();
-                return back()->with('error', 'Validasi fisik belum 100% selesai atau data master kedaluwarsa. Silakan upload dan scan ulang.');
-            }
-
-            // 2. Commit Temp to Permanent Tables
-            foreach ($masterBarcodes as $master) {
-                // Barcode
-                Barcode::updateOrCreate(
-                    ['barcode' => $master->barcode, 'kode_customer' => $master->kode_customer],
-                    [
-                        'no_packing_list' => $master->no_packing_list,
-                        'no_billing' => $master->no_billing,
-                        'kode_barang' => $master->kode_barang,
-                        'keterangan' => $master->keterangan,
-                        'nomor_seri' => $master->nomor_seri,
-                        'pcs' => $master->pcs,
-                        'berat_kg' => $master->berat_kg,
-                        'panjang_mlc' => $master->panjang_mlc,
-                        'warna' => $master->warna,
-                        'bale' => $master->bale,
-                        'harga_ppn' => $master->harga_ppn,
-                        'harga_jual' => $master->harga_jual,
-                        'pemasok' => $master->pemasok,
-                        'customer' => $master->customer,
-                        'kontrak' => $master->kontrak,
-                        'subtotal' => $master->subtotal,
-                        'tanggal' => $master->tanggal,
-                        'jatuh' => $master->jatuh,
-                        'no_vehicle' => $master->no_vehicle,
-                    ]
-                );
-
-                // Barang Masuk
-                \App\Models\BarangMasuk::firstOrCreate([
-                    'nbrg' => $master->barcode,
-                    'kode_customer' => $master->kode_customer,
-                ], [
-                    'tanggal' => $validatedData['tanggal'],
-                ]);
-            }
-
-            // Clear temporary data after successful commit
-            \App\Models\TempMasterBarcode::where('no_po', $validatedData['no_po'])->where('user_id', $userId)->delete();
-            \App\Models\TempScannedBarcode::where('no_po', $validatedData['no_po'])->where('user_id', $userId)->delete();
+            // NOTE:
+            // Temporary table (TempMasterBarcode/TempScannedBarcode) sudah tidak dipakai.
+            // Mode packing_list sekarang langsung memakai data Barcode permanen yang sudah ada,
+            // dan validasi kecocokan dilakukan melalui mapping dari packing list.
 
             // Simpan penerimaan barang dengan kode_customer dari cabang aktif
             $penerimaan = PenerimaanBarang::create([
@@ -927,86 +1364,217 @@ class PenerimaanBarangController extends Controller
                 'kode_customer' => $branch->customer_id,
             ]);
 
-            // Attach packing lists (many-to-many)
-            $penerimaan->packingLists()->attach($validatedData['packing_list_ids']);
-
-            Log::info('Penerimaan barang created:', $penerimaan->toArray());
-
-            // Ambil detail item dari packing list
-            $result = $this->mapItemDetailsFromPackingLists(
-                $validatedData['no_po'],
-                $validatedData['npb'],
-                $validatedData['packing_list_ids'],
-                true,  // Update id_pb pada barcode
-                true   // Include vendor
-            );
-
-            $itemDetails = $result['items'];
-            $barcodes = $result['barcodes'] ?? ($result['approvalStocks'] ?? collect());
-            $vendorData = $result['vendor'];
-            $matchedBarcodeIds = $result['matchedBarcodeIds'] ?? [];
-
-            Log::info('Mapped items and vendor data:', [
-                'items_count' => count($itemDetails),
-                'barcodes_count' => $barcodes->count(),
-                'vendor_data' => $vendorData
-            ]);
-
-            if ($barcodes->isEmpty()) {
-                Log::warning("Barcode kosong saat simpan penerimaan barang", [
-                    'no_po' => $validatedData['no_po'],
-                    'npb' => $validatedData['npb']
-                ]);
-
-                $penerimaan->delete();
-                DB::rollBack();
-                return redirect()->route('penerimaan-barang.index')
-                    ->with('error', 'Tidak ada barang yang disetujui untuk penerimaan barang ini');
+            // Attach packing lists (many-to-many) - hanya jika mode packing_list
+            $packingListIds = $validatedData['packing_list_ids'] ?? [];
+            if ($mode === 'packing_list' && !empty($packingListIds)) {
+                $penerimaan->packingLists()->attach($packingListIds);
             }
 
-            // Update status barcode ke uploaded
-            foreach ($barcodes as $barcode) {
-                $barcode->status = Barcode::STATUS_UPLOADED;
-                $barcode->save();
-            }
+            Log::info('Penerimaan barang created:', array_merge($penerimaan->toArray(), ['mode' => $mode]));
 
+            $itemDetails = [];
+            $barcodes = collect();
+            $vendorData = null;
+            $matchedBarcodeIds = [];
             $detailItems = [];
-            foreach ($itemDetails as $item) {
-                if ($item['panjang_total'] > 0) {
-                    $detailItems[] = [
-                        'itemNo' => $item['item_no_pl'] ?? $item['kode_barang'],
-                        // 'detailName' => $item['nama_barang'],
-                        'quantity' => (float) $item['panjang_total'],
-                        'unitPrice' => (float) $item['unit_price'],
-                        'itemUnitName' => 'METER',
-                        'purchaseOrderNumber' => $validatedData['no_po'],
-                        'warehouseName' => 'GUDANG STOK',
-                        'detailSerialNumber' => $item['serial_numbers'] ?? [],
-                    ];
-                }
-            }
 
-            if (empty($detailItems)) {
-                Log::warning("Tidak ada item yang cocok untuk dikirim ke Accurate", [
-                    'npb' => $validatedData['npb'],
-                    'items' => $itemDetails
+            if ($mode === 'packing_list') {
+                // Mode Packing List: ambil detail item dari packing list
+                $result = $this->mapItemDetailsFromPackingLists(
+                    $validatedData['no_po'],
+                    $validatedData['npb'],
+                    $packingListIds,
+                    true,  // Update id_pb pada barcode
+                    true   // Include vendor
+                );
+
+                $itemDetails = $result['items'];
+                $barcodes = $result['barcodes'] ?? ($result['approvalStocks'] ?? collect());
+                $vendorData = $result['vendor'];
+                $matchedBarcodeIds = $result['matchedBarcodeIds'] ?? [];
+
+                Log::info('Mapped items and vendor data:', [
+                    'items_count' => count($itemDetails),
+                    'barcodes_count' => $barcodes->count(),
+                    'vendor_data' => $vendorData
                 ]);
 
+                if ($barcodes->isEmpty()) {
+                    Log::warning("Barcode kosong saat simpan penerimaan barang", [
+                        'no_po' => $validatedData['no_po'],
+                        'npb' => $validatedData['npb']
+                    ]);
+
+                    $penerimaan->delete();
+                    DB::rollBack();
+                    return redirect()->route('penerimaan-barang.index')
+                        ->with('error', 'Tidak ada barang yang disetujui untuk penerimaan barang ini');
+                }
+
+                // Update status barcode ke uploaded
                 foreach ($barcodes as $barcode) {
-                    $barcode->status = Barcode::STATUS_APPROVED;
+                    $barcode->status = Barcode::STATUS_UPLOADED;
                     $barcode->save();
                 }
 
-                $penerimaan->delete();
-                DB::rollBack();
+                foreach ($itemDetails as $item) {
+                    if ($item['panjang_total'] > 0) {
+                        $uomAcc = $this->normalizeUom($item['uom_acc'] ?? 'M');
+                        $detailItems[] = [
+                            'itemNo' => $item['item_no_pl'] ?? $item['kode_barang'],
+                            'quantity' => (float) $item['panjang_total'],
+                            'unitPrice' => (float) $item['unit_price'],
+                            'itemUnitName' => $uomAcc === 'YD' ? 'YD' : 'METER',
+                            'purchaseOrderNumber' => $validatedData['no_po'],
+                            'warehouseName' => 'GUDANG STOK',
+                            'detailSerialNumber' => $item['serial_numbers'] ?? [],
+                        ];
+                    }
+                }
 
-                return redirect()->route('penerimaan-barang.index')
-                    ->with('error', 'Tidak ada barang yang cocok dengan data Accurate');
+                if (empty($detailItems)) {
+                    Log::warning("Tidak ada item yang cocok untuk dikirim ke Accurate", [
+                        'npb' => $validatedData['npb'],
+                        'items' => $itemDetails
+                    ]);
+
+                    foreach ($barcodes as $barcode) {
+                        $barcode->status = Barcode::STATUS_APPROVED;
+                        $barcode->save();
+                    }
+
+                    $penerimaan->delete();
+                    DB::rollBack();
+
+                    return redirect()->route('penerimaan-barang.index')
+                        ->with('error', 'Tidak ada barang yang cocok dengan data Accurate');
+                }
+            } else {
+                // Mode Non Packing List: ambil data dari non_pl_items (JSON dari frontend)
+                $nonPlItemsRaw = json_decode($request->input('non_pl_items', '[]'), true);
+
+                if (empty($nonPlItemsRaw) || !is_array($nonPlItemsRaw)) {
+                    $penerimaan->delete();
+                    DB::rollBack();
+                    return back()->with('error', 'Data item Non Packing List tidak valid atau kosong.');
+                }
+
+                // Ambil vendor dari Accurate PO
+                $apiToken = Auth::user()->accurate_api_token;
+                $signatureSecret = Auth::user()->accurate_signature_secret;
+                $tsVendor = Carbon::now()->toIso8601String();
+                $sigVendor = hash_hmac('sha256', $tsVendor, $signatureSecret);
+
+                $poResponse = Http::timeout(30)->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'X-Api-Signature' => $sigVendor,
+                    'X-Api-Timestamp' => $tsVendor,
+                ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
+                    'number' => $validatedData['no_po'],
+                ]);
+
+                if ($poResponse->successful()) {
+                    $resData = $poResponse->json();
+                    if (isset($resData['d']['vendor'])) {
+                        $vendorData = ['vendorNo' => $resData['d']['vendor']['vendorNo'] ?? null];
+                    }
+                }
+
+                // Build detailItems dari non_pl_items + simpan BarcodeNonPL
+                foreach ($nonPlItemsRaw as $nlItem) {
+                    $itemNo = $nlItem['kode_barang'] ?? null;
+                    $itemName = $nlItem['nama_barang'] ?? null;
+                    $serialNumbers = $nlItem['serial_numbers'] ?? [];
+                    $uom = $nlItem['uom'] ?? 'METER';
+                    $unitPrice = (float) ($nlItem['unit_price'] ?? 0);
+                    $itemQtyLimit = (float) ($nlItem['kuantitas'] ?? 0);
+
+                    if (!$itemNo || empty($serialNumbers)) continue;
+
+                    $totalQty = 0;
+                    $detailSerials = [];
+                    foreach ($serialNumbers as $sn) {
+                        $snQty = (float) ($sn['quantity'] ?? 0);
+                        $snBarcode = $sn['barcode'] ?? '';
+                        $snToken = (string) ($sn['reservation_token'] ?? '');
+                        if ($snBarcode && $snQty > 0) {
+                            if ($snToken === '') {
+                                throw new \Exception("Token reservasi tidak ditemukan untuk barcode {$snBarcode}.");
+                            }
+
+                            $reservation = Cache::get($this->nonPlReservationCacheKey($snToken));
+                            if (!$reservation || !is_array($reservation)) {
+                                throw new \Exception("Reservasi barcode sudah kedaluwarsa atau tidak valid untuk barcode {$snBarcode}.");
+                            }
+
+                            $reservedCustomer = (string) ($reservation['kode_customer'] ?? '');
+                            if ($reservedCustomer !== $branch->customer_id) {
+                                throw new \Exception("Reservasi barcode tidak sesuai customer untuk barcode {$snBarcode}.");
+                            }
+
+                            $reservedBarcodes = $reservation['barcodes'] ?? [];
+                            if (!is_array($reservedBarcodes) || !in_array($snBarcode, $reservedBarcodes, true)) {
+                                throw new \Exception("Barcode {$snBarcode} tidak termasuk dalam reservasi token yang diberikan.");
+                            }
+
+                            // Pastikan tidak pernah dipakai sebelumnya
+                            if (BarcodeNonPL::where('barcode', $snBarcode)->exists()) {
+                                throw new \Exception("Barcode {$snBarcode} sudah pernah digunakan.");
+                            }
+
+                            $detailSerials[] = [
+                                'serialNumberNo' => $snBarcode,
+                                'quantity' => $snQty,
+                            ];
+                            $totalQty += $snQty;
+
+                            if ($itemQtyLimit > 0 && $totalQty > $itemQtyLimit + 1e-9) {
+                                throw new \Exception("Total kuantitas serial untuk item {$itemNo} melebihi kuantitas item ({$itemQtyLimit}).");
+                            }
+
+                            BarcodeNonPL::updateOrCreate(
+                                ['barcode' => $snBarcode],
+                                [
+                                    'kode_customer' => $branch->customer_id,
+                                    'quantity' => $snQty,
+                                    'npb' => $penerimaan->npb,
+                                    'item_no' => $itemNo,
+                                    'item_name' => $itemName,
+                                ]
+                            );
+                        }
+                    }
+
+                    if ($totalQty > 0) {
+                        $detailItems[] = [
+                            'itemNo' => $itemNo,
+                            'quantity' => $totalQty,
+                            'unitPrice' => $unitPrice,
+                            'itemUnitName' => $uom,
+                            'purchaseOrderNumber' => $validatedData['no_po'],
+                            'warehouseName' => 'GUDANG STOK',
+                            'detailSerialNumber' => $detailSerials,
+                        ];
+                    }
+                }
+
+                if (empty($detailItems)) {
+                    $penerimaan->delete();
+                    DB::rollBack();
+                    return redirect()->route('penerimaan-barang.index')
+                        ->with('error', 'Tidak ada item Non Packing List yang valid untuk dikirim.');
+                }
+
+                Log::info('Non Packing List mode - items with serial numbers:', [
+                    'items_count' => count($detailItems),
+                    'vendor_data' => $vendorData,
+                    'total_barcodes' => \App\Models\BarcodeNonPL::where('npb', $penerimaan->npb)->count(),
+                ]);
             }
 
             // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1056,27 +1624,45 @@ class PenerimaanBarangController extends Controller
             ]);
 
             if ($response->successful()) {
-                // Update status packing list: closed jika semua barcode ter-match, used jika parsial
-                foreach ($validatedData['packing_list_ids'] as $plId) {
-                    $pl = PackingList::find($plId);
-                    if (!$pl)
-                        continue;
+                // Update status packing list: closed jika semua barcode ter-match (hanya mode packing_list)
+                if ($mode === 'packing_list' && !empty($packingListIds)) {
+                    foreach ($packingListIds as $plId) {
+                        $pl = PackingList::find($plId);
+                        if (!$pl) continue;
 
-                    $allBarcodeIds = Barcode::where('no_packing_list', $pl->npl)
-                        ->where('kode_customer', $branch->customer_id)
-                        ->pluck('id')
-                        ->toArray();
+                        $allBarcodeIds = Barcode::where('no_packing_list', $pl->npl)
+                            ->where('kode_customer', $branch->customer_id)
+                            ->pluck('id')
+                            ->toArray();
 
-                    $matchedInPl = array_intersect($allBarcodeIds, $matchedBarcodeIds);
+                        $matchedInPl = array_intersect($allBarcodeIds, $matchedBarcodeIds);
 
-                    if (count($allBarcodeIds) > 0 && count($matchedInPl) === count($allBarcodeIds)) {
-                        $pl->update(['status' => PackingList::STATUS_CLOSED]);
-                    } else {
-                        $pl->update(['status' => PackingList::STATUS_USED]);
+                        if (count($allBarcodeIds) > 0 && count($matchedInPl) === count($allBarcodeIds)) {
+                            $pl->update(['status' => PackingList::STATUS_CLOSED]);
+                        } else {
+                            $pl->update(['status' => PackingList::STATUS_APPROVED]);
+                        }
                     }
                 }
 
                 DB::commit();
+
+                // Bersihkan token reservasi Non-PL yang dipakai (best-effort)
+                if ($mode === 'non_packing_list') {
+                    $tokens = [];
+                    $nonPlItemsRaw = json_decode($request->input('non_pl_items', '[]'), true);
+                    if (is_array($nonPlItemsRaw)) {
+                        foreach ($nonPlItemsRaw as $nlItem) {
+                            foreach (($nlItem['serial_numbers'] ?? []) as $sn) {
+                                $t = (string) ($sn['reservation_token'] ?? '');
+                                if ($t !== '') $tokens[$t] = true;
+                            }
+                        }
+                    }
+                    foreach (array_keys($tokens) as $t) {
+                        Cache::forget($this->nonPlReservationCacheKey($t));
+                    }
+                }
 
                 // Clear related cache (global dan per cabang aktif)
                 Cache::forget('accurate_penerimaan_barang_list');
@@ -1105,15 +1691,18 @@ class PenerimaanBarangController extends Controller
 
                 Log::error("Gagal mengirim data ke Accurate", [
                     'npb' => $penerimaan->npb,
+                    'mode' => $mode,
                     'status_code' => $response->status(),
                     'response' => $responseData,
                     'request_data' => $postData,
                     'error_message' => $errorMessage
                 ]);
 
-                foreach ($barcodes as $barcode) {
-                    $barcode->status = Barcode::STATUS_APPROVED;
-                    $barcode->save();
+                if ($mode === 'packing_list' && $barcodes->isNotEmpty()) {
+                    foreach ($barcodes as $barcode) {
+                        $barcode->status = Barcode::STATUS_APPROVED;
+                        $barcode->save();
+                    }
                 }
 
                 $penerimaan->delete();
@@ -1133,7 +1722,7 @@ class PenerimaanBarangController extends Controller
                 'file' => $e->getFile()
             ]);
 
-            if (isset($barcodes)) {
+            if (isset($barcodes) && $barcodes->isNotEmpty()) {
                 foreach ($barcodes as $barcode) {
                     $barcode->status = Barcode::STATUS_APPROVED;
                     $barcode->save();
@@ -1168,18 +1757,81 @@ class PenerimaanBarangController extends Controller
             $penerimaanBarang = PenerimaanBarang::where('npb', $npb)->firstOrFail();
 
             // Ambil packing list IDs dari penerimaan barang
-            $packingListIds = $penerimaanBarang->packingLists()->pluck('packing_list.id')->toArray();
-            // Penghapusan throw exception jika empty agar detail PO yang kuantitasnya 0 tetap tampil
+            $packingListIds = $penerimaanBarang->packingLists()->pluck('id')->toArray();
+            if (!empty($packingListIds)) {
+                // Mode packing_list: gunakan matching barcode permanen dari packing list
+                $itemDetailsData = $this->mapItemDetailsFromPackingLists(
+                    $penerimaanBarang->no_po,
+                    $penerimaanBarang->npb,
+                    $packingListIds,
+                    false,
+                    false
+                );
 
-            $itemDetailsData = $this->mapItemDetailsFromPackingLists(
-                $penerimaanBarang->no_po,
-                $penerimaanBarang->npb,
-                $packingListIds,
-                false,
-                false
-            );
+                $matchedItems = $itemDetailsData['items'];
+            } else {
+                // Mode non_packing_list: ambil dari BarcodeNonPL berdasarkan npb
+                $rows = BarcodeNonPL::where('npb', $penerimaanBarang->npb)->get();
+                if ($rows->isEmpty()) {
+                    throw new \Exception('Tidak ada data barcode Non Packing List untuk penerimaan barang ini.');
+                }
 
-            $matchedItems = $itemDetailsData['items'];
+                // Ambil UOM item dari Accurate (optional, untuk kolom satuan)
+                $uomMap = [];
+                try {
+                    $activeBranchId = session('active_branch');
+                    $branch = $activeBranchId ? Branch::find($activeBranchId) : null;
+                    if (!$branch) {
+                        $branch = Branch::where('customer_id', $penerimaanBarang->kode_customer)->first();
+                    }
+
+                    if ($branch && Auth::check() && Auth::user()->accurate_api_token && Auth::user()->accurate_signature_secret) {
+                        $apiToken = Auth::user()->accurate_api_token;
+                        $signatureSecret = Auth::user()->accurate_signature_secret;
+                        $timestamp = Carbon::now()->toIso8601String();
+                        $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+                        $poResponse = Http::timeout(30)->withHeaders([
+                            'Authorization' => 'Bearer ' . $apiToken,
+                            'X-Api-Signature' => $signature,
+                            'X-Api-Timestamp' => $timestamp,
+                        ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
+                            'number' => $penerimaanBarang->no_po,
+                        ]);
+
+                        if ($poResponse->successful()) {
+                            $resData = $poResponse->json();
+                            foreach ($resData['d']['detailItem'] ?? [] as $detail) {
+                                $itemNo = $detail['item']['no'] ?? null;
+                                $uomAcc = $detail['itemUnit']['name'] ?? ($detail['item']['unit1']['name'] ?? null);
+                                if ($itemNo) {
+                                    $uomMap[$itemNo] = $this->normalizeUom($uomAcc);
+                                }
+                            }
+                        }
+                    }
+                } catch (\Exception $e) {
+                    Log::warning('Gagal mengambil UOM Accurate untuk Non PL detail', ['npb' => $npb, 'error' => $e->getMessage()]);
+                }
+
+                $matchedItems = $rows
+                    ->groupBy('item_no')
+                    ->map(function ($grp, $itemNo) use ($uomMap) {
+                        $sumQty = $grp->sum('quantity');
+                        $itemName = $grp->first()->item_name ?? '-';
+                        $uomAcc = $uomMap[$itemNo] ?? 'M';
+
+                        return [
+                            'nama_barang' => $itemName,
+                            'kode_barang' => $itemNo,
+                            'panjang_total' => round((float) $sumQty, 2),
+                            'uom_acc' => $uomAcc,
+                            'unit' => $uomAcc === 'YD' ? 'YD' : 'METER',
+                        ];
+                    })
+                    ->values()
+                    ->all();
+            }
 
             $dataToCache = [
                 'penerimaanBarang' => $penerimaanBarang,

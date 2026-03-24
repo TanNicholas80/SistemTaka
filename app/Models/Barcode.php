@@ -12,38 +12,63 @@ use Spatie\Activitylog\Traits\LogsActivity;
 class Barcode extends Model
 {
     use HasFactory, LogsActivity;
-
-    const STATUS_TEMPORARY = 'temporary';
+    
     const STATUS_APPROVED = 'approved';
     const STATUS_UPLOADED = 'uploaded';
 
     protected $fillable = [
+        // Kolom sesuai migration `create_barcodes_table`
         'barcode',
-        'status',
+        'kode_customer',
+        'customer',
         'no_packing_list',
+        'contract',
         'no_billing',
-        'kode_barang',
-        'keterangan',
-        'nomor_seri',
-        'pcs',
-        'berat_kg',
-        'panjang_mlc',
-        'length',
-        'uom',
-        'warna',
-        'material_code',
-        'kode_warna',
-        'bale',
+        'date',
+        'jatuh_tempo',
+        'plant',
+        'pemasok',
         'harga_ppn',
         'harga_jual',
-        'pemasok',
-        'customer',
-        'kontrak',
-        'subtotal',
-        'tanggal',
-        'jatuh',
-        'no_vehicle',
-        'kode_customer',
+        'material_code',
+        'batch_no',
+        'length',
+        'weight',
+        'base_uom',
+        'kategori_warna',
+        'kode_warna',
+        'warna',
+        'date_kain',
+        'job_order',
+        'incoterms',
+        'ekspeditor',
+        'vehicle_number',
+        'production_order',
+        'order_type',
+        'unit',
+        'longtext',
+        'salestext',
+        'konstruksi_akhir',
+        'nojo',
+        'zno',
+        'lebar_kain',
+        'kode',
+        'grade',
+        'pcs',
+        'sample',
+        'kodisi_kain',
+        'status',
+        'id_pb',
+        'item_flag',
+        'special_treatment',
+    ];
+
+    protected $casts = [
+        'harga_ppn' => 'float',
+        'harga_jual' => 'float',
+        'length' => 'float',
+        'weight' => 'float',
+        'pcs' => 'integer',
     ];
 
     /**
@@ -80,33 +105,125 @@ class Barcode extends Model
         return $query->whereRaw('1=0');
     }
 
-    /**
-     * Alias panjang_mlc untuk kompatibilitas dengan ApprovalStock->panjang.
-     */
-    public function getPanjangAttribute()
+    // ---- Alias atribut (legacy compatibility) ----
+    // Banyak controller lama masih memakai field seperti `kode_barang`, `keterangan`, dll.
+    // Model ini memetakan ke kolom baru sesuai migration.
+
+    public function getKodeBarangAttribute()
     {
-        return $this->panjang_mlc;
+        return $this->material_code;
     }
 
-    /**
-     * Alias harga_jual untuk kompatibilitas dengan ApprovalStock->harga_unit.
-     */
+    public function setKodeBarangAttribute($value): void
+    {
+        $this->attributes['material_code'] = $value;
+    }
+
+    public function getKeteranganAttribute()
+    {
+        return $this->longtext;
+    }
+
+    public function setKeteranganAttribute($value): void
+    {
+        $this->attributes['longtext'] = $value;
+    }
+
+    public function getNomorSeriAttribute()
+    {
+        return $this->batch_no;
+    }
+
+    public function setNomorSeriAttribute($value): void
+    {
+        $this->attributes['batch_no'] = $value;
+    }
+
+    public function getBeratKgAttribute()
+    {
+        return $this->weight;
+    }
+
+    public function setBeratKgAttribute($value): void
+    {
+        $this->attributes['weight'] = $value;
+    }
+
+    public function getPanjangMlcAttribute()
+    {
+        return $this->length;
+    }
+
+    public function setPanjangMlcAttribute($value): void
+    {
+        $this->attributes['length'] = $value;
+    }
+
+    public function getUomAttribute()
+    {
+        return $this->base_uom;
+    }
+
+    public function setUomAttribute($value): void
+    {
+        $this->attributes['base_uom'] = $value;
+    }
+
+    public function getKontrakAttribute()
+    {
+        return $this->contract;
+    }
+
+    public function setKontrakAttribute($value): void
+    {
+        $this->attributes['contract'] = $value;
+    }
+
+    public function getTanggalAttribute()
+    {
+        return $this->date;
+    }
+
+    public function setTanggalAttribute($value): void
+    {
+        $this->attributes['date'] = $value;
+    }
+
+    public function getJatuhAttribute()
+    {
+        return $this->jatuh_tempo;
+    }
+
+    public function setJatuhAttribute($value): void
+    {
+        $this->attributes['jatuh_tempo'] = $value;
+    }
+
+    public function getNoVehicleAttribute()
+    {
+        return $this->vehicle_number;
+    }
+
+    public function setNoVehicleAttribute($value): void
+    {
+        $this->attributes['vehicle_number'] = $value;
+    }
+
+    public function getPanjangAttribute()
+    {
+        return $this->length;
+    }
+
     public function getHargaUnitAttribute()
     {
         return $this->harga_jual;
     }
 
-    /**
-     * Alias no_billing untuk kompatibilitas dengan ApprovalStock->no_invoice.
-     */
     public function getNoInvoiceAttribute()
     {
         return $this->no_billing;
     }
 
-    /**
-     * Alias no_packing_list untuk kompatibilitas dengan ApprovalStock->npl.
-     */
     public function getNplAttribute()
     {
         return $this->no_packing_list;
@@ -119,10 +236,49 @@ class Barcode extends Model
     {
         return LogOptions::defaults()
             ->logOnly([
-                'barcode', 'no_packing_list', 'no_billing', 'kode_barang', 'keterangan', 
-                'nomor_seri', 'pcs', 'berat_kg', 'panjang_mlc', 'warna', 'bale', 
-                'harga_ppn', 'harga_jual', 'pemasok', 'customer', 'kontrak', 
-                'subtotal', 'tanggal', 'jatuh', 'no_vehicle', 'kode_customer'
+                'barcode',
+                'kode_customer',
+                'customer',
+                'no_packing_list',
+                'contract',
+                'no_billing',
+                'date',
+                'jatuh_tempo',
+                'plant',
+                'pemasok',
+                'harga_ppn',
+                'harga_jual',
+                'material_code',
+                'batch_no',
+                'length',
+                'weight',
+                'base_uom',
+                'kategori_warna',
+                'kode_warna',
+                'warna',
+                'date_kain',
+                'job_order',
+                'incoterms',
+                'ekspeditor',
+                'vehicle_number',
+                'production_order',
+                'order_type',
+                'unit',
+                'longtext',
+                'salestext',
+                'konstruksi_akhir',
+                'nojo',
+                'zno',
+                'lebar_kain',
+                'kode',
+                'grade',
+                'pcs',
+                'sample',
+                'kodisi_kain',
+                'status',
+                'id_pb',
+                'item_flag',
+                'special_treatment',
             ])
             ->logOnlyDirty() // Hanya log perubahan yang benar-benar terjadi
             ->dontSubmitEmptyLogs() // Jangan submit log kosong
@@ -155,23 +311,20 @@ class Barcode extends Model
                     'kode_customer' => $this->kode_customer,    
                     'no_packing_list' => $this->no_packing_list,
                     'no_billing' => $this->no_billing,
-                    'kode_barang' => $this->kode_barang,
-                    'keterangan' => $this->keterangan,
-                    'nomor_seri' => $this->nomor_seri,
+                    'material_code' => $this->material_code,
+                    'batch_no' => $this->batch_no,
                     'pcs' => $this->pcs,
-                    'berat_kg' => $this->berat_kg,
-                    'panjang_mlc' => $this->panjang_mlc,
+                    'weight' => $this->weight,
+                    'length' => $this->length,
                     'warna' => $this->warna,
-                    'bale' => $this->bale,
                     'harga_ppn' => $this->harga_ppn,
                     'harga_jual' => $this->harga_jual,
                     'pemasok' => $this->pemasok,
                     'customer' => $this->customer,
-                    'kontrak' => $this->kontrak,
-                    'subtotal' => $this->subtotal,
-                    'tanggal' => $this->tanggal,
-                    'jatuh' => $this->jatuh,
-                    'no_vehicle' => $this->no_vehicle,
+                    'contract' => $this->contract,
+                    'date' => $this->date,
+                    'jatuh_tempo' => $this->jatuh_tempo,
+                    'vehicle_number' => $this->vehicle_number,
                     'updated_at' => $this->updated_at->format('Y-m-d H:i:s')
                 ],
                 'updated_fields' => array_keys($changes),

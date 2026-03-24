@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'sap' => [
+        'packing_list_url' => env('SAP_PACKING_LIST_URL', 'http://18.139.142.16:8020/sap/bc/ztoko/ztaka?sap-client=100'),
+        'auth_token' => env('SAP_PACKING_LIST_AUTH', 'RFRfV01TOldtczAxMTEyMDI1QA=='),
+    ],
+
 ];

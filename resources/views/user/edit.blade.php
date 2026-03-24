@@ -57,15 +57,44 @@
 
                                     <div class="form-group">
                                         <label>Role</label>
-                                        <select name="role" class="form-control" required>
+                                        <select name="role" id="role" class="form-control" required>
                                             <option value="super_admin"
                                                 {{ $user->role == 'super_admin' ? 'selected' : '' }}>Super Admin</option>
                                             <option value="owner" {{ $user->role == 'owner' ? 'selected' : '' }}>Owner
                                             </option>
-                                            <option value="toko" {{ $user->role == 'toko' ? 'selected' : '' }}>Toko
+                                            <option value="kepala_toko"
+                                                {{ $user->role == 'kepala_toko' ? 'selected' : '' }}>Kepala Toko
+                                            </option>
+                                            <option value="akunting" {{ $user->role == 'akunting' ? 'selected' : '' }}>
+                                                Akunting
+                                            </option>
+                                            <option value="marketing" {{ $user->role == 'marketing' ? 'selected' : '' }}>
+                                                Marketing
                                             </option>
                                         </select>
                                     </div>
+
+                                    @if (Auth::user()->role === 'super_admin')
+                                        <div id="accurateFields" class="border rounded p-3 bg-light">
+                                            <h6 class="mb-3">Accurate Credentials</h6>
+                                            <div class="form-group">
+                                                <label>API Token Accurate</label>
+                                                <textarea name="accurate_api_token" id="accurate_api_token" class="form-control" rows="2"
+                                                    placeholder="Masukkan API Token Accurate">{{ old('accurate_api_token', $user->accurate_api_token) }}</textarea>
+                                                @error('accurate_api_token')
+                                                    <small class="text-danger">{{ $message }}</small>
+                                                @enderror
+                                            </div>
+                                            <div class="form-group mb-0">
+                                                <label>Signature Secret</label>
+                                                <textarea name="accurate_signature_secret" id="accurate_signature_secret" class="form-control" rows="2"
+                                                    placeholder="Masukkan Signature Secret">{{ old('accurate_signature_secret', $user->accurate_signature_secret) }}</textarea>
+                                                @error('accurate_signature_secret')
+                                                    <small class="text-danger">{{ $message }}</small>
+                                                @enderror
+                                            </div>
+                                        </div>
+                                    @endif
 
                                     <div class="form-group">
                                         <label>Toko</label>

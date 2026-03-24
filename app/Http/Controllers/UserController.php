@@ -28,18 +28,23 @@ class UserController extends Controller
     {
         $request->validate([
             'name' => 'required',
-            'role' => 'required',
+            'role' => 'required|in:super_admin,owner,kepala_toko,akunting,marketing',
             'username' => 'required|unique:users',
             'password' => 'required|min:6',
             'branches' => 'array',
+            'accurate_api_token' => 'nullable|required_if:role,super_admin,owner,kepala_toko,akunting',
+            'accurate_signature_secret' => 'nullable|required_if:role,super_admin,owner,kepala_toko,akunting',
         ]);
 
-        $user = User::create([
-            'name' => $request->name,
-            'role' => $request->role,
-            'username' => $request->username,
-            'password' => Hash::make($request->password),
-        ]);
+        $user = new User();
+        $user->name = $request->name;
+        $user->role = $request->role;
+        $user->username = $request->username;
+        $user->password = Hash::make($request->password);
+        // Memanggil mutator model User untuk enkripsi credential Accurate
+        $user->accurate_api_token = $request->accurate_api_token;
+        $user->accurate_signature_secret = $request->accurate_signature_secret;
+        $user->save();
 
         $user->branches()->sync($request->branches ?? []);
 
@@ -59,18 +64,24 @@ class UserController extends Controller
 
         $request->validate([
             'name' => 'required',
-            'role' => 'required',
+            'role' => 'required|in:super_admin,owner,kepala_toko,akunting,marketing',
             'username' => 'required|unique:users,username,' . $user->id,
             'password' => 'nullable|min:6',
             'branches' => 'array',
+            'accurate_api_token' => 'nullable|required_if:role,super_admin,owner,kepala_toko,akunting',
+            'accurate_signature_secret' => 'nullable|required_if:role,super_admin,owner,kepala_toko,akunting',
         ]);
 
-        $data = $request->only(['name', 'role', 'username']);
+        $user->name = $request->name;
+        $user->role = $request->role;
+        $user->username = $request->username;
         if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+            $user->password = Hash::make($request->password);
         }
-
-        $user->update($data);
+        // Memanggil mutator model User untuk enkripsi credential Accurate
+        $user->accurate_api_token = $request->accurate_api_token;
+        $user->accurate_signature_secret = $request->accurate_signature_secret;
+        $user->save();
         $user->branches()->sync($request->branches ?? []);
 
         return redirect()->route('user.index')->with('success', 'User berhasil diperbarui');

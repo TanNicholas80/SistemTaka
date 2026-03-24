@@ -45,7 +45,6 @@
                                             <th>Tanggal</th>
                                             <th>No Packing List</th>
                                             <th>Status</th>
-                                            <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -63,48 +62,7 @@
                                                     @endphp
                                                     <span class="badge {{ $statusClass }}">{{ strtoupper($pl->status ?? 'pending') }}</span>
                                                 </td>
-                                                <td>
-                                                    <a href="{{ route('packing-list.edit', $pl->id) }}"
-                                                        class="btn-sm btn-warning"><i class="fas fa-pen"></i>
-                                                        Edit</a>
-                                                    <a href="" data-toggle="modal"
-                                                        data-target="#modal-hapus{{ $pl->id }}"
-                                                        class="btn-sm btn-danger"><i class="fas fa-trash-alt"></i>
-                                                        Hapus</a>
-                                                </td>
                                             </tr>
-
-                                            <!-- Modal Hapus -->
-                                            <div class="modal fade" id="modal-hapus{{ $pl->id }}">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header">
-                                                            <h4 class="modal-title">Konfirmasi Hapus</h4>
-                                                            <button type="button" class="close" data-dismiss="modal"
-                                                                aria-label="Close">
-                                                                <span aria-hidden="true">&times;</span>
-                                                            </button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            <p>Apakah anda yakin ingin menghapus
-                                                                <strong>{{ $pl->npl }}</strong>?
-                                                            </p>
-                                                        </div>
-                                                        <div class="modal-footer justify-content-between">
-                                                            <button type="button" class="btn btn-default"
-                                                                data-dismiss="modal">Batal</button>
-                                                            <form action="{{ route('packing-list.destroy', $pl->id) }}"
-                                                                method="POST">
-                                                                @csrf
-                                                                @method('DELETE')
-                                                                <button type="submit" class="btn btn-danger">Ya,
-                                                                    Hapus</button>
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <!-- End Modal -->
                                         @endforeach
                                     </tbody>
                                 </table>

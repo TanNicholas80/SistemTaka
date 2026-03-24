@@ -98,11 +98,18 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::middleware(['role:toko,super_admin'])->group(function () {
-        Route::resource('barcode', BarcodeController::class);
-        Route::post('/barcode/update-from-csv', [BarcodeController::class, 'updateFromCSV'])->name('barcode.updateFromCSV');
+        Route::get('/barcode', [BarcodeController::class, 'index'])->name('barcode.index');
 
-        Route::resource('barang-masuk', BarangMasukController::class);
-        Route::get('/barang-masuk/detail/{id}', [BarangMasukController::class, 'show'])->name('barang_masuk_detail');
+        // Barang Masuk (Scan Barang) - hanya fitur yang dipakai
+        Route::get('/barang-masuk', [BarangMasukController::class, 'index'])->name('barang-masuk.index');
+        Route::get('/barang-masuk/create', [BarangMasukController::class, 'create'])->name('barang-masuk.create');
+        Route::post('/barang-masuk', [BarangMasukController::class, 'store'])->name('barang-masuk.store');
+
+        // AJAX endpoints untuk scan Packing List
+        Route::get('/barang-masuk/packing-list-items', [BarangMasukController::class, 'getPackingListItems'])->name('barang-masuk.packing-list-items');
+        Route::post('/barang-masuk/scan', [BarangMasukController::class, 'scanBarcode'])->name('barang-masuk.scan');
+        Route::get('/barang-masuk/scanned-items', [BarangMasukController::class, 'getScannedItems'])->name('barang-masuk.scanned-items');
+        Route::post('/barang-masuk/flush', [BarangMasukController::class, 'flushScannedItems'])->name('barang-masuk.flush');
 
         // Stock Opname - For Non-Owner
         Route::get('/hasil-stock-opname/create', [HasilStockOpnameController::class, 'create'])->name('hasil_stock_opname.create');
@@ -115,6 +122,9 @@ Route::middleware(['auth'])->group(function () {
         // Penerimaan Barang - For Non-Owner
         Route::post('/penerimaan-barang', [PenerimaanBarangController::class, 'store'])->name('penerimaan-barang.store');
         Route::post('/purchase-orders/detail', [PenerimaanBarangController::class, 'getDetailPo']);
+        Route::post('/penerimaan-barang/generate-barcode-non-pl', [PenerimaanBarangController::class, 'generateBarcodeNonPL'])->name('penerimaan-barang.generate-barcode-non-pl');
+        Route::get('/penerimaan-barang/qrcode-non-pl', [PenerimaanBarangController::class, 'qrcodeNonPl'])->name('penerimaan-barang.qrcode-non-pl');
+        Route::post('/penerimaan-barang/non-pl/print-pdf', [PenerimaanBarangController::class, 'printNonPlLabelsPdf'])->name('penerimaan-barang.non-pl.print-pdf');
 
         // Temp Scan Routes
         Route::post('/penerimaan-barang/temp/upload-txt', [TempScanController::class, 'uploadTxt'])->name('temp_scan.upload_txt');
@@ -159,13 +169,4 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('packing-list', PackingListController::class);
     Route::get('/packing-list/detail/{id}', [PackingListController::class, 'show'])->name('packing_list_detail');
-
-    Route::patch('/packing-list/{id}/approve', [PackingListController::class, 'approve'])
-        ->name('packing-list.approve');
-
-    // Route::get('/faktur', [FakturController::class, 'index'])->name('faktur.index');
-    // Route::get('/faktur/{no_billing}', [FakturController::class, 'show'])->name('faktur.show');
-
-    // Route::get('/surat-jalan', [SuratJalanController::class, 'index'])->name('surat_jalan.index');
-    // Route::get('/surat-jalan/{no_billing}', [SuratJalanController::class, 'show'])->name('surat_jalan.show');
 });

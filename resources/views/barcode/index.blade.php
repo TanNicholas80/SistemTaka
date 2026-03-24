@@ -25,16 +25,6 @@
                 <div class="row">
                     <div class="col-12">
 
-                        <!-- Add Button -->
-                        <div class="d-flex justify-content-end mb-3">
-                            <form action="{{ route('barcode.updateFromCSV') }}" method="POST">
-                                @csrf
-                                <button type="submit" class="btn btn-success">
-                                    <i class="fas fa-sync-alt"></i> Update
-                                </button>
-                            </form>
-                        </div>
-
                         <!-- Card Table -->
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
@@ -68,13 +58,11 @@
                                             <th>Kode Warna</th>
                                             <th>Panjang (MLC)</th>
                                             <th>Warna</th>
-                                            <th>Bale</th>
                                             <th>Harga PPN</th>
                                             <th>Harga Jual</th>
                                             <th>Pemasok</th>
                                             <th>Customer</th>
                                             <th>Kontrak</th>
-                                            <th>Subtotal</th>
                                             <th>Tanggal</th>
                                             <th>Jatuh Tempo</th>
                                             <th>Mobil / No. Polisi</th>
@@ -110,13 +98,11 @@
                                                 <td>{{ $barcode->kode_warna ? $barcode->kode_warna : '-' }}</td>
                                                 <td>{{ $barcode->panjang_mlc ? number_format($barcode->panjang_mlc, 2) : '-' }}</td>
                                                 <td>{{ $barcode->warna }}</td>
-                                                <td>{{ $barcode->bale }}</td>
                                                 <td>{{ 'Rp. ' . number_format($barcode->harga_ppn, 0, ',', '.') }}</td>
                                                 <td>{{ 'Rp. ' . number_format($barcode->harga_jual, 0, ',', '.') }}</td>
                                                 <td>{{ $barcode->pemasok }}</td>
                                                 <td>{{ $barcode->customer }}</td>
                                                 <td>{{ $barcode->kontrak }}</td>
-                                                <td>{{ 'Rp. ' . number_format($barcode->subtotal, 0, ',', '.') }}</td>
                                                 <td>{{ \Carbon\Carbon::parse($barcode->tanggal)->format('d-m-Y') }}</td>
                                                 <td>{{ \Carbon\Carbon::parse($barcode->jatuh)->format('d-m-Y') }}</td>
                                                 <td>{{ $barcode->no_vehicle }}</td>

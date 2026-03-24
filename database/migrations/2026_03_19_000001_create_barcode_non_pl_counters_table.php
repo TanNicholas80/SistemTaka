@@ -11,14 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('penerimaan_barangs', function (Blueprint $table) {
+        Schema::create('barcode_non_pl_counters', function (Blueprint $table) {
             $table->id();
-            $table->string('kode_customer', 50)->index();
-            $table->string('no_po');
-            $table->string('vendor');
-            $table->string('no_terima')->unique();
-            $table->string('npb')->unique();
-            $table->date('tanggal');
+            $table->string('kode_customer', 50)->unique();
+            $table->string('prefix', 10);
+            $table->unsignedBigInteger('last_seq')->default(0);
             $table->timestamps();
         });
     }
@@ -28,6 +25,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('penerimaan_barangs');
+        Schema::dropIfExists('barcode_non_pl_counters');
     }
 };
+
