@@ -69,7 +69,7 @@ class PenerimaanBarang extends Model
         // Dapatkan informasi user yang sedang login (causer)
         $causer = Auth::user();
         $causerInfo = null;
-        
+
         if ($causer) {
             $causerInfo = [
                 'causer_id' => $causer->id,
@@ -166,8 +166,7 @@ class PenerimaanBarang extends Model
     {
         $now = Carbon::now();
         $year = $now->format('Y');
-        $month = $now->format('m');
-        $prefix = "RI.{$year}.{$month}.";
+        $prefix = "RI.{$year}.";
 
         try {
             // Validasi active_branch session
@@ -190,31 +189,47 @@ class PenerimaanBarang extends Model
                 return "{$prefix}00001";
             }
 
-            // Get API credentials from branch (auto-decrypted by model accessors)
+            // Get API credentials from branch
             $apiToken = $branch->accurate_api_token;
             $signatureSecret = $branch->accurate_signature_secret;
 
-            // 1. PRIORITAS UTAMA: Cek database lokal terlebih dahulu filtered by kode_customer
+            $maxIter = 0;
+
+            // 1. PRIORITAS TERTINGGI: Cek API Accurate untuk mendapatkan nomor terakhir
+            $lastNpbFromAPI = self::getLastNpbFromAPI($apiToken, $signatureSecret, $prefix, $branch);
+            if ($lastNpbFromAPI) {
+                $iterVal = (int) substr($lastNpbFromAPI, strrpos($lastNpbFromAPI, '.') + 1);
+                if ($iterVal > $maxIter) {
+                    $maxIter = $iterVal;
+                }
+            }
+
+            // 2. Cek database lokal untuk nomor terakhir (jika ada transaksi belum terikirim)
             $query = self::where('npb', 'like', $prefix . '%');
-            
-            // Jika kode_customer tersedia, filter berdasarkan kode_customer
-            // Jika tidak, gunakan customer_id dari branch sebagai fallback
             $customerId = $kodeCustomer ?? $branch->customer_id;
             if ($customerId) {
                 $query->where('kode_customer', $customerId);
             }
-            
             $lastEntry = $query->orderBy('npb', 'desc')->first();
 
             if ($lastEntry && !empty($lastEntry->npb)) {
-                // Extract nomor dari npb terakhir dan increment
-                $lastNpb = $lastEntry->npb;
-                $lastIter = (int)substr($lastNpb, strrpos($lastNpb, '.') + 1);
-                $newIter = $lastIter + 1;
-                $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
+                $lastNpbFromDB = $lastEntry->npb;
+                // Pastikan formatnya RI.YYYY.XXXXX sebelum di-extract iter-nya
+                // Jika NPB lama menggunakan format RI.YYYY.MM.XXXXX, kita harus berhati-hati.
+                // Tapi secara umum strrpos('.') akan mengambil XXXXX setelah titik terakhir.
+                $parts = explode('.', $lastNpbFromDB);
+                $iterVal = (int) end($parts);
+                if ($iterVal > $maxIter) {
+                    $maxIter = $iterVal;
+                }
+            }
 
-                Log::info('Generated npb from local database', [
-                    'last_npb' => $lastNpb,
+            // 3. Generate nomor baru
+            if ($maxIter > 0) {
+                $newIter = $maxIter + 1;
+                $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
+                
+                Log::info('Generated npb from combined check (Local + API)', [
                     'new_npb' => "{$prefix}{$formattedIter}",
                     'kode_customer' => $customerId
                 ]);
@@ -222,22 +237,6 @@ class PenerimaanBarang extends Model
                 return "{$prefix}{$formattedIter}";
             }
 
-            // 2. Jika tidak ada di database lokal, cek API dengan pagination
-            $lastNpbFromAPI = self::getLastNpbFromAPI($apiToken, $signatureSecret, $prefix, $branch);
-
-            if ($lastNpbFromAPI) {
-                $lastIter = (int)substr($lastNpbFromAPI, strrpos($lastNpbFromAPI, '.') + 1);
-                $newIter = $lastIter + 1;
-                $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
-
-                Log::info('Generated npb from API', [
-                    'last_npb' => $lastNpbFromAPI,
-                    'new_npb' => "{$prefix}{$formattedIter}",
-                    'kode_customer' => $customerId
-                ]);
-
-                return "{$prefix}{$formattedIter}";
-            }
         } catch (\Exception $e) {
             Log::error('Exception occurred while generating npb: ' . $e->getMessage(), [
                 'trace' => $e->getTraceAsString()
@@ -269,16 +268,16 @@ class PenerimaanBarang extends Model
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
-            $response = Http::withHeaders([
+            $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
             ])->get($baseUrl, [
-                'fields' => 'number',
-                'sp.page' => $page,
-                'sp.pageSize' => $pageSize,
-                'sp.sort' => 'number|desc', // Coba sorting descending
-            ]);
+                        'fields' => 'number',
+                        'sp.page' => $page,
+                        'sp.pageSize' => $pageSize,
+                        'sp.sort' => 'number|desc', // Coba sorting descending
+                    ]);
 
             if (!$response->successful()) {
                 Log::error('API request failed', [

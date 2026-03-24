@@ -25,35 +25,36 @@
                 <div class="card-header justify-content-between align-items-center">
                     <div>
                         @if ($data && $data->npl != null && $barcodes && $barcodes->first())
-                            <div class="text-center">
-                                <h4><strong><u>PACKING LIST</u></strong></h4>
-                                <p class="mb-1">
-                                    <strong>No. : {{ $data->npl }} / Tgl. :
-                                        {{ $barcodes->isNotEmpty() ? \Carbon\Carbon::parse($barcodes->first()->tanggal)->format('d-m-Y') : \Carbon\Carbon::parse($data->tanggal)->format('d-m-Y') }}</strong>
-                                    @php
-                                        $statusClass = match($data->status ?? 'pending') {
-                                            'approved' => 'badge-success',
-                                            'used' => 'badge-info',
-                                            default => 'badge-warning',
-                                        };
-                                    @endphp
-                                    <span class="badge {{ $statusClass }} ml-2">{{ strtoupper($data->status ?? 'pending') }}</span>
-                                </p>
-                            </div>
-                            <br>
-                            <table class="table table-bordered text-nowrap" style="table-layout: fixed; width: 100%;">
-                                <tr>
-                                    <td style="width: 40%; text-align: left;">
-                                        <strong>Pemasok : {{ $barcodes->first()->pemasok }}</strong>
-                                    </td>
-                                    <td style="width: 33.33%; text-align: center;">
-                                        <strong>Pembeli : {{ $barcodes->first()->customer }}</strong>
-                                    </td>
-                                    <td style="width: 33.33%; text-align: right;">
-                                        <strong>Mobil / No. Polisi : {{ $barcodes->first()->no_vehicle }}</strong>
-                                    </td>
-                                </tr>
-                            </table>
+                                        <div class="text-center">
+                                            <h4><strong><u>PACKING LIST</u></strong></h4>
+                                            <p class="mb-1">
+                                                <strong>No. : {{ $data->npl }} / Tgl. :
+                                                    {{ $barcodes->isNotEmpty() ? \Carbon\Carbon::parse($barcodes->first()->tanggal)->format('d-m-Y') : \Carbon\Carbon::parse($data->tanggal)->format('d-m-Y') }}</strong>
+                                                @php
+                                                    $statusClass = match ($data->status ?? 'pending') {
+                                                        'approved' => 'badge-success',
+                                                        'used' => 'badge-info',
+                                                        default => 'badge-warning',
+                                                    };
+                                                @endphp
+                            <span
+                                                    class="badge {{ $statusClass }} ml-2">{{ strtoupper($data->status ?? 'pending') }}</span>
+                                            </p>
+                                        </div>
+                                        <br>
+                                        <table class="table table-bordered text-nowrap" style="table-layout: fixed; width: 100%;">
+                                            <tr>
+                                                <td style="width: 40%; text-align: left;">
+                                                    <strong>Pemasok : {{ $barcodes->first()->pemasok }}</strong>
+                                                </td>
+                                                <td style="width: 33.33%; text-align: center;">
+                                                    <strong>Pembeli : {{ $barcodes->first()->customer }}</strong>
+                                                </td>
+                                                <td style="width: 33.33%; text-align: right;">
+                                                    <strong>Mobil / No. Polisi : {{ $barcodes->first()->no_vehicle }}</strong>
+                                                </td>
+                                            </tr>
+                                        </table>
                         @else
                             <div class="text-center">
                                 <h4><strong><u>PACKING LIST</u></strong></h4>

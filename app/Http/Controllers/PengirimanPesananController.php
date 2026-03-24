@@ -152,6 +152,8 @@ class PengirimanPesananController extends Controller
                         // Jalankan semua promise secara paralel
                         $results = Utils::settle($promises)->wait();
 
+                        $isFullFetchSuccessful = true;
+
                         // Proses hasil dari setiap promise
                         foreach ($results as $page => $result) {
                             if ($result['state'] === 'fulfilled') {
@@ -163,13 +165,40 @@ class PengirimanPesananController extends Controller
                                 }
                             } else {
                                 Log::error("Failed to fetch page {$page}: " . $result['reason']);
+                                $isFullFetchSuccessful = false;
                             }
                         }
+                    } else {
+                        $isFullFetchSuccessful = true;
                     }
 
                     // Setelah mendapatkan semua ID delivery order, ambil detail untuk masing-masing secara batch
                     $detailsResult = $this->fetchDeliveryOrderDetailsInBatches($allDeliveryOrders, $branch, $apiToken, $signature, $timestamp);
                     $pengirimanPesanan = $detailsResult['details'];
+
+                    // --- SYNC LOCAL DB (DELETE ORPHANED DOs) ---
+                    if ($isFullFetchSuccessful && !$detailsResult['has_error']) {
+                        try {
+                            $accurateDoNumbers = array_column($pengirimanPesanan, 'number');
+                            
+                            // Jika $accurateDoNumbers kosong karena memang tidak ada DO di Accurate, kita harus hapus semua lokal
+                            // Tapi jika kosong karena API gagal total (sudah dicatch di has_error), kita skip.
+                            
+                            // Ambil DO lokal untuk customer/branch ini
+                            $localDos = PengirimanPesanan::where('kode_customer', $branch->customer_id)->pluck('no_pengiriman')->toArray();
+                            
+                            // DO yang ada di lokal tapi tidak ada di Accurate (artinya sudah dihapus di Accurate)
+                            $deletedInAccurate = array_diff($localDos, $accurateDoNumbers);
+                            
+                            if (!empty($deletedInAccurate)) {
+                                PengirimanPesanan::whereIn('no_pengiriman', $deletedInAccurate)->delete();
+                                Log::info('Sinkronisasi: Menghapus DO lokal yang sudah dihapus di Accurate', ['deleted_dos' => $deletedInAccurate]);
+                            }
+                        } catch (\Exception $e) {
+                            Log::error('Gagal sinkronisasi penghapusan DO lokal: ' . $e->getMessage());
+                        }
+                    }
+                    // -------------------------------------------
 
                     // Cek jika ada error dari proses fetch detail
                     if ($detailsResult['has_error']) {

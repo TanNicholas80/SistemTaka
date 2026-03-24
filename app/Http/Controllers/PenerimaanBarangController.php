@@ -214,7 +214,7 @@ class PenerimaanBarangController extends Controller
 
         foreach ($batches as $batch) {
             $promises = [];
-            $client = new \GuzzleHttp\Client();
+            $client = new \GuzzleHttp\Client(['verify' => false]);
 
             foreach ($batch as $item) {
                 if (!$item['no_po']) {
@@ -337,7 +337,7 @@ class PenerimaanBarangController extends Controller
             'fields' => 'transDate,number,status'
         ];
 
-        $firstPageResponse = Http::timeout(30)->withHeaders([
+        $firstPageResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
             'Authorization' => 'Bearer ' . $apiToken,
             'X-Api-Signature' => $signature,
             'X-Api-Timestamp' => $timestamp,
@@ -356,7 +356,7 @@ class PenerimaanBarangController extends Controller
 
                 if ($totalPages > 1) {
                     $promises = [];
-                    $client = new \GuzzleHttp\Client();
+                    $client = new \GuzzleHttp\Client(['verify' => false]);
 
                     for ($page = 2; $page <= $totalPages; $page++) {
                         $promises[$page] = $client->getAsync($poApiUrl, [
@@ -487,13 +487,13 @@ class PenerimaanBarangController extends Controller
             $vendorData = null;
             $accurateItems = [];
 
-            $poResponse = Http::timeout(30)->withHeaders([
+            $poResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
             ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
-                'number' => $validated['no_po'],
-            ]);
+                        'number' => $validated['no_po'],
+                    ]);
 
             if ($poResponse->successful()) {
                 $resData = $poResponse->json();
@@ -658,25 +658,37 @@ class PenerimaanBarangController extends Controller
                 if (!empty($accurateItems)) {
                     if (!$namaBarang && $materialCode12) {
                         foreach ($accurateItems as $item) {
-                            if ($item['no'] === $materialCode12) { $namaBarang = $item['name']; $targetUom = $item['uom'] ?? ''; break; }
+                            if ($item['no'] === $materialCode12) {
+                                $namaBarang = $item['name'];
+                                break;
+                            }
                         }
                     }
                     if (!$namaBarang && $materialCode12) {
                         foreach ($accurateItems as $item) {
                             $accNumeric = $item['no_numeric'];
-                            if ($accNumeric !== '' && substr($accNumeric, -12) === $materialCode12) { $namaBarang = $item['name']; $targetUom = $item['uom'] ?? ''; break; }
+                            if ($accNumeric !== '' && substr($accNumeric, -12) === $materialCode12) {
+                                $namaBarang = $item['name'];
+                                break;
+                            }
                         }
                     }
                     if (!$namaBarang && $materialCode12) {
                         foreach ($accurateItems as $item) {
-                            if (str_contains($item['no'], $materialCode12) || str_contains($materialCode12, $item['no'])) { $namaBarang = $item['name']; $targetUom = $item['uom'] ?? ''; break; }
+                            if (str_contains($item['no'], $materialCode12) || str_contains($materialCode12, $item['no'])) {
+                                $namaBarang = $item['name'];
+                                break;
+                            }
                         }
                     }
                     if (!$namaBarang) {
                         $barcodeNama = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace('KC', '', $barcode->nama ?? '')));
                         foreach ($accurateItems as $item) {
                             $accNama = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $item['name'] ?? ''));
-                            if ($accNama !== '' && $accNama === $barcodeNama) { $namaBarang = $item['name']; $targetUom = $item['uom'] ?? ''; break; }
+                            if ($accNama !== '' && $accNama === $barcodeNama) {
+                                $namaBarang = $item['name'];
+                                break;
+                            }
                         }
                     }
                 }
@@ -741,7 +753,7 @@ class PenerimaanBarangController extends Controller
         $vendorData = null;
 
         // Ambil detail PO dari Accurate
-        $detailPurchaseOrderResponse = Http::withHeaders([
+        $detailPurchaseOrderResponse = Http::withoutVerifying()->withHeaders([
             'Authorization' => 'Bearer ' . $apiToken,
             'X-Api-Signature' => $signature,
             'X-Api-Timestamp' => $timestamp,
@@ -771,6 +783,59 @@ class PenerimaanBarangController extends Controller
             ->where('kode_customer', $branch->customer_id)
             ->where('status', PackingList::STATUS_APPROVED)
             ->get();
+
+        if (empty($packingListIds)) {
+            // Jika tidak ada packing list, coba ambil detail aktual dari Penerimaan Barang (receive-item) di Accurate
+            $detailReceiveItemResponse = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($this->buildApiUrl($branch, 'receive-item/detail.do'), ['number' => $npb]);
+
+            if ($detailReceiveItemResponse->successful() && isset($detailReceiveItemResponse->json()['d'])) {
+                $resData = $detailReceiveItemResponse->json();
+                $receiveItemDetails = [];
+                
+                foreach ($resData['d']['detailItem'] ?? [] as $detail) {
+                    $serialNumbers = [];
+                    foreach ($detail['detailSerialNumber'] ?? [] as $sn) {
+                        $serialNumbers[] = [
+                            'serialNumberNo' => $sn['serialNumber']['number'] ?? '',
+                            'quantity' => $sn['quantity'] ?? 0,
+                        ];
+                    }
+
+                    $receiveItemDetails[] = [
+                        'nama_barang' => $detail['item']['name'] ?? null,
+                        'kode_barang' => $detail['item']['no'] ?? null,
+                        'unit' => $detail['item']['unit1']['name'] ?? null,
+                        'panjang_total' => $detail['quantity'] ?? 0,
+                        'karyawan' => '-',
+                        'grade' => '-',
+                        'availableToSell' => 0,
+                        'unit_price' => 0,
+                        'keterangan' => '-',
+                        'serial_numbers' => $serialNumbers
+                    ];
+                }
+
+                // Jika berhasil mendapat detail item, kembalikan ini alih-alih fallback ke kuantitas 0
+                if (!empty($receiveItemDetails)) {
+                    return [
+                        'items' => $receiveItemDetails,
+                        'packingListIds' => [],
+                        'vendorData' => $vendorData
+                    ];
+                }
+            }
+
+            // Fallback kembali ke PO dengan kuantitas 0 jika API gagal
+            return [
+                'items' => $itemDetails,
+                'packingListIds' => [],
+                'vendorData' => $vendorData
+            ];
+        }
 
         if ($packingLists->isEmpty()) {
             throw new \Exception('Packing list tidak ditemukan atau status belum approved.');
@@ -811,21 +876,30 @@ class PenerimaanBarangController extends Controller
             // Strategi 1: Exact match kode_barang Accurate === materialCode12
             if ($matchedIdx === null && $mc12) {
                 foreach ($accurateItemsForMatch as $idx => $acc) {
-                    if ($acc['no'] === $mc12) { $matchedIdx = $idx; break; }
+                    if ($acc['no'] === $mc12) {
+                        $matchedIdx = $idx;
+                        break;
+                    }
                 }
             }
 
             // Strategi 2: Numeric suffix match (12 digit terakhir)
             if ($matchedIdx === null && $mc12) {
                 foreach ($accurateItemsForMatch as $idx => $acc) {
-                    if ($acc['no_numeric'] !== '' && substr($acc['no_numeric'], -12) === $mc12) { $matchedIdx = $idx; break; }
+                    if ($acc['no_numeric'] !== '' && substr($acc['no_numeric'], -12) === $mc12) {
+                        $matchedIdx = $idx;
+                        break;
+                    }
                 }
             }
 
             // Strategi 3: Contains match
             if ($matchedIdx === null && $mc12) {
                 foreach ($accurateItemsForMatch as $idx => $acc) {
-                    if (str_contains($acc['no'], $mc12) || str_contains($mc12, $acc['no'])) { $matchedIdx = $idx; break; }
+                    if (str_contains($acc['no'], $mc12) || str_contains($mc12, $acc['no'])) {
+                        $matchedIdx = $idx;
+                        break;
+                    }
                 }
             }
 
@@ -834,7 +908,10 @@ class PenerimaanBarangController extends Controller
                 $namaBarcode = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace('KC', '', $barcode->nama ?? '')));
                 foreach ($accurateItemsForMatch as $idx => $acc) {
                     $accNama = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $acc['name']));
-                    if ($accNama !== '' && $accNama === $namaBarcode) { $matchedIdx = $idx; break; }
+                    if ($accNama !== '' && $accNama === $namaBarcode) {
+                        $matchedIdx = $idx;
+                        break;
+                    }
                 }
             }
 
@@ -883,11 +960,15 @@ class PenerimaanBarangController extends Controller
                 $matchedItems[$existingItemIndex]['availableToSell'] = $matchedItems[$existingItemIndex]['panjang_total'];
                 $matchedItems[$existingItemIndex]['unit_price'] += $barcode->harga_unit ?? 0;
                 $matchedItems[$existingItemIndex]['serial_numbers'][] = $serialEntry;
+                if (!isset($matchedItems[$existingItemIndex]['keterangan']) || empty($matchedItems[$existingItemIndex]['keterangan'])) {
+                    $matchedItems[$existingItemIndex]['keterangan'] = ltrim($barcode->keterangan ?? '', '*');
+                }
             } else {
                 $newItem = $item;
                 $newItem['panjang_total'] = $barcodeQty;
                 $newItem['availableToSell'] = $newItem['panjang_total'];
                 $newItem['unit_price'] = $barcode->harga_unit ?? 0;
+                $newItem['keterangan'] = ltrim($barcode->keterangan ?? '', '*');
                 $newItem['serial_numbers'] = [$serialEntry];
                 $newItem['item_no_pl'] = $itemNoPl;
                 $matchedItems[] = $newItem;
@@ -1528,7 +1609,7 @@ class PenerimaanBarangController extends Controller
             ]);
 
             // Send to Accurate API dengan timeout
-            $response = Http::timeout(60)->withHeaders([
+            $response = Http::timeout(60)->withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -1789,117 +1870,5 @@ class PenerimaanBarangController extends Controller
         }
 
         return view('penerimaan_barang.detail', compact('penerimaanBarang', 'matchedItems', 'errorMessage'));
-    }
-
-    public function showApproval($npb, $kodeBarang, Request $request)
-    {
-        // Cache key yang unik
-        $cacheKey = 'penerimaan_barang_approval_' . $npb . '_' . md5($kodeBarang);
-        $cacheDuration = 10; // 10 menit
-
-        // Jika ada parameter force_refresh, bypass cache
-        if ($request->has('force_refresh')) {
-            Cache::forget($cacheKey);
-        }
-
-        $errorMessage = null;
-        $penerimaanBarang = null;
-        $approvalStock = null;
-
-        try {
-            // Selalu coba ambil data dari database/API terlebih dahulu
-            $penerimaanBarang = PenerimaanBarang::with('packingLists')
-                ->where('npb', $npb)
-                ->firstOrFail();
-
-            $packingListIds = $penerimaanBarang->packingLists()->pluck('id')->toArray();
-
-            if (!empty($packingListIds)) {
-                // Mode packing_list: filter berdasarkan kode item (material_code 12 digit + kode_warna opsional)
-                $kodeBarang = (string) $kodeBarang;
-                $approvalStock = $penerimaanBarang->barcodes()
-                    ->filter(function ($barcode) use ($kodeBarang) {
-                        $rawMc = preg_replace('/\D/', '', (string) ($barcode->material_code ?? ''));
-                        $mc12 = $rawMc !== '' ? substr($rawMc, -12) : '';
-                        $kw = trim((string) ($barcode->kode_warna ?? ''));
-                        $barcodeKode = ($mc12 && $kw) ? ($mc12 . ' - ' . $kw) : ($mc12 ?: (string) ($barcode->kode_barang ?? ''));
-                        return $barcodeKode === $kodeBarang;
-                    })
-                    ->values()
-                    ->map(function ($barcode) {
-                        return (object) [
-                            'barcode' => $barcode->barcode ?? '-',
-                            'nama' => $barcode->keterangan ?? '-',
-                            'npl' => $barcode->no_packing_list ?? '-',
-                            'no_invoice' => $barcode->no_billing ?? '-',
-                            'panjang' => $barcode->length ?? 0,
-                            'harga_unit' => $barcode->harga_unit ?? ($barcode->harga_jual ?? 0),
-                            'status' => $barcode->status ?? '-',
-                        ];
-                    });
-            } else {
-                // Mode non_packing_list: ambil barcode dari BarcodeNonPL berdasarkan npb + item_no
-                $rows = BarcodeNonPL::where('npb', $penerimaanBarang->npb)
-                    ->where('item_no', (string) $kodeBarang)
-                    ->get();
-                $approvalStock = $rows
-                    ->values()
-                    ->map(function ($r) {
-                        return (object) [
-                            'barcode' => $r->barcode ?? '-',
-                            'nama' => $r->item_name ?? '-',
-                            'npl' => '-',
-                            'no_invoice' => '-',
-                            'panjang' => $r->quantity ?? 0,
-                            'harga_unit' => 0,
-                            'status' => 'uploaded',
-                        ];
-                    });
-            }
-
-            if ($approvalStock->isEmpty()) {
-                $errorMessage = "Data approval tidak ditemukan untuk kode barang '{$kodeBarang}' pada penerimaan barang NPB {$npb}.";
-            } else {
-                $dataToCache = [
-                    'penerimaanBarang' => $penerimaanBarang,
-                    'approvalStock' => $approvalStock,
-                    'errorMessage' => null
-                ];
-
-                // Simpan data ke cache setelah berhasil dari database
-                Cache::put($cacheKey, $dataToCache, $cacheDuration * 60);
-                Log::info("Data approval penerimaan barang {$npb} dengan kode barang {$kodeBarang} dari database berhasil disimpan ke cache");
-            }
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
-            $errorMessage = "Penerimaan barang dengan NPB {$npb} tidak ditemukan.";
-            Log::error('Penerimaan barang tidak ditemukan untuk approval: ' . $e->getMessage(), [
-                'npb' => $npb,
-                'kodeBarang' => $kodeBarang
-            ]);
-        } catch (\Exception $e) {
-            // Log error untuk debugging
-            Log::error('Error in showApproval method: ' . $e->getMessage(), [
-                'npb' => $npb,
-                'kodeBarang' => $kodeBarang
-            ]);
-
-            if ($penerimaanBarang) {
-                $errorMessage = "Gagal mengambil data approval dari database. Silakan coba lagi.";
-            } else {
-                $errorMessage = "Terjadi kesalahan koneksi. Silakan periksa jaringan Anda.";
-            }
-
-            // Gunakan cache sebagai fallback jika database error
-            if (Cache::has($cacheKey)) {
-                $cachedData = Cache::get($cacheKey);
-                $penerimaanBarang = $cachedData['penerimaanBarang'] ?? null;
-                $approvalStock = $cachedData['approvalStock'] ?? null;
-                if (is_null($errorMessage))
-                    $errorMessage = $cachedData['errorMessage'] ?? null;
-                Log::info("Menggunakan data cached untuk approval {$npb} karena error pada database");
-            }
-        }
-
-        return view('penerimaan_barang.detail-approval', compact('penerimaanBarang', 'approvalStock', 'errorMessage'));
     }
 }

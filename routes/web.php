@@ -55,7 +55,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/penerimaan-barang', [PenerimaanBarangController::class, 'index'])->name('penerimaan-barang.index');
     Route::get('/penerimaan-barang/create', [PenerimaanBarangController::class, 'create'])->name('penerimaan-barang.create');
     Route::get('/penerimaan-barang/{npb}', [PenerimaanBarangController::class, 'show'])->name('penerimaan-barang.show');
-    Route::get('/penerimaan-barang/{npb}/{kodeBarang}', [PenerimaanBarangController::class, 'showApproval'])->name('penerimaan-barang.showApproval');
 
     // Pelanggan - Full Access
     Route::get('/pelanggan', [PelangganController::class, 'index'])->name('pelanggan.index');
