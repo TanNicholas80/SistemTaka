@@ -9,9 +9,9 @@ return new class extends Migration
     /**
      * Run the migrations.
      */
-    public function up()
+    public function up(): void
     {
-        Schema::create('barcodes', function (Blueprint $table) {
+        Schema::create('raw_barcodes', function (Blueprint $table) {
             $table->id();
             $table->string('barcode')->unique();
             $table->string('kode_customer', 50)->index();
@@ -53,9 +53,6 @@ return new class extends Migration
             $table->string('sample')->nullable();
             $table->string('kodisi_kain')->nullable();
             $table->string('special_treatment')->nullable();
-            $table->enum('status', ['approved', 'uploaded'])->default('approved');
-            $table->string('id_pb')->nullable();
-            $table->enum('item_flag', ['pembelian', 'retur_pembelian', 'penjualan', 'retur_penjualan', 'stock_opname', 'penyesuaian_stock'])->default('pembelian');
             $table->timestamps();
         });
     }
@@ -65,6 +62,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('barcodes');
+        Schema::dropIfExists('raw_barcodes');
     }
 };

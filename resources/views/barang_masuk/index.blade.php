@@ -51,7 +51,6 @@
                                             <th>Berat (KG)</th>
                                             <th>Panjang (MLC)</th>
                                             <th>Panjang (Yard)</th>
-                                            <th>Action</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -76,45 +75,7 @@
                                                     <td>-</td>
                                                     <td>-</td>
                                                 @endif
-                                                <td>
-                                                    <a href="" data-toggle="modal"
-                                                        data-target="#modal-hapus{{ $item->id }}"
-                                                        class="btn-sm btn-danger"><i class="fas fa-trash-alt"></i>
-                                                        Hapus</a>
-                                                </td>
                                             </tr>
-
-                                            <!-- Modal Hapus -->
-                                            <div class="modal fade" id="modal-hapus{{ $item->id }}">
-                                                <div class="modal-dialog">
-                                                    <div class="modal-content">
-                                                        <div class="modal-header">
-                                                            <h4 class="modal-title">Konfirmasi Hapus</h4>
-                                                            <button type="button" class="close" data-dismiss="modal"
-                                                                aria-label="Close">
-                                                                <span aria-hidden="true">&times;</span>
-                                                            </button>
-                                                        </div>
-                                                        <div class="modal-body">
-                                                            <p>Apakah anda yakin ingin menghapus
-                                                                <strong>{{ $item->nbrg }}</strong>?
-                                                            </p>
-                                                        </div>
-                                                        <div class="modal-footer justify-content-between">
-                                                            <button type="button" class="btn btn-default"
-                                                                data-dismiss="modal">Batal</button>
-                                                            <form action="{{ route('barang-masuk.destroy', $item->id) }}"
-                                                                method="POST">
-                                                                @csrf
-                                                                @method('DELETE')
-                                                                <button type="submit" class="btn btn-danger">Ya,
-                                                                    Hapus</button>
-                                                            </form>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <!-- End Modal -->
                                         @endforeach
                                     </tbody>
                                 </table>

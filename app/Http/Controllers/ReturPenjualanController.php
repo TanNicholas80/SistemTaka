@@ -7,6 +7,7 @@ use App\Models\Branch;
 use App\Models\FakturPenjualan;
 use App\Models\PengirimanPesanan;
 use App\Models\ReturPenjualan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
@@ -33,7 +34,7 @@ class ReturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -60,8 +61,8 @@ class ReturPenjualanController extends Controller
         }
 
         // Get API credentials from branch (auto-decrypted by model accessors)
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
@@ -267,7 +268,7 @@ class ReturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -304,7 +305,7 @@ class ReturPenjualanController extends Controller
         }
 
         $branch = Branch::find($activeBranchId);
-        if (!$branch || !$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return response()->json(['deliveryOrders' => [], 'error' => 'Kredensial API tidak tersedia.'], 400);
         }
 
@@ -330,7 +331,7 @@ class ReturPenjualanController extends Controller
         }
 
         $branch = Branch::find($activeBranchId);
-        if (!$branch || !$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return response()->json(['salesInvoices' => [], 'error' => 'Kredensial API tidak tersedia.'], 400);
         }
 
@@ -361,13 +362,13 @@ class ReturPenjualanController extends Controller
         }
 
         $branch = Branch::find($activeBranchId);
-        if (!$branch || !$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return response()->json(['success' => false, 'message' => 'Kredensial API tidak tersedia.'], 400);
         }
 
         $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -447,8 +448,8 @@ class ReturPenjualanController extends Controller
      */
     private function fetchCustomersFromAccurate(Branch $branch, string $baseUrl): array
     {
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
         $customerApiUrl = $this->buildApiUrl($branch, 'customer/list.do');
@@ -544,8 +545,8 @@ class ReturPenjualanController extends Controller
      */
     private function getDeliveryOrdersFromAccurate(Branch $branch, string $baseUrl, ?string $customerNo = null)
     {
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -686,8 +687,8 @@ class ReturPenjualanController extends Controller
      */
     private function getSalesInvoicesFromAccurate(Branch $branch, string $baseUrl, ?string $customerNo = null)
     {
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -840,7 +841,7 @@ class ReturPenjualanController extends Controller
             return back()->with('error', 'Data cabang tidak ditemukan.');
         }
 
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -906,8 +907,8 @@ class ReturPenjualanController extends Controller
             $validatedData = $validator->validated();
             $returnType = $validatedData['return_type'];
 
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
@@ -1203,7 +1204,7 @@ class ReturPenjualanController extends Controller
             return back()->with('error', 'Data cabang tidak ditemukan.');
         }
 
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -1225,8 +1226,8 @@ class ReturPenjualanController extends Controller
         $apiSuccess = false;
 
         try {
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
             $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');

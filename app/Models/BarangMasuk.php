@@ -16,14 +16,16 @@ class BarangMasuk extends Model
 
     protected $fillable = [
         'tanggal',
+        'npl',
         'nbrg',
         'kode_customer',
     ];
 
-    /**
-     * Relasi ke Barcode berdasarkan barcode & kode_customer.
-     * Gunakan hasOne agar bisa memakai whereColumn dengan aman.
-     */
+    public function packingList()
+    {
+        return $this->belongsTo(PackingList::class, 'npl', 'npl');
+    }
+
     public function barcode()
     {
         return $this->hasOne(Barcode::class, 'barcode', 'nbrg');
@@ -50,7 +52,7 @@ class BarangMasuk extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['tanggal', 'nbrg', 'kode_customer']) // Log field yang ada di BarangMasuk
+            ->logOnly(['tanggal', 'npl', 'nbrg', 'kode_customer']) // Log field yang ada di BarangMasuk
             ->logOnlyDirty() // Hanya log perubahan yang benar-benar terjadi
             ->dontSubmitEmptyLogs() // Jangan submit log kosong
             ->useLogName('Manajemen Barang Masuk') // Set log name sesuai permintaan

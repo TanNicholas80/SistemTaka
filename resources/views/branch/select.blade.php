@@ -101,11 +101,7 @@
                         <div class="h-full relative" data-branch-id="{{ $branch->id }}"
                             data-branch-name="{{ $branch->name }}" data-branch-photo="{{ $branch->photo ?? '' }}"
                             data-branch-customer="{{ $branch->customer_id ?? '' }}"
-                            data-branch-url-accurate="{{ $branch->url_accurate ?? '' }}"
-                            data-branch-auth-accurate="{{ $branch->auth_accurate ?? '' }}"
-                            data-branch-session-accurate="{{ $branch->session_accurate ?? '' }}"
-                            data-branch-api-token="{{ $branch->accurate_api_token ?? '' }}"
-                            data-branch-signature-secret="{{ $branch->accurate_signature_secret ?? '' }}">
+                            data-branch-url-accurate="{{ $branch->url_accurate ?? '' }}">
 
                             @if (Auth::user()->role === 'super_admin')
                                 <div class="absolute top-2 right-2 z-30">
@@ -201,59 +197,6 @@
                         <p class="text-xs text-gray-500 mt-1">Format: JPG, PNG (Max: 2MB)</p>
                     </div>
 
-                    <!-- Accurate API -->
-                    <div class="border-t pt-3 mt-4">
-                        <p class="text-sm font-semibold text-gray-600 mb-2">Accurate API</p>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Auth Accurate</label>
-                            <div class="relative">
-                                <input type="password" name="auth_accurate" id="createAuthAccurate"
-                                    class="w-full border rounded px-3 py-2 pr-10">
-                                <button type="button" onclick="togglePassword('createAuthAccurate', this)"
-                                    class="absolute right-2 top-2 text-gray-500">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Session Accurate</label>
-                            <div class="relative">
-                                <input type="password" name="session_accurate" id="createSessionAccurate"
-                                    class="w-full border rounded px-3 py-2 pr-10">
-                                <button type="button" onclick="togglePassword('createSessionAccurate', this)"
-                                    class="absolute right-2 top-2 text-gray-500">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">API Token Accurate</label>
-                            <div class="relative">
-                                <input type="password" name="accurate_api_token" id="createApiToken"
-                                    class="w-full border rounded px-3 py-2 pr-10">
-                                <button type="button" onclick="togglePassword('createApiToken', this)"
-                                    class="absolute right-2 top-2 text-gray-500">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Signature Secret</label>
-                            <div class="relative">
-                                <input type="password" name="accurate_signature_secret" id="createSignatureSecret"
-                                    class="w-full border rounded px-3 py-2 pr-10">
-                                <button type="button" onclick="togglePassword('createSignatureSecret', this)"
-                                    class="absolute right-2 top-2 text-gray-500">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
                     <div class="flex justify-end gap-3 mt-4">
                         <button type="button" onclick="closeCreateModal()"
                             class="px-4 py-2 border rounded">Batal</button>
@@ -300,59 +243,6 @@
                         <label class="block text-sm font-medium text-gray-700">Ganti Foto</label>
                         <input type="file" name="photo" accept="image/*"
                             class="w-full border rounded px-3 py-2">
-                    </div>
-
-                    <!-- Accurate API -->
-                    <div class="border-t pt-3 mt-4">
-                        <p class="text-sm font-semibold text-gray-600 mb-2">Accurate API</p>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Auth Accurate</label>
-                            <div class="relative">
-                                <input type="password" name="auth_accurate" id="editAuthAccurate"
-                                    class="w-full border rounded px-3 py-2 pr-10">
-                                <button type="button" onclick="togglePassword('editAuthAccurate', this)"
-                                    class="absolute right-2 top-2 text-gray-500">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Session Accurate</label>
-                            <div class="relative">
-                                <input type="password" name="session_accurate" id="editSessionAccurate"
-                                    class="w-full border rounded px-3 py-2 pr-10">
-                                <button type="button" onclick="togglePassword('editSessionAccurate', this)"
-                                    class="absolute right-2 top-2 text-gray-500">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">API Token Accurate</label>
-                            <div class="relative">
-                                <input type="password" name="accurate_api_token" id="editApiToken"
-                                    class="w-full border rounded px-3 py-2 pr-10">
-                                <button type="button" onclick="togglePassword('editApiToken', this)"
-                                    class="absolute right-2 top-2 text-gray-500">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700">Signature Secret</label>
-                            <div class="relative">
-                                <input type="password" name="accurate_signature_secret" id="editSignatureSecret"
-                                    class="w-full border rounded px-3 py-2 pr-10">
-                                <button type="button" onclick="togglePassword('editSignatureSecret', this)"
-                                    class="absolute right-2 top-2 text-gray-500">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            </div>
-                        </div>
                     </div>
 
                     <div class="flex justify-end gap-3 mt-4">
@@ -461,15 +351,11 @@
                 card.getAttribute('data-branch-name'),
                 card.getAttribute('data-branch-photo'),
                 card.getAttribute('data-branch-customer') ?? '',
-                card.getAttribute('data-branch-url-accurate') ?? '',
-                card.getAttribute('data-branch-auth-accurate') ?? '',
-                card.getAttribute('data-branch-session-accurate') ?? '',
-                card.getAttribute('data-branch-api-token') ?? '',
-                card.getAttribute('data-branch-signature-secret') ?? ''
+                card.getAttribute('data-branch-url-accurate') ?? ''
             );
         }
 
-        function openEditModal(id, name, photo, customer, urlAccurate, authAccurate, sessionAccurate, apiToken, signatureSecret) {
+        function openEditModal(id, name, photo, customer, urlAccurate) {
             document.getElementById('editModal').classList.remove('hidden');
             const form = document.getElementById('editForm');
             form.action = `/branch/${id}`;
@@ -477,11 +363,6 @@
             document.getElementById('editName').value = name || '';
             document.getElementById('editCustomerId').value = customer || '';
             document.getElementById('editUrlAccurate').value = urlAccurate || '';
-
-            document.getElementById('editAuthAccurate').value = authAccurate || '';
-            document.getElementById('editSessionAccurate').value = sessionAccurate || '';
-            document.getElementById('editApiToken').value = apiToken || '';
-            document.getElementById('editSignatureSecret').value = signatureSecret || '';
 
             const currentLogo = document.getElementById('currentLogo');
             if (photo && photo !== '') {

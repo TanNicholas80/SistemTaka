@@ -10,6 +10,7 @@ use Carbon\Carbon;
 use Exception;
 use GuzzleHttp\Promise\Utils;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -33,7 +34,7 @@ class FakturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -60,8 +61,8 @@ class FakturPenjualanController extends Controller
         }
 
         // Get API credentials from branch (auto-decrypted by model accessors)
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
@@ -268,7 +269,7 @@ class FakturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -296,8 +297,8 @@ class FakturPenjualanController extends Controller
      */
     private function getDeliveryOrdersFromAccurate(Branch $branch, string $baseUrl)
     {
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -440,7 +441,7 @@ class FakturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return response()->json([
                 'success' => false,
                 'message' => 'Kredensial API Accurate untuk cabang ini belum diatur.'
@@ -448,8 +449,8 @@ class FakturPenjualanController extends Controller
         }
 
         // Get API credentials from branch (auto-decrypted by model accessors)
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
@@ -543,7 +544,7 @@ class FakturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -619,8 +620,8 @@ class FakturPenjualanController extends Controller
             ]);
 
             // Get API credentials from branch (auto-decrypted by model accessors)
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
@@ -821,7 +822,7 @@ class FakturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -848,8 +849,8 @@ class FakturPenjualanController extends Controller
 
         try {
             // 1. Ambil token dari branch (auto-decrypted by model accessors)
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
             $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');

@@ -578,8 +578,10 @@
 
 
         $(document).ready(function () {
-            //Initialize Select2 Elements
-            $('.select2').select2()
+            $('.select2').select2();
+            $('.select2bs4').select2({
+                theme: 'bootstrap4'
+            });
         });
 
         //Bootstrap Duallistbox
@@ -665,6 +667,10 @@
             });
         });
 
+        $(function () {
+            $('[data-toggle="tooltip"]').tooltip();
+        });
+
         // Toast notifications
         @if(session('success'))
             const ToastSuccess = Swal.mixin({
@@ -711,6 +717,7 @@
                 });
             @endif
     </script>
+    @stack('scripts')
 </body>
 
 </html>

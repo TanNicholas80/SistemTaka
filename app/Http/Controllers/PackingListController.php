@@ -2,9 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\Barcode;
+use App\Models\Branch;
 use App\Models\PackingList;
+use App\Models\RawBarcode;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class PackingListController extends Controller
 {
@@ -21,9 +26,18 @@ class PackingListController extends Controller
         $branchId = session('active_branch');
         $packingList = PackingList::forBranch($branchId)->findOrFail($id);
 
-        $barcodes = $packingList->barcodes()
-            ->forBranch($branchId)
-            ->get();
+        // Jika packing list masih pending, tampilkan data dari raw_barcodes (hasil tarik dari SAP).
+        // Jika sudah approved, tampilkan data dari barcodes (data final/ter-approve).
+        if (($packingList->status ?? PackingList::STATUS_PENDING) === PackingList::STATUS_APPROVED) {
+            $barcodes = $packingList->barcodes()
+                ->forBranch($branchId)
+                ->get();
+        } else {
+            // RawBarcode tidak punya scopeForBranch, jadi filter pakai kode_customer dari packing list.
+            $barcodes = $packingList->rawBarcodes()
+                ->where('kode_customer', $packingList->kode_customer)
+                ->get();
+        }
 
         return view('packing_list.detail', [
             'data' => $packingList,

@@ -11,6 +11,7 @@ use App\Models\PenerimaanBarang;
 use App\Models\HasilStockOpname;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -54,7 +55,7 @@ class DashboardController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
+        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -68,8 +69,8 @@ class DashboardController extends Controller
         }
 
         // Get API credentials from branch (auto-decrypted by model accessors)
-        $apiToken = $branch->accurate_api_token;
-        $signatureSecret = $branch->accurate_signature_secret;
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -85,8 +86,8 @@ class DashboardController extends Controller
         // Hitung statistik dasar (data lokal - cepat) filtered by kode_customer
         $totalPenjualan = KasirPenjualan::where('kode_customer', $branch->customer_id)->count();
         $barangSiapJual = Barcode::where('status', 'uploaded')
-            ->whereNotNull('panjang_mlc')
-            ->where('panjang_mlc', '>', 0)
+            ->whereNotNull('length')
+            ->where('length', '>', 0)
             ->where('kode_customer', $branch->customer_id)
             ->count();
         $totalPackingList = PackingList::where('kode_customer', $branch->customer_id)->count();
