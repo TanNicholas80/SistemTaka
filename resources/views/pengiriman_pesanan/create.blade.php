@@ -633,15 +633,16 @@
                 const barcode = input.value.trim();
                 if (!barcode) return;
 
-                // Jika ada serial number cache dari Accurate, gunakan itu
-                if (serialNumberCache.length > 0) {
+                // Check in local cache first
+                const cachedEntry = serialNumberCache.find(sn => sn.barcode === barcode);
+                if (cachedEntry) {
                     input.value = '';
                     input.focus();
                     handleCachedScan(barcode);
                 } else {
-                    // Fallback: scan via local DB
+                    // Fallback: scan via Accurate API in real-time
                     input.disabled = true;
-                    handleLocalDbScan(barcode, input);
+                    handleAccurateScan(barcode, input);
                 }
             }
         }
@@ -666,14 +667,19 @@
             processScanResult(matchedItemIndex, cachedEntry.quantity, barcode, cachedEntry.itemName);
         }
 
-        function handleLocalDbScan(barcode, input) {
-            fetch('{{ route("temp_scan.scan_outbound") }}', {
+        function handleAccurateScan(barcode, input) {
+            const itemNos = detailItems.map(i => i.item?.no).filter(n => n);
+            
+            fetch('{{ route("pengiriman_pesanan.scan_accurate") }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': '{{ csrf_token() }}'
                 },
-                body: JSON.stringify({ barcode: barcode })
+                body: JSON.stringify({ 
+                    barcode: barcode,
+                    itemNos: itemNos
+                })
             })
                 .then(res => res.json())
                 .then(data => {
@@ -681,27 +687,15 @@
                     input.value = '';
                     input.focus();
 
-                    if (data.status === 'success') {
-                        let mcf = (data.data.material_code_formatted || '').trim();
-                        let matchedItemIndex = detailItems.findIndex(i => {
-                            if (!i.item) return false;
-                            const itemNo = (i.item.no || '').trim();
-                            const itemName = (i.item.name || '').trim();
-                            return (
-                                itemNo === data.data.kode_barang ||
-                                itemNo === data.data.alias_nama ||
-                                itemNo === mcf ||
-                                (mcf && itemNo.startsWith(mcf)) ||
-                                (mcf && mcf.startsWith(itemNo)) ||
-                                itemName === data.data.keterangan
-                            );
-                        });
+                    if (data.success) {
+                        const matchedItemIndex = detailItems.findIndex(i => 
+                            i.item && i.item.no === data.data.itemNo
+                        );
 
                         if (matchedItemIndex !== -1) {
-                            const qtyFromDb = (data.data.panjang_mlc ?? data.data.length ?? 0);
-                            processScanResult(matchedItemIndex, qtyFromDb, barcode, detailItems[matchedItemIndex].item.name);
+                            processScanResult(matchedItemIndex, data.data.quantity, barcode, data.data.itemName);
                         } else {
-                            Swal.fire({ icon: 'error', title: 'Tidak Cocok', text: `Barang (${data.data.kode_barang}) tidak ada di dalam detail pesanan SO!` });
+                            Swal.fire({ icon: 'error', title: 'Tidak Cocok', text: `Barang (${data.data.itemName}) tidak ada di dalam detail pesanan SO!` });
                         }
                     } else {
                         Swal.fire({ icon: 'error', title: 'Error Scan', text: data.message });

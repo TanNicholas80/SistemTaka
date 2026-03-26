@@ -1473,4 +1473,70 @@ class PengirimanPesananController extends Controller
 
         return view('pengiriman_pesanan.detail', $dataToCache);
     }
+    /**
+     * AJAX: Scan barcode via Accurate API (Real-time)
+     */
+    public function scanBarcodeAccurate(Request $request)
+    {
+        $barcode = $request->input('barcode');
+        $itemNos = $request->input('itemNos', []);
+        
+        if (!$barcode) {
+            return response()->json(['success' => false, 'message' => 'Barcode tidak boleh kosong.'], 400);
+        }
+
+        $activeBranchId = session('active_branch');
+        if (!$activeBranchId) {
+            return response()->json(['success' => false, 'message' => 'Tidak ada cabang yang aktif.'], 400);
+        }
+
+        $branch = Branch::find($activeBranchId);
+        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+            return response()->json(['success' => false, 'message' => 'Kredensial API tidak tersedia.'], 400);
+        }
+
+        $apiToken = Auth::user()->accurate_api_token;
+        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $timestamp = Carbon::now()->toIso8601String();
+        $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+        try {
+            // Search in SN reports for each item in the SO
+            foreach ($itemNos as $itemNo) {
+                $detailUrl = $this->buildApiUrl($branch, 'report/serial-number-per-warehouse.do');
+                $snResponse = Http::withoutVerifying()->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'X-Api-Signature' => $signature,
+                    'X-Api-Timestamp' => $timestamp,
+                ])->get($detailUrl, ['itemNo' => $itemNo]);
+
+                if ($snResponse->successful()) {
+                    $snData = $snResponse->json()['d'] ?? [];
+                    foreach ($snData as $entry) {
+                        $snNumber = $entry['serialNumber']['number'] ?? null;
+                        if ($snNumber === $barcode) {
+                            $qty = (float)($entry['quantity'] ?? 0);
+                            if ($qty > 0) {
+                                return response()->json([
+                                    'success' => true,
+                                    'data' => [
+                                        'itemNo' => $itemNo,
+                                        'quantity' => $qty,
+                                        'barcode' => $barcode,
+                                        'itemName' => $entry['item']['name'] ?? '',
+                                        'warehouseName' => $entry['warehouse']['name'] ?? ''
+                                    ]
+                                ]);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return response()->json(['success' => false, 'message' => "Barcode ($barcode) tidak ditemukan di Accurate untuk item tersebut."], 404);
+        } catch (\Exception $e) {
+            Log::error('Error scanBarcodeAccurate: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan sistem saat menghubungi Accurate.'], 500);
+        }
+    }
 }
