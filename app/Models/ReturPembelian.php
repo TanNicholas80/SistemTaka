@@ -22,19 +22,10 @@ class ReturPembelian extends Model
         'vendor',
         'return_type',
         'faktur_pembelian_id',
-        'penerimaan_barang_id',
-        'alamat',
-        'keterangan',
-        'syarat_bayar',
-        'kena_pajak',
-        'total_termasuk_pajak',
-        'diskon_keseluruhan',
     ];
 
     protected $casts = [
         'tanggal_retur' => 'date',
-        'kena_pajak' => 'boolean',
-        'total_termasuk_pajak' => 'boolean',
     ];
 
     /**
@@ -119,8 +110,9 @@ class ReturPembelian extends Model
                 return $prefix . '00001';
             }
 
-            if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
-                Log::warning('Kredensial API Accurate untuk cabang belum diatur saat generate no_retur retur pembelian, menggunakan default');
+            $user = Auth::user();
+            if (!$user || !$user->accurate_api_token || !$user->accurate_signature_secret) {
+                Log::warning('Kredensial API Accurate untuk user belum diatur saat generate no_retur retur pembelian, menggunakan default');
                 return $prefix . '00001';
             }
 
@@ -142,8 +134,8 @@ class ReturPembelian extends Model
                 return $prefix . $formattedIter;
             }
 
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            $apiToken = $user->accurate_api_token;
+            $signatureSecret = $user->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
             $listApiUrl = self::getListApiUrl($branch);
@@ -153,10 +145,10 @@ class ReturPembelian extends Model
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
             ])->get($listApiUrl, [
-                'fields' => 'number',
-                'sp.page' => 1,
-                'sp.pageSize' => 100,
-            ]);
+                        'fields' => 'number',
+                        'sp.page' => 1,
+                        'sp.pageSize' => 100,
+                    ]);
 
             if ($response->successful()) {
                 $responseData = $response->json();
@@ -165,7 +157,7 @@ class ReturPembelian extends Model
                         return isset($item['number']) && strpos($item['number'], $prefix) === 0;
                     });
                     if (!empty($filtered)) {
-                        usort($filtered, fn ($a, $b) => strcmp($b['number'], $a['number']));
+                        usort($filtered, fn($a, $b) => strcmp($b['number'], $a['number']));
                         $lastNoRetur = $filtered[0]['number'];
                         $lastIter = (int) substr($lastNoRetur, strrpos($lastNoRetur, '.') + 1);
                         $formattedIter = str_pad($lastIter + 1, 5, '0', STR_PAD_LEFT);
