@@ -22,20 +22,11 @@ class ReturPenjualan extends Model
         'pelanggan_id',
         'return_type',
         'return_status_type',
-        'faktur_penjualan_id',
-        'pengiriman_pesanan_id',
-        'alamat',
-        'keterangan',
-        'syarat_bayar',
-        'kena_pajak',
-        'total_termasuk_pajak',
-        'diskon_keseluruhan',
+        'no_faktur_penjualan',
     ];
 
     protected $casts = [
         'tanggal_retur' => 'date',
-        'kena_pajak' => 'boolean',
-        'total_termasuk_pajak' => 'boolean',
     ];
 
     /**
@@ -98,14 +89,13 @@ class ReturPenjualan extends Model
     }
 
     /**
-     * Generate nomor retur penjualan format: SRT.{tahun}.{bulan}.00001
+     * Generate nomor retur penjualan format: SRT.{tahun}.00001
      */
     public static function generateNoRetur(?string $kodeCustomer = null): string
     {
         $now = Carbon::now();
         $year = $now->format('Y');
-        $month = $now->format('m');
-        $prefix = "SRT.{$year}.{$month}.";
+        $prefix = "SRT.{$year}.";
 
         try {
             $activeBranchId = session('active_branch');
@@ -120,63 +110,56 @@ class ReturPenjualan extends Model
                 return $prefix . '00001';
             }
 
-            if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
-                Log::warning('Kredensial API Accurate untuk cabang belum diatur saat generate no_retur retur penjualan, menggunakan default');
+            // Ambil API credentials dari User (mengikuti pola PenerimaanBarang::generateNpb)
+            $user = Auth::user();
+            if (
+                !$user ||
+                !$user->accurate_api_token ||
+                !$user->accurate_signature_secret
+            ) {
+                Log::warning('Kredensial API Accurate user belum diatur saat generate no_retur retur penjualan, menggunakan default');
                 return $prefix . '00001';
             }
 
+            $apiToken = $user->accurate_api_token;
+            $signatureSecret = $user->accurate_signature_secret;
+
+            $maxIter = 0;
+
+            // 1) Cek nomor terakhir dari Accurate API
+            $lastNoReturFromAPI = self::getLastNoReturFromAPI(
+                $apiToken,
+                $signatureSecret,
+                $prefix,
+                $branch
+            );
+            if ($lastNoReturFromAPI) {
+                $iterVal = (int) substr($lastNoReturFromAPI, strrpos($lastNoReturFromAPI, '.') + 1);
+                $maxIter = max($maxIter, $iterVal);
+            }
+
+            // 2) Cek nomor terakhir dari DB lokal (jika ada transaksi belum tersinkronisasi)
             $query = self::where('no_retur', 'like', $prefix . '%');
-            $customerId = $kodeCustomer ?? $branch->customer_id;
+            $customerId = $kodeCustomer ?? $branch->customer_id ?? null;
             if ($customerId) {
                 $query->where('kode_customer', $customerId);
             }
             $lastEntry = $query->orderBy('no_retur', 'desc')->first();
-
             if ($lastEntry && !empty($lastEntry->no_retur)) {
                 $lastNoRetur = $lastEntry->no_retur;
-                $lastIter = (int) substr($lastNoRetur, strrpos($lastNoRetur, '.') + 1);
-                $formattedIter = str_pad($lastIter + 1, 5, '0', STR_PAD_LEFT);
-                Log::info('Generated no_retur retur penjualan from local database', [
-                    'last_no_retur' => $lastNoRetur,
-                    'new_no_retur' => $prefix . $formattedIter,
-                ]);
-                return $prefix . $formattedIter;
+                $iterVal = (int) substr($lastNoRetur, strrpos($lastNoRetur, '.') + 1);
+                $maxIter = max($maxIter, $iterVal);
             }
 
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
-            $timestamp = Carbon::now()->toIso8601String();
-            $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
-            $listApiUrl = self::getListApiUrl($branch);
-
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $apiToken,
-                'X-Api-Signature' => $signature,
-                'X-Api-Timestamp' => $timestamp,
-            ])->get($listApiUrl, [
-                'fields' => 'number',
-                'sp.page' => 1,
-                'sp.pageSize' => 100,
-            ]);
-
-            if ($response->successful()) {
-                $responseData = $response->json();
-                if (isset($responseData['d']) && is_array($responseData['d'])) {
-                    $filtered = array_filter($responseData['d'], function ($item) use ($prefix) {
-                        return isset($item['number']) && strpos($item['number'], $prefix) === 0;
-                    });
-                    if (!empty($filtered)) {
-                        usort($filtered, fn ($a, $b) => strcmp($b['number'], $a['number']));
-                        $lastNoRetur = $filtered[0]['number'];
-                        $lastIter = (int) substr($lastNoRetur, strrpos($lastNoRetur, '.') + 1);
-                        $formattedIter = str_pad($lastIter + 1, 5, '0', STR_PAD_LEFT);
-                        Log::info('Generated no_retur retur penjualan from API', [
-                            'last_no_retur' => $lastNoRetur,
-                            'new_no_retur' => $prefix . $formattedIter,
-                        ]);
-                        return $prefix . $formattedIter;
-                    }
-                }
+            if ($maxIter > 0) {
+                $newIter = $maxIter + 1;
+                $formattedIter = str_pad($newIter, 5, '0', STR_PAD_LEFT);
+                Log::info('Generated no_retur retur penjualan from combined check (Local + API)', [
+                    'new_no_retur' => $prefix . $formattedIter,
+                    'kode_customer' => $customerId,
+                    'max_iter' => $maxIter,
+                ]);
+                return $prefix . $formattedIter;
             }
         } catch (\Exception $e) {
             Log::error('Exception generating no_retur retur penjualan: ' . $e->getMessage(), [
@@ -186,5 +169,77 @@ class ReturPenjualan extends Model
 
         Log::warning('Using fallback no_retur retur penjualan: ' . $prefix . '00001');
         return $prefix . '00001';
+    }
+
+    /**
+     * Ambil nomor terakhir no_retur dari Accurate API berdasarkan prefix.
+     */
+    private static function getLastNoReturFromAPI(
+        string $apiToken,
+        string $signatureSecret,
+        string $prefix,
+        Branch $branch
+    ): ?string {
+        $listApiUrl = self::getListApiUrl($branch);
+
+        $page = 1;
+        $pageSize = 100;
+        $all = [];
+        $maxPages = 10;
+
+        do {
+            $timestamp = Carbon::now()->toIso8601String();
+            $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+            $response = Http::timeout(60)->withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($listApiUrl, [
+                'fields' => 'number',
+                'sp.page' => $page,
+                'sp.pageSize' => $pageSize,
+                'sp.sort' => 'number|desc',
+            ]);
+
+            if (!$response->successful()) {
+                Log::error('API request failed saat getLastNoReturFromAPI', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'page' => $page,
+                ]);
+                break;
+            }
+
+            $responseData = $response->json();
+            if (!isset($responseData['d']) || !is_array($responseData['d'])) {
+                break;
+            }
+
+            $pageData = $responseData['d'];
+            $all = array_merge($all, $pageData);
+
+            $totalItems = $responseData['sp']['rowCount'] ?? 0;
+            $hasMore = count($pageData) === $pageSize && (($page * $pageSize) < $totalItems);
+            $page++;
+        } while ($hasMore && $page <= $maxPages);
+
+        if (empty($all)) {
+            return null;
+        }
+
+        $filtered = array_filter($all, function ($item) use ($prefix) {
+            return isset($item['number']) && strpos((string) $item['number'], $prefix) === 0;
+        });
+
+        if (empty($filtered)) {
+            return null;
+        }
+
+        usort($filtered, function ($a, $b) {
+            return strcmp((string) ($b['number'] ?? ''), (string) ($a['number'] ?? ''));
+        });
+
+        return (string) ($filtered[0]['number'] ?? null);
     }
 }

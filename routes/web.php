@@ -14,6 +14,7 @@ use App\Http\Controllers\HasilStockOpnameController;
 use App\Http\Controllers\PackingListController;
 use App\Http\Controllers\PelangganController;
 use App\Http\Controllers\PenerimaanBarangController;
+use App\Http\Controllers\PrintBarcodeReturController;
 use App\Http\Controllers\PengirimanPesananController;
 use App\Http\Controllers\PerintahStockOpnameController;
 use App\Http\Controllers\PesananPembelianController;
@@ -126,13 +127,6 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/penerimaan-barang/qrcode-non-pl', [PenerimaanBarangController::class, 'qrcodeNonPl'])->name('penerimaan-barang.qrcode-non-pl');
         Route::post('/penerimaan-barang/non-pl/print-pdf', [PenerimaanBarangController::class, 'printNonPlLabelsPdf'])->name('penerimaan-barang.non-pl.print-pdf');
 
-        // Temp Scan Routes
-        Route::post('/penerimaan-barang/temp/upload-txt', [TempScanController::class, 'uploadTxt'])->name('temp_scan.upload_txt');
-        Route::post('/penerimaan-barang/temp/scan-physical', [TempScanController::class, 'scanPhysical'])->name('temp_scan.scan_physical');
-        Route::post('/penerimaan-barang/temp/flush', [TempScanController::class, 'flush'])->name('temp_scan.flush');
-        Route::get('/penerimaan-barang/temp/scanned-items', [TempScanController::class, 'getScannedItems'])->name('temp_scan.get_scanned_items');
-        Route::post('/pengiriman-pesanan/temp/scan-outbound', [TempScanController::class, 'scanOutbound'])->name('temp_scan.scan_outbound');
-
         // Point Of Sales (POS) - For Non-Owner
         Route::get('/cashier/create', [SalesController::class, 'create'])->name('cashier.create');
         Route::post('/cashier/store', [SalesController::class, 'store'])->name('cashier.store');
@@ -155,6 +149,11 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/retur-penjualan/sales-invoices', [ReturPenjualanController::class, 'getSalesInvoicesAjax'])->name('retur_penjualan.sales_invoices');
         Route::get('/retur-penjualan/referensi-detail', [ReturPenjualanController::class, 'getReferensiDetailAjax'])->name('retur_penjualan.referensi_detail');
         Route::post('/retur-penjualan/store', [ReturPenjualanController::class, 'store'])->name('retur_penjualan.store');
+
+        // Print Barcode Retur
+        Route::get('/print-barcode-retur', [PrintBarcodeReturController::class, 'index'])->name('print_barcode_retur.index');
+        Route::get('/print-barcode-retur/sales-invoices', [PrintBarcodeReturController::class, 'getSalesInvoicesForPrintAjax'])->name('print_barcode_retur.sales_invoices');
+        Route::post('/print-barcode-retur/resolve', [PrintBarcodeReturController::class, 'resolveFromInvoice'])->name('print_barcode_retur.resolve');
 
         // Retur Pembelian - For Non-Owner
         Route::get('/retur-pembelian/create', [ReturPembelianController::class, 'create'])->name('retur_pembelian.create');

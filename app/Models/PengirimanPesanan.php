@@ -201,7 +201,6 @@ class PengirimanPesanan extends Model
     private static function getLastNoPengirimanFromAPI($apiToken, $signatureSecret, $prefix, Branch $branch)
     {
         $baseUrl = $branch->getAccurateApiBaseUrl() . '/delivery-order/list.do';
-        $currentYear = Carbon::now()->format('Y');
         $allDeliveryOrders = [];
         $page = 1;
         $pageSize = 100; // Gunakan page size yang lebih besar untuk efisiensi
