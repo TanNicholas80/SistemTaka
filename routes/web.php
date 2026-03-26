@@ -24,6 +24,7 @@ use App\Http\Controllers\SalesController;
 use App\Http\Controllers\SuratJalanController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\TempScanController;
+use App\Http\Controllers\PrintBarcodeController;
 
 Route::get('/', [AuthController::class, 'login'])->name('login');
 Route::post('/login-proses', [AuthController::class, 'login_proses'])->name('login-proses');
@@ -126,6 +127,13 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/penerimaan-barang/generate-barcode-non-pl', [PenerimaanBarangController::class, 'generateBarcodeNonPL'])->name('penerimaan-barang.generate-barcode-non-pl');
         Route::get('/penerimaan-barang/qrcode-non-pl', [PenerimaanBarangController::class, 'qrcodeNonPl'])->name('penerimaan-barang.qrcode-non-pl');
         Route::post('/penerimaan-barang/non-pl/print-pdf', [PenerimaanBarangController::class, 'printNonPlLabelsPdf'])->name('penerimaan-barang.non-pl.print-pdf');
+
+        // Print Barcode
+        Route::get('/print-barcode', [PrintBarcodeController::class, 'index'])->name('print_barcode.index');
+        Route::get('/print-barcode/search-items', [PrintBarcodeController::class, 'searchItems'])->name('print_barcode.search_items');
+        Route::get('/print-barcode/serials', [PrintBarcodeController::class, 'getSerials'])->name('print_barcode.serials');
+        Route::get('/print-barcode/reprint/{serialNo}', [PrintBarcodeController::class, 'reprint'])->name('print_barcode.reprint')->where('serialNo', '.+');
+        Route::post('/print-barcode/bulk-reprint', [PrintBarcodeController::class, 'bulkReprint'])->name('print_barcode.bulk_reprint');
 
         // Point Of Sales (POS) - For Non-Owner
         Route::get('/cashier/create', [SalesController::class, 'create'])->name('cashier.create');

@@ -248,63 +248,81 @@
                         @endif
 
                         @if (Auth::user()->role !== 'owner')
-                        <li class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') ? 'menu-open' : '' }}">
-                            <a href="#" class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') ? 'active' : '' }}">
-                                <i class="nav-icon fas fa-warehouse"></i>
-                                <p>Penerimaan <i class="right fas fa-angle-left"></i></p>
-                            </a>
-                            <ul class="nav nav-treeview">
-                                <li class="nav-item">
-                                    <a href="{{ route('pesanan_pembelian.index') }}" class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Pesanan Pembelian</p>
-                                    </a>
-                                </li>
+                            <li
+                                class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('print_barcode.*') ? 'menu-open' : '' }}">
+                                <a href="#"
+                                    class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('print_barcode.*') ? 'active' : '' }}">
+                                    <i class="nav-icon fas fa-warehouse"></i>
+                                    <p>Penerimaan <i class="right fas fa-angle-left"></i></p>
+                                </a>
+                                <ul class="nav nav-treeview">
+                                    <li class="nav-item">
+                                        <a href="{{ route('pesanan_pembelian.index') }}"
+                                            class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Pesanan Pembelian</p>
+                                        </a>
+                                    </li>
 
-                                <li class="nav-item {{ Request::routeIs('barcode.*') || Request::is('packing-list*') || Request::is('barang-masuk*') ? 'menu-open' : '' }}">
-                                    <a href="#" class="nav-link {{ Request::routeIs('barcode.*') || Request::is('packing-list*') || Request::is('barang-masuk*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Barcode <i class="right fas fa-angle-left"></i></p>
-                                    </a>
-                                    <ul class="nav nav-treeview ml-3">
-                                        <li class="nav-item">
-                                            <a href="{{ route('barcode.index') }}" class="nav-link {{ Request::routeIs('barcode.*') ? 'active' : '' }}">
-                                                <i class="far fa-dot-circle nav-icon"></i>
-                                                <p>Daftar Barcode</p>
-                                            </a>
-                                        </li>
+                                    <li
+                                        class="nav-item {{ Request::routeIs('barcode.*') || Request::is('packing-list*') || Request::is('barang-masuk*') ? 'menu-open' : '' }}">
+                                        <a href="#"
+                                            class="nav-link {{ Request::routeIs('barcode.*') || Request::is('packing-list*') || Request::is('barang-masuk*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Barcode <i class="right fas fa-angle-left"></i></p>
+                                        </a>
+                                        <ul class="nav nav-treeview ml-3">
+                                            <li class="nav-item">
+                                                <a href="{{ route('barcode.index') }}"
+                                                    class="nav-link {{ Request::routeIs('barcode.*') ? 'active' : '' }}">
+                                                    <i class="far fa-dot-circle nav-icon"></i>
+                                                    <p>Daftar Barcode</p>
+                                                </a>
+                                            </li>
 
-                                        <li class="nav-item {{ Request::is('packing-list*') || Request::is('barang-masuk*') ? 'menu-open' : '' }}">
-                                            <a href="#" class="nav-link {{ Request::is('packing-list*') || Request::is('barang-masuk*') ? 'active' : '' }}">
-                                                <i class="far fa-dot-circle nav-icon"></i>
-                                                <p>Packing List <i class="right fas fa-angle-left"></i></p>
-                                            </a>
-                                            <ul class="nav nav-treeview ml-3">
-                                                <li class="nav-item">
-                                                    <a href="{{ route('packing-list.index') }}" class="nav-link {{ Request::is('packing-list*') ? 'active' : '' }}">
-                                                        <i class="fas fa-minus nav-icon"></i>
-                                                        <p>Packing List</p>
-                                                    </a>
-                                                </li>
-                                                <li class="nav-item">
-                                                    <a href="{{ route('barang-masuk.index') }}" class="nav-link {{ Request::is('barang-masuk*') ? 'active' : '' }}">
-                                                        <i class="fas fa-minus nav-icon"></i>
-                                                        <p>Scan Barang</p>
-                                                    </a>
-                                                </li>
-                                            </ul>
-                                        </li>
-                                    </ul>
-                                </li>
+                                            <li
+                                                class="nav-item {{ Request::is('packing-list*') || Request::is('barang-masuk*') ? 'menu-open' : '' }}">
+                                                <a href="#"
+                                                    class="nav-link {{ Request::is('packing-list*') || Request::is('barang-masuk*') ? 'active' : '' }}">
+                                                    <i class="far fa-dot-circle nav-icon"></i>
+                                                    <p>Packing List <i class="right fas fa-angle-left"></i></p>
+                                                </a>
+                                                <ul class="nav nav-treeview ml-3">
+                                                    <li class="nav-item">
+                                                        <a href="{{ route('packing-list.index') }}"
+                                                            class="nav-link {{ Request::is('packing-list*') ? 'active' : '' }}">
+                                                            <i class="fas fa-minus nav-icon"></i>
+                                                            <p>Packing List</p>
+                                                        </a>
+                                                    </li>
+                                                    <li class="nav-item">
+                                                        <a href="{{ route('barang-masuk.index') }}"
+                                                            class="nav-link {{ Request::is('barang-masuk*') ? 'active' : '' }}">
+                                                            <i class="fas fa-minus nav-icon"></i>
+                                                            <p>Scan Barang</p>
+                                                        </a>
+                                                    </li>
+                                                </ul>
+                                            </li>
+                                        </ul>
+                                    </li>
 
-                                <li class="nav-item">
-                                    <a href="{{ route('penerimaan-barang.index') }}" class="nav-link {{ Request::is('penerimaan-barang*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Penerimaan Barang</p>
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
+                                    <li class="nav-item">
+                                        <a href="{{ route('penerimaan-barang.index') }}"
+                                            class="nav-link {{ Request::is('penerimaan-barang*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Penerimaan Barang</p>
+                                        </a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a href="{{ route('print_barcode.index') }}"
+                                            class="nav-link {{ Request::routeIs('print_barcode.*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Reprint Barcode</p>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </li>
                         @endif
 
                         <li
@@ -572,7 +590,7 @@
         });
 
 
-        $(document).ready(function() {
+        $(document).ready(function () {
             $('.select2').select2();
             $('.select2bs4').select2({
                 theme: 'bootstrap4'
@@ -662,7 +680,7 @@
             });
         });
 
-        $(function() {
+        $(function () {
             $('[data-toggle="tooltip"]').tooltip();
         });
 

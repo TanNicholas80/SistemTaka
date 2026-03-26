@@ -544,8 +544,8 @@ class PenerimaanBarangController extends Controller
                         'X-Api-Signature' => $signature,
                         'X-Api-Timestamp' => $timestamp,
                     ])->get($this->buildApiUrl($branch, 'vendor/detail.do'), [
-                        'vendorNo' => $vendorData['vendorNo'],
-                    ]);
+                                'vendorNo' => $vendorData['vendorNo'],
+                            ]);
 
                     if ($vendorDetailResponse->successful()) {
                         $vendorResData = $vendorDetailResponse->json();
@@ -571,10 +571,12 @@ class PenerimaanBarangController extends Controller
                     $unitPrice = (float) ($detail['unitPrice'] ?? 0);
                     $uomAcc = $detail['itemUnit']['name'] ?? ($detail['item']['unit1']['name'] ?? 'METER');
 
-                    if (!$itemNo) continue;
+                    if (!$itemNo)
+                        continue;
 
                     $itemAllowed = in_array($cf1, $allowedCharField1) || $vendorCategoryAllowed;
-                    if (!$itemAllowed) continue;
+                    if (!$itemAllowed)
+                        continue;
 
                     $nameWithIndentStrip = $detail['item']['nameWithIndentStrip'] ?? null;
 
@@ -624,7 +626,6 @@ class PenerimaanBarangController extends Controller
             $barcodes = Barcode::whereIn('no_packing_list', $nplList)
                 ->where('kode_customer', $branch->customer_id)
                 ->whereIn('status', [Barcode::STATUS_APPROVED, Barcode::STATUS_UPLOADED])
-                // `keterangan` adalah alias model (longtext), tidak bisa dipakai untuk ORDER BY SQL
                 ->orderBy('longtext', 'asc')
                 ->get();
 
@@ -735,8 +736,7 @@ class PenerimaanBarangController extends Controller
         $updateIdPb = false,
         $includeVendor = false,
         string $packingListStatus = PackingList::STATUS_APPROVED
-    )
-    {
+    ) {
         $activeBranchId = session('active_branch');
         if (!$activeBranchId) {
             throw new \Exception('Cabang belum dipilih.');
@@ -802,7 +802,7 @@ class PenerimaanBarangController extends Controller
             if ($detailReceiveItemResponse->successful() && isset($detailReceiveItemResponse->json()['d'])) {
                 $resData = $detailReceiveItemResponse->json();
                 $receiveItemDetails = [];
-                
+
                 foreach ($resData['d']['detailItem'] ?? [] as $detail) {
                     $serialNumbers = [];
                     foreach ($detail['detailSerialNumber'] ?? [] as $sn) {
@@ -851,7 +851,10 @@ class PenerimaanBarangController extends Controller
         $nplList = $packingLists->pluck('npl')->toArray();
         $barcodes = Barcode::whereIn('no_packing_list', $nplList)
             ->where('kode_customer', $branch->customer_id)
-            ->whereIn('status', [Barcode::STATUS_APPROVED, Barcode::STATUS_UPLOADED])
+            ->where(function ($q) use ($npb) {
+                $q->whereIn('status', [Barcode::STATUS_APPROVED, Barcode::STATUS_UPLOADED])
+                    ->orWhere('id_pb', $npb);
+            })
             ->get();
 
         if ($barcodes->isEmpty()) {
@@ -1478,8 +1481,8 @@ class PenerimaanBarangController extends Controller
                     'X-Api-Signature' => $sigVendor,
                     'X-Api-Timestamp' => $tsVendor,
                 ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
-                    'number' => $validatedData['no_po'],
-                ]);
+                            'number' => $validatedData['no_po'],
+                        ]);
 
                 if ($poResponse->successful()) {
                     $resData = $poResponse->json();
@@ -1497,7 +1500,8 @@ class PenerimaanBarangController extends Controller
                     $unitPrice = (float) ($nlItem['unit_price'] ?? 0);
                     $itemQtyLimit = (float) ($nlItem['kuantitas'] ?? 0);
 
-                    if (!$itemNo || empty($serialNumbers)) continue;
+                    if (!$itemNo || empty($serialNumbers))
+                        continue;
 
                     $totalQty = 0;
                     $detailSerials = [];
@@ -1636,7 +1640,8 @@ class PenerimaanBarangController extends Controller
                 if ($mode === 'packing_list' && !empty($packingListIds)) {
                     foreach ($packingListIds as $plId) {
                         $pl = PackingList::find($plId);
-                        if (!$pl) continue;
+                        if (!$pl)
+                            continue;
 
                         $allBarcodeIds = Barcode::where('no_packing_list', $pl->npl)
                             ->where('kode_customer', $branch->customer_id)
@@ -1663,7 +1668,8 @@ class PenerimaanBarangController extends Controller
                         foreach ($nonPlItemsRaw as $nlItem) {
                             foreach (($nlItem['serial_numbers'] ?? []) as $sn) {
                                 $t = (string) ($sn['reservation_token'] ?? '');
-                                if ($t !== '') $tokens[$t] = true;
+                                if ($t !== '')
+                                    $tokens[$t] = true;
                             }
                         }
                     }
@@ -1805,8 +1811,8 @@ class PenerimaanBarangController extends Controller
                             'X-Api-Signature' => $signature,
                             'X-Api-Timestamp' => $timestamp,
                         ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
-                            'number' => $penerimaanBarang->no_po,
-                        ]);
+                                    'number' => $penerimaanBarang->no_po,
+                                ]);
 
                         if ($poResponse->successful()) {
                             $resData = $poResponse->json();
@@ -1830,12 +1836,18 @@ class PenerimaanBarangController extends Controller
                         $itemName = $grp->first()->item_name ?? '-';
                         $uomAcc = $uomMap[$itemNo] ?? 'M';
 
+                        $serialNumbers = $grp->map(fn($row) => [
+                            'serialNumberNo' => $row->barcode,
+                            'quantity' => round((float) $row->quantity, 2),
+                        ])->values()->all();
+
                         return [
                             'nama_barang' => $itemName,
                             'kode_barang' => $itemNo,
                             'panjang_total' => round((float) $sumQty, 2),
                             'uom_acc' => $uomAcc,
                             'unit' => $uomAcc === 'YD' ? 'YD' : 'METER',
+                            'serial_numbers' => $serialNumbers,
                         ];
                     })
                     ->values()

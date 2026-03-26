@@ -130,6 +130,24 @@ class PackingListController extends Controller
                 'total_barcodes' => count($sapData),
             ]);
 
+            // Validasi: KODE_CUSTOMER dari SAP harus cocok dengan customer_id cabang aktif
+            $sapKodeCustomers = array_unique(array_filter(array_column($sapData, 'KODE_CUSTOMER')));
+            $mismatched = array_values(array_filter($sapKodeCustomers, fn($kc) => $kc !== $kodeCustomer));
+
+            if (!empty($mismatched)) {
+                Log::warning('SAP KODE_CUSTOMER tidak cocok dengan cabang aktif', [
+                    'npl' => $validated['npl'],
+                    'branch_customer_id' => $kodeCustomer,
+                    'sap_kode_customers' => $sapKodeCustomers,
+                ]);
+                return back()->withInput()->with(
+                    'error',
+                    'Packing List ini bukan milik cabang Anda. ' .
+                    'Kode Customer di SAP: ' . implode(', ', $mismatched) . ', ' .
+                    'Kode Customer cabang: ' . $kodeCustomer . '.'
+                );
+            }
+
         } catch (\Exception $e) {
             Log::error('SAP API exception', [
                 'npl' => $validated['npl'],

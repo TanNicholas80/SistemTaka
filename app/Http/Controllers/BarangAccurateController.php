@@ -69,7 +69,7 @@ class BarangAccurateController extends Controller
         $hasApiError = false; // Flag untuk error rate limit
 
         try {
-            $firstPageResponse = Http::withHeaders([
+            $firstPageResponse = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
