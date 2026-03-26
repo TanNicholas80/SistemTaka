@@ -82,7 +82,7 @@ class ReturPembelianController extends Controller
         // Selalu coba ambil data dari API terlebih dahulu
         try {
             // Fetch purchase return IDs from the API
-            $firstPageResponse = Http::withHeaders([
+            $firstPageResponse = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -112,7 +112,7 @@ class ReturPembelianController extends Controller
                     if ($totalPages > 1) {
                         // Buat array untuk menyimpan semua promise
                         $promises = [];
-                        $client = new \GuzzleHttp\Client();
+                        $client = new \GuzzleHttp\Client(['verify' => false]);
 
                         // Buat promise untuk setiap halaman (mulai dari halaman 2)
                         for ($page = 2; $page <= $totalPages; $page++) {
@@ -150,12 +150,12 @@ class ReturPembelianController extends Controller
                     // Setelah mendapatkan semua ID retur pembelian, ambil detail untuk masing-masing secara batch
                     $detailsResult = $this->fetchPurchaseReturnDetailsInBatches($allPurchaseReturns, $apiToken, $signature, $timestamp, $baseUrl);
                     $returPembelian = $detailsResult['details'];
-                    
+
                     // Cek jika ada error dari proses fetch detail
                     if ($detailsResult['has_error']) {
                         $hasApiError = true;
                     }
-                    
+
                     $apiSuccess = true;
                     Log::info('Data retur pembelian dari API berhasil diambil');
                 }
@@ -175,10 +175,12 @@ class ReturPembelianController extends Controller
             if (Cache::has($cacheKey)) {
                 $cachedData = Cache::get($cacheKey);
                 $returPembelian = $cachedData['returPembelian'] ?? [];
-                if (is_null($errorMessage)) $errorMessage = $cachedData['errorMessage'] ?? null;
+                if (is_null($errorMessage))
+                    $errorMessage = $cachedData['errorMessage'] ?? null;
                 Log::info('Data retur pembelian diambil dari cache karena API error');
             } else {
-                if (is_null($errorMessage)) $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache tersedia.';
+                if (is_null($errorMessage))
+                    $errorMessage = 'Gagal terhubung ke server Accurate dan tidak ada data cache tersedia.';
                 Log::warning('Tidak ada cache tersedia, menampilkan data kosong');
             }
         }
@@ -195,7 +197,7 @@ class ReturPembelianController extends Controller
         return view('retur_pembelian.index', compact('returPembelian', 'errorMessage'));
     }
 
-        /**
+    /**
      * Mengambil detail retur pembelian dalam batch untuk mengoptimalkan performa
      */
     private function fetchPurchaseReturnDetailsInBatches($purchaseReturns, $apiToken, $signature, $timestamp, $baseUrl, $batchSize = 5)
@@ -206,7 +208,7 @@ class ReturPembelianController extends Controller
 
         foreach ($batches as $batch) {
             $promises = [];
-            $client = new \GuzzleHttp\Client();
+            $client = new \GuzzleHttp\Client(['verify' => false]);
 
             foreach ($batch as $return) {
                 $detailUrl = $baseUrl . '/purchase-return/detail.do?id=' . $return['id'];
@@ -219,7 +221,8 @@ class ReturPembelianController extends Controller
                 ]);
             }
 
-            if (empty($promises)) continue;
+            if (empty($promises))
+                continue;
 
             // Jalankan batch promise secara paralel
             $results = Utils::settle($promises)->wait();
@@ -235,7 +238,7 @@ class ReturPembelianController extends Controller
                 } else {
                     $reason = $result['reason'];
                     Log::error("Failed to fetch retur pembelian detail for ID {$invoiceId}: " . $reason->getMessage());
-                    
+
                     // Check if it's a rate limiting error
                     if ($reason instanceof \GuzzleHttp\Exception\ClientException && $reason->getResponse()->getStatusCode() == 429) {
                         $hasApiError = true;
@@ -313,9 +316,6 @@ class ReturPembelianController extends Controller
     public function getInvoicesAjax(Request $request)
     {
         $vendorNo = $request->query('filter.vendorNo') ?? $request->query('filter_vendorNo');
-        if (empty($vendorNo)) {
-            return response()->json(['purchaseInvoices' => [], 'message' => 'vendorNo wajib diisi']);
-        }
 
         $activeBranchId = session('active_branch');
         if (!$activeBranchId) {
@@ -334,26 +334,100 @@ class ReturPembelianController extends Controller
     }
 
     /**
-     * AJAX: Get detail items dari referensi (receive item atau purchase invoice) untuk form retur pembelian
-     * return_type: RECEIVE -> receive-item/detail.do, INVOICE/INVOICE_DP -> purchase-invoice/detail.do, NO_INVOICE -> tidak ada referensi
+     * AJAX: Get purchase orders (purchase-order/list.do) filtered by vendor (filter.vendorNo)
+     */
+    public function getPurchaseOrdersAjax(Request $request)
+    {
+        $activeBranchId = session('active_branch');
+        if (!$activeBranchId) return response()->json(['purchaseOrders' => []]);
+        $branch = Branch::find($activeBranchId);
+        $user = Auth::user();
+        $apiToken = $user->accurate_api_token;
+        $signatureSecret = $user->accurate_signature_secret;
+        $timestamp = Carbon::now()->toIso8601String();
+        $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+        $baseUrl = $branch->getAccurateApiBaseUrl();
+
+        try {
+            $params = [
+                'sp.pageSize' => 100,
+                'fields' => 'number,transDate,vendor',
+            ];
+            $res = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($baseUrl . '/purchase-order/list.do', $params);
+
+            return response()->json(['purchaseOrders' => $res->json()['d'] ?? []]);
+        } catch (\Exception $e) {
+            return response()->json(['purchaseOrders' => []]);
+        }
+    }
+
+    public function getSerialsFromReceiveItemAjax(Request $request)
+    {
+        $number = $request->query('number');
+        if (!$number) return response()->json(['success' => false, 'message' => 'Nomor Penerimaan Barang wajib']);
+
+        $activeBranchId = session('active_branch');
+        $branch = Branch::find($activeBranchId);
+        $items = $this->fetchSerialsFromReceiveItem($number, $branch, Auth::user());
+
+        if (!empty($items)) {
+            return response()->json(['success' => true, 'detailItem' => $items]);
+        }
+        return response()->json(['success' => false, 'message' => 'Penerimaan Barang tidak ditemukan atau gagal mengambil data']);
+    }
+
+    private function fetchSerialsFromReceiveItem($number, $branch, $user)
+    {
+        if (!$number || !$branch || !$user) return [];
+
+        $apiToken = $user->accurate_api_token;
+        $signatureSecret = $user->accurate_signature_secret;
+        $timestamp = Carbon::now()->toIso8601String();
+        $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+        $baseUrl = $branch->getAccurateApiBaseUrl();
+
+        try {
+            $res = Http::withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($baseUrl . '/receive-item/detail.do', ['number' => $number]);
+
+            if ($res->successful() && isset($res->json()['d'])) {
+                $items = $res->json()['d']['detailItem'] ?? [];
+                foreach ($items as &$item) {
+                    $item['itemNo'] = $item['item']['no'] ?? '';
+                    if (isset($item['detailSerialNumber']) && is_array($item['detailSerialNumber'])) {
+                        foreach ($item['detailSerialNumber'] as &$sn) {
+                             if (isset($sn['serialNumber']) && is_array($sn['serialNumber'])) {
+                                 $sn['serialNumberNo'] = $sn['serialNumber']['number'] ?? '';
+                             }
+                        }
+                    }
+                }
+                return $items;
+            }
+        } catch (\Exception $e) {
+            Log::error('fetchSerialsFromReceiveItem Error: ' . $e->getMessage());
+        }
+        return [];
+    }
+
+    /**
+     * AJAX: Get detail items dari referensi (PO atau purchase invoice) untuk form retur pembelian.
+     * return_type: po -> purchase-order/detail.do, invoice -> purchase-invoice/detail.do
      */
     public function getReferensiDetailAjax(Request $request)
     {
-        $returnType = $request->query('return_type') ?? $request->input('return_type');
-        $number = $request->query('number') ?? $request->input('number');
+        $returnType = strtolower(trim($request->query('return_type') ?? $request->input('return_type', '')));
+        $number = trim($request->query('number') ?? $request->input('number', ''));
 
-        if (empty($number) || empty($returnType)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'return_type dan number referensi wajib diisi.',
-            ], 400);
-        }
-
-        if (strtoupper($returnType) === 'NO_INVOICE') {
-            return response()->json([
-                'success' => true,
-                'detailItems' => [],
-            ]);
+        if ($number === '' || $returnType === '') {
+            return response()->json(['success' => false, 'message' => 'return_type dan number referensi wajib diisi.'], 400);
         }
 
         $activeBranchId = session('active_branch');
@@ -372,60 +446,190 @@ class ReturPembelianController extends Controller
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
-        $detailApiUrl = null;
-        if (strtoupper($returnType) === 'RECEIVE') {
-            $detailApiUrl = $baseUrl . '/receive-item/detail.do';
-        } elseif (in_array(strtoupper($returnType), ['INVOICE', 'INVOICE_DP'])) {
-            $detailApiUrl = $baseUrl . '/purchase-invoice/detail.do';
-        }
+        // Determine API URL based on return_type
+        $detailApiUrl = match ($returnType) {
+            'po' => $baseUrl . '/purchase-order/detail.do',
+            'invoice' => $baseUrl . '/purchase-invoice/detail.do',
+            // legacy types still supported for existing records
+            'receive' => $baseUrl . '/receive-item/detail.do',
+            'invoice_dp' => $baseUrl . '/purchase-invoice/detail.do',
+            default => null,
+        };
 
         if (!$detailApiUrl) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Tipe retur tidak valid untuk mengambil detail.',
-            ], 400);
+            return response()->json(['success' => false, 'message' => 'Tipe retur tidak valid.'], 400);
         }
 
         try {
-            $response = Http::withHeaders([
+            $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
             ])->get($detailApiUrl, ['number' => $number]);
 
             if (!$response->successful()) {
-                Log::warning('Referensi detail API retur pembelian gagal', [
+                Log::warning('getReferensiDetailAjax retur pembelian API gagal', [
                     'return_type' => $returnType,
                     'number' => $number,
                     'status' => $response->status(),
                 ]);
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Gagal mengambil detail referensi dari Accurate.',
-                ], $response->status());
+                return response()->json(['success' => false, 'message' => 'Gagal mengambil detail referensi dari Accurate.'], $response->status());
             }
 
             $responseData = $response->json();
             if (!isset($responseData['d'])) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Respon API tidak valid.',
-                ], 400);
+                return response()->json(['success' => false, 'message' => 'Respon API tidak valid.'], 400);
             }
 
             $detail = $responseData['d'];
             $detailItems = $detail['detailItem'] ?? [];
 
+            // Normalize detailSerialNumber and auto-fetch from Receive Item if needed
+            if (is_array($detailItems)) {
+                // Collect unique linked RIs if any
+                $linkedRIs = [];
+                foreach ($detailItems as $di) {
+                    // Check various possible locations for the linked Receive Item number
+                    $riNo = $di['receiveItemNo'] ?? ($di['receiveItemNumber'] ?? ($di['purchaseReceiveNo'] ?? ($di['purchaseReceiveNumber'] ?? null)));
+                    if (!$riNo && isset($di['receiveItem']) && is_array($di['receiveItem'])) {
+                        $riNo = $di['receiveItem']['number'] ?? ($di['receiveItem']['no'] ?? null);
+                    }
+                    if (!$riNo && isset($di['purchaseReceive']) && is_array($di['purchaseReceive'])) {
+                        $riNo = $di['purchaseReceive']['number'] ?? ($di['purchaseReceive']['no'] ?? null);
+                    }
+                    if ($riNo) $linkedRIs[$riNo] = [];
+                }
+
+                // Pre-fetch serials for all linked RIs
+                foreach (array_keys($linkedRIs) as $riNo) {
+                    $linkedRIs[$riNo] = $this->fetchSerialsFromReceiveItem($riNo, $branch, Auth::user());
+                }
+
+                foreach ($detailItems as $idx => $di) {
+                    $normSerials = [];
+                    // 1. Try serials already in the invoice item (if any)
+                    $origSerials = $di['detailSerialNumber'] ?? [];
+                    foreach ((array) $origSerials as $sn) {
+                        if (!is_array($sn)) continue;
+                        $snNo = $sn['serialNumberNo'] ?? ($sn['serialNumber']['number'] ?? null);
+                        $snNo = trim((string) ($snNo ?? ''));
+                        $qty = (float) ($sn['quantity'] ?? 0);
+                        if ($snNo !== '' && $qty > 0) {
+                            $sn['serialNumberNo'] = $snNo;
+                            $normSerials[] = $sn;
+                        }
+                    }
+
+                    // 2. Auto-fetch from linked RI if serials still empty
+                    if (empty($normSerials)) {
+                        $riNo = $di['receiveItemNo'] ?? ($di['receiveItemNumber'] ?? ($di['purchaseReceiveNo'] ?? ($di['purchaseReceiveNumber'] ?? null)));
+                        if (!$riNo && isset($di['receiveItem']) && is_array($di['receiveItem'])) {
+                            $riNo = $di['receiveItem']['number'] ?? ($di['receiveItem']['no'] ?? null);
+                        }
+                        if (!$riNo && isset($di['purchaseReceive']) && is_array($di['purchaseReceive'])) {
+                            $riNo = $di['purchaseReceive']['number'] ?? ($di['purchaseReceive']['no'] ?? null);
+                        }
+
+                        if ($riNo && isset($linkedRIs[$riNo])) {
+                            // Find matching item in RI
+                            $itemNo = $di['item']['no'] ?? '';
+                            $riItem = collect($linkedRIs[$riNo])->first(function($pi) use ($itemNo) {
+                                return $pi['itemNo'] === $itemNo;
+                            });
+                            if ($riItem && !empty($riItem['detailSerialNumber'])) {
+                                $normSerials = $riItem['detailSerialNumber'];
+                            }
+                        }
+                    }
+
+                    $detailItems[$idx]['detailSerialNumber'] = $normSerials;
+                }
+            }
+
+            // ── Incremental Return Logic ─────────────────────────────────
+            if ($returnType === 'invoice') {
+                // 1. Cari semua retur pembelian yang sudah ada untuk faktur ini
+                $previousReturnsRes = Http::withoutVerifying()->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'X-Api-Signature' => $signature,
+                    'X-Api-Timestamp' => $timestamp,
+                ])->get($baseUrl . '/purchase-return/list.do', [
+                    'filter.invoiceNumber' => $number,
+                    'fields' => 'id,number'
+                ]);
+
+                if ($previousReturnsRes->successful() && isset($previousReturnsRes->json()['d'])) {
+                    $returnedQuantities = []; // itemNo => totalQtyReturned
+                    $returnedSerials = [];    // itemNo -> serialNo => totalQtyReturned
+
+                    $returns = $previousReturnsRes->json()['d'];
+                    foreach ($returns as $ret) {
+                        $retDetailRes = Http::withoutVerifying()->withHeaders([
+                            'Authorization' => 'Bearer ' . $apiToken,
+                            'X-Api-Signature' => $signature,
+                            'X-Api-Timestamp' => $timestamp,
+                        ])->get($baseUrl . '/purchase-return/detail.do', ['id' => $ret['id']]);
+
+                        if ($retDetailRes->successful() && isset($retDetailRes->json()['d'])) {
+                            $retDetail = $retDetailRes->json()['d'];
+                            foreach ($retDetail['detailItem'] ?? [] as $ri) {
+                                $itemNo = $ri['item']['no'] ?? '';
+                                $riQty = (float)($ri['quantity'] ?? 0);
+                                $returnedQuantities[$itemNo] = ($returnedQuantities[$itemNo] ?? 0) + $riQty;
+
+                                if (isset($ri['detailSerialNumber']) && is_array($ri['detailSerialNumber'])) {
+                                    foreach ($ri['detailSerialNumber'] as $rsn) {
+                                        $snNo = $rsn['serialNumberNo'] ?? '';
+                                        $snQty = (float)($rsn['quantity'] ?? 0);
+                                        if ($snNo) {
+                                            $returnedSerials[$itemNo][$snNo] = ($returnedSerials[$itemNo][$snNo] ?? 0) + $snQty;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // 2. Kurangi kuantitas item invoice dengan yang sudah diretur
+                    foreach ($detailItems as $idx => &$it) {
+                        $itItemNo = $it['item']['no'] ?? '';
+                        $origQty = (float)($it['quantity'] ?? 0);
+                        $alreadyReturned = $returnedQuantities[$itItemNo] ?? 0;
+                        $it['quantity'] = max(0, $origQty - $alreadyReturned);
+
+                        // 3. Kurangi kuantitas serial number
+                        if (isset($it['detailSerialNumber']) && is_array($it['detailSerialNumber'])) {
+                            foreach ($it['detailSerialNumber'] as $sidx => &$sn) {
+                                $snNo = $sn['serialNumberNo'] ?? '';
+                                if (!$snNo && isset($sn['serialNumber']['number'])) {
+                                    $snNo = $sn['serialNumber']['number'];
+                                }
+                                $origSnQty = (float)($sn['quantity'] ?? 0);
+                                $snAlreadyReturned = $returnedSerials[$itItemNo][$snNo] ?? 0;
+                                $sn['quantity'] = max(0, $origSnQty - $snAlreadyReturned);
+                            }
+                            // Filter out SNs with 0 or less quantity
+                            $it['detailSerialNumber'] = array_values(array_filter($it['detailSerialNumber'], function($sn) {
+                                return (float)($sn['quantity'] ?? 0) > 0;
+                            }));
+                        }
+                    }
+                    // Filter out items with 0 or less quantity
+                    $detailItems = array_values(array_filter($detailItems, function($it) {
+                        return (float)($it['quantity'] ?? 0) > 0;
+                    }));
+                }
+            }
+            // ─────────────────────────────────────────────────────────────
+
             return response()->json([
                 'success' => true,
                 'detailItems' => $detailItems,
+                'vendor' => $detail['vendor'] ?? null,
             ]);
         } catch (Exception $e) {
             Log::error('Exception getReferensiDetailAjax retur pembelian: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Terjadi kesalahan saat mengambil detail referensi.',
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Terjadi kesalahan saat mengambil detail referensi.'], 500);
         }
     }
 
@@ -471,7 +675,7 @@ class ReturPembelianController extends Controller
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
             $baseUrl = $branch->getAccurateApiBaseUrl();
 
-            $httpClient = Http::withHeaders([
+            $httpClient = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -527,37 +731,37 @@ class ReturPembelianController extends Controller
             }
 
             $dataToCache = [
-                'returPembelian'          => $returPembelian,
-                'accurateDetail'          => $accurateDetail,
-                'accurateDetailItems'     => $accurateDetailItems,
+                'returPembelian' => $returPembelian,
+                'accurateDetail' => $accurateDetail,
+                'accurateDetailItems' => $accurateDetailItems,
                 'accurateReferenceDetail' => $accurateReferenceDetail,
-                'referenceType'           => $referenceType,
-                'penerimaanBarang'        => $penerimaanBarang,
-                'errorMessage'            => $errorMessage,
+                'referenceType' => $referenceType,
+                'penerimaanBarang' => $penerimaanBarang,
+                'errorMessage' => $errorMessage,
             ];
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             $errorMessage = "Data retur pembelian dengan nomor {$no_retur} tidak ditemukan.";
             Log::error('Retur pembelian tidak ditemukan: ' . $e->getMessage(), ['no_retur' => $no_retur]);
             $dataToCache = [
-                'returPembelian'          => null,
-                'accurateDetail'          => null,
-                'accurateDetailItems'     => [],
+                'returPembelian' => null,
+                'accurateDetail' => null,
+                'accurateDetailItems' => [],
                 'accurateReferenceDetail' => null,
-                'referenceType'           => null,
-                'penerimaanBarang'        => null,
-                'errorMessage'            => $errorMessage,
+                'referenceType' => null,
+                'penerimaanBarang' => null,
+                'errorMessage' => $errorMessage,
             ];
         } catch (Exception $e) {
             Log::error('Error saat mengambil data retur pembelian: ' . $e->getMessage(), ['no_retur' => $no_retur]);
             $errorMessage = 'Terjadi kesalahan: ' . $e->getMessage();
             $dataToCache = [
-                'returPembelian'          => $returPembelian ?? null,
-                'accurateDetail'          => $accurateDetail ?? null,
-                'accurateDetailItems'     => $accurateDetailItems ?? [],
+                'returPembelian' => $returPembelian ?? null,
+                'accurateDetail' => $accurateDetail ?? null,
+                'accurateDetailItems' => $accurateDetailItems ?? [],
                 'accurateReferenceDetail' => $accurateReferenceDetail ?? null,
-                'referenceType'           => $referenceType ?? null,
-                'penerimaanBarang'        => $penerimaanBarang ?? null,
-                'errorMessage'            => $errorMessage,
+                'referenceType' => $referenceType ?? null,
+                'penerimaanBarang' => $penerimaanBarang ?? null,
+                'errorMessage' => $errorMessage,
             ];
         }
 
@@ -566,13 +770,13 @@ class ReturPembelianController extends Controller
         }
 
         return view('retur_pembelian.detail', $dataToCache ?? [
-            'returPembelian'          => $returPembelian ?? null,
-            'accurateDetail'          => $accurateDetail ?? null,
-            'accurateDetailItems'     => $accurateDetailItems ?? [],
+            'returPembelian' => $returPembelian ?? null,
+            'accurateDetail' => $accurateDetail ?? null,
+            'accurateDetailItems' => $accurateDetailItems ?? [],
             'accurateReferenceDetail' => $accurateReferenceDetail ?? null,
-            'referenceType'           => $referenceType ?? null,
-            'penerimaanBarang'        => $penerimaanBarang ?? null,
-            'errorMessage'            => $errorMessage,
+            'referenceType' => $referenceType ?? null,
+            'penerimaanBarang' => $penerimaanBarang ?? null,
+            'errorMessage' => $errorMessage,
         ]);
     }
 
@@ -598,41 +802,47 @@ class ReturPembelianController extends Controller
         $returnType = $request->input('return_type');
 
         $rules = [
-            'no_retur'                => 'required|string|max:255|unique:retur_pembelians,no_retur',
-            'tanggal_retur'           => 'required|date',
-            'vendor'                  => 'required|string|max:255',
-            'return_type'             => 'required|in:invoice,invoice_dp,no_invoice,receive',
-            'detailItems'             => 'required|array|min:1',
-            'detailItems.*.kode'      => 'required|string',
+            'no_retur' => 'required|string|max:255|unique:retur_pembelians,no_retur',
+            'tanggal_retur' => 'required|date',
+            'vendor' => 'required|string|max:255',
+            'return_type' => 'required|in:invoice,invoice_dp,no_invoice,receive,po',
+            'detailItems' => 'required|array|min:1',
+            'detailItems.*.kode' => 'required|string',
             'detailItems.*.kuantitas' => 'required|string',
-            'detailItems.*.harga'     => 'required|numeric|min:0',
-            'detailItems.*.diskon'    => 'nullable|numeric|min:0',
+            'detailItems.*.harga' => 'required|numeric|min:0',
+            'detailItems.*.diskon' => 'nullable|numeric|min:0',
         ];
 
         if (in_array($returnType, ['invoice', 'invoice_dp'])) {
             $rules['faktur_pembelian_id'] = 'required|string|max:255';
         } elseif ($returnType === 'receive') {
             $rules['penerimaan_barang_id'] = 'required|string|max:255';
+        } elseif ($returnType === 'po') {
+            $rules['faktur_pembelian_id'] = 'required|string|max:255'; // reusing this field name from the view
         }
 
+        $rules['detailItems.*.detailSerialNumber'] = 'nullable|array';
+        $rules['detailItems.*.detailSerialNumber.*.serialNumberNo'] = 'required|string';
+        $rules['detailItems.*.detailSerialNumber.*.quantity'] = 'required|numeric|min:0';
+
         $messages = [
-            'no_retur.required'                => 'Nomor Retur wajib diisi.',
-            'no_retur.unique'                  => 'Nomor Retur sudah digunakan.',
-            'tanggal_retur.required'           => 'Tanggal Retur wajib diisi.',
-            'tanggal_retur.date'               => 'Format tanggal tidak valid.',
-            'vendor.required'                  => 'Vendor wajib diisi.',
-            'return_type.required'             => 'Tipe retur wajib dipilih.',
-            'return_type.in'                   => 'Tipe retur tidak valid.',
-            'faktur_pembelian_id.required'     => 'Nomor Faktur Pembelian wajib diisi untuk tipe retur Invoice / Invoice DP.',
-            'penerimaan_barang_id.required'    => 'Nomor Penerimaan Barang wajib diisi untuk tipe retur Receive.',
-            'detailItems.required'             => 'Detail item wajib diisi.',
-            'detailItems.min'                  => 'Minimal harus ada 1 item yang diinputkan.',
-            'detailItems.*.kode.required'      => 'Kode item wajib diisi.',
+            'no_retur.required' => 'Nomor Retur wajib diisi.',
+            'no_retur.unique' => 'Nomor Retur sudah digunakan.',
+            'tanggal_retur.required' => 'Tanggal Retur wajib diisi.',
+            'tanggal_retur.date' => 'Format tanggal tidak valid.',
+            'vendor.required' => 'Vendor wajib diisi.',
+            'return_type.required' => 'Tipe retur wajib dipilih.',
+            'return_type.in' => 'Tipe retur tidak valid.',
+            'faktur_pembelian_id.required' => 'Nomor Faktur Pembelian wajib diisi untuk tipe retur Invoice / Invoice DP.',
+            'penerimaan_barang_id.required' => 'Nomor Penerimaan Barang wajib diisi untuk tipe retur Receive.',
+            'detailItems.required' => 'Detail item wajib diisi.',
+            'detailItems.min' => 'Minimal harus ada 1 item yang diinputkan.',
+            'detailItems.*.kode.required' => 'Kode item wajib diisi.',
             'detailItems.*.kuantitas.required' => 'Kuantitas item wajib diisi.',
-            'detailItems.*.harga.required'     => 'Harga item wajib diisi.',
-            'detailItems.*.harga.min'          => 'Harga item tidak boleh kurang dari 0.',
-            'detailItems.*.diskon.numeric'    => 'Diskon item harus berupa angka.',
-            'detailItems.*.diskon.min'        => 'Diskon item tidak boleh kurang dari 0.',
+            'detailItems.*.harga.required' => 'Harga item wajib diisi.',
+            'detailItems.*.harga.min' => 'Harga item tidak boleh kurang dari 0.',
+            'detailItems.*.diskon.numeric' => 'Diskon item harus berupa angka.',
+            'detailItems.*.diskon.min' => 'Diskon item tidak boleh kurang dari 0.',
         ];
 
         $validator = Validator::make($request->all(), $rules, $messages);
@@ -672,7 +882,7 @@ class ReturPembelianController extends Controller
                 }
                 // Data alamat, syarat_bayar, pajak, diskon bisa diambil dari API receive-item/detail.do jika diperlukan
                 try {
-                    $riResponse = Http::withHeaders([
+                    $riResponse = Http::withoutVerifying()->withHeaders([
                         'Authorization' => 'Bearer ' . $apiToken,
                         'X-Api-Signature' => $signature,
                         'X-Api-Timestamp' => $timestamp,
@@ -692,13 +902,13 @@ class ReturPembelianController extends Controller
                 $receiveItemNumber = $validatedData['penerimaan_barang_id'];
             } elseif (in_array($returnType, ['invoice', 'invoice_dp'])) {
                 try {
-                    $invoiceResponse = Http::withHeaders([
+                    $invoiceResponse = Http::withoutVerifying()->withHeaders([
                         'Authorization' => 'Bearer ' . $apiToken,
                         'X-Api-Signature' => $signature,
                         'X-Api-Timestamp' => $timestamp,
                     ])->get($baseUrl . '/purchase-invoice/detail.do', [
-                        'number' => $validatedData['faktur_pembelian_id'],
-                    ]);
+                                'number' => $validatedData['faktur_pembelian_id'],
+                            ]);
 
                     if ($invoiceResponse->successful() && isset($invoiceResponse->json()['d'])) {
                         $invDetail = $invoiceResponse->json()['d'];
@@ -713,15 +923,52 @@ class ReturPembelianController extends Controller
                     Log::error('Exception purchase-invoice/detail.do: ' . $e->getMessage());
                 }
                 $invoiceNumber = $validatedData['faktur_pembelian_id'];
+            } elseif ($returnType === 'po') {
+                try {
+                    $poResponse = Http::withoutVerifying()->withHeaders([
+                        'Authorization' => 'Bearer ' . $apiToken,
+                        'X-Api-Signature' => $signature,
+                        'X-Api-Timestamp' => $timestamp,
+                    ])->get($baseUrl . '/purchase-order/detail.do', [
+                        'number' => $validatedData['faktur_pembelian_id'],
+                    ]);
+
+                    if ($poResponse->successful() && isset($poResponse->json()['d'])) {
+                        $poDetail = $poResponse->json()['d'];
+                        $alamat = $poDetail['toAddress'] ?? null;
+                        $keterangan = $poDetail['description'] ?? null;
+                        $syaratBayar = !empty($poDetail['paymentTermName']) ? $poDetail['paymentTermName'] : 'C.O.D';
+                        $kenaPajak = $poDetail['taxable'] ?? null;
+                        $totalTermasukPajak = $poDetail['inclusiveTax'] ?? null;
+                        $diskonKeseluruhan = $poDetail['cashDiscPercent'] ?? $poDetail['cashDiscount'] ?? null;
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Exception purchase-order/detail.do: ' . $e->getMessage());
+                }
+                $purchaseOrderNumber = $validatedData['faktur_pembelian_id'];
             }
 
             $detailItemsForAccurate = [];
             foreach ($validatedData['detailItems'] as $item) {
                 $accurateItem = [
-                    'itemNo'    => $item['kode'],
-                    'quantity'  => $item['kuantitas'],
+                    'itemNo' => $item['kode'],
+                    'quantity' => $item['kuantitas'],
                     'unitPrice' => $item['harga'],
                 ];
+
+                // Include serial numbers if present
+                if (!empty($item['detailSerialNumber']) && is_array($item['detailSerialNumber'])) {
+                    $accurateItem['detailSerialNumber'] = [];
+                    foreach ($item['detailSerialNumber'] as $sn) {
+                        if (!empty($sn['serialNumberNo'])) {
+                            $accurateItem['detailSerialNumber'][] = [
+                                'serialNumberNo' => $sn['serialNumberNo'],
+                                'quantity' => (float) ($sn['quantity'] ?? 0),
+                            ];
+                        }
+                    }
+                }
+
                 if (isset($item['diskon']) && $item['diskon'] > 0) {
                     $diskon = (float) $item['diskon'];
                     if ($diskon > 0 && $diskon <= 100) {
@@ -734,11 +981,11 @@ class ReturPembelianController extends Controller
             }
 
             $postDataForAccurate = [
-                'vendorNo'     => $validatedData['vendor'],
-                'transDate'    => date('d/m/Y', strtotime($validatedData['tanggal_retur'])),
-                'number'       => $validatedData['no_retur'],
-                'detailItem'   => $detailItemsForAccurate,
-                'returnType'   => strtoupper($returnType),
+                'vendorNo' => $validatedData['vendor'],
+                'transDate' => date('d/m/Y', strtotime($validatedData['tanggal_retur'])),
+                'number' => $validatedData['no_retur'],
+                'detailItem' => $detailItemsForAccurate,
+                'returnType' => ($returnType === 'po' ? 'PURCHASE_ORDER' : strtoupper($returnType)),
                 'paymentTermName' => $syaratBayar,
             ];
 
@@ -771,38 +1018,43 @@ class ReturPembelianController extends Controller
 
             Log::info('PostDataForAccurate retur pembelian prepared:', $postDataForAccurate);
 
-            $response = Http::withHeaders([
+            $response = Http::withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
-                'Content-Type'  => 'application/json',
+                'Content-Type' => 'application/json',
             ])->post($baseUrl . '/purchase-return/save.do', $postDataForAccurate);
 
             if (!$response->successful()) {
                 DB::rollBack();
+                Log::error('Gagal mengirim data ke Accurate API (non-2xx)', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
                 return back()->withInput()->with('error', 'Gagal mengirim data ke Accurate API. HTTP Status: ' . $response->status());
             }
 
             $responseData = $response->json();
             if (isset($responseData['s']) && $responseData['s'] === false) {
                 DB::rollBack();
-                return back()->withInput()->with('error', 'Accurate API mengembalikan error: ' . ($responseData['m'] ?? 'Unknown error'));
+                Log::error('Accurate API returned logical error during save', [
+                    'response' => $responseData
+                ]);
+                $msg = $responseData['m'] ?? 'Unknown error';
+                // If there are specific validation errors in detail, extract them
+                if (isset($responseData['d']) && is_array($responseData['d'])) {
+                     // Sometimes Accurate returns an array of errors in 'd'
+                }
+                return back()->withInput()->with('error', 'Accurate API mengembalikan error: ' . $msg);
             }
 
             $returPembelian = ReturPembelian::create([
-                'no_retur'               => $validatedData['no_retur'],
-                'tanggal_retur'          => $validatedData['tanggal_retur'],
-                'kode_customer'          => '',
-                'vendor'                 => $validatedData['vendor'],
-                'return_type'            => $returnType,
-                'faktur_pembelian_id'    => $validatedData['faktur_pembelian_id'] ?? null,
-                'penerimaan_barang_id'   => $validatedData['penerimaan_barang_id'] ?? null,
-                'alamat'                 => $alamat,
-                'keterangan'             => $keterangan,
-                'syarat_bayar'           => $syaratBayar,
-                'kena_pajak'             => $kenaPajak,
-                'total_termasuk_pajak'   => $totalTermasukPajak,
-                'diskon_keseluruhan'     => $diskonKeseluruhan,
+                'no_retur' => $validatedData['no_retur'],
+                'tanggal_retur' => $validatedData['tanggal_retur'],
+                'kode_customer' => $branch->customer_id ?? '',
+                'vendor' => $validatedData['vendor'],
+                'return_type' => $returnType,
+                'faktur_pembelian_id' => $validatedData['faktur_pembelian_id'] ?? null,
             ]);
 
             DB::commit();
@@ -831,7 +1083,7 @@ class ReturPembelianController extends Controller
         $data = ['sp.page' => 1, 'sp.pageSize' => 20];
 
         try {
-            $firstPageResponse = Http::timeout(30)->withHeaders([
+            $firstPageResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
                 'Authorization' => 'Bearer ' . $apiToken,
                 'X-Api-Signature' => $signature,
                 'X-Api-Timestamp' => $timestamp,
@@ -848,7 +1100,7 @@ class ReturPembelianController extends Controller
             $totalItems = $responseData['sp']['rowCount'] ?? 0;
             $totalPages = (int) ceil($totalItems / 20);
             if ($totalPages > 1) {
-                $client = new \GuzzleHttp\Client();
+                $client = new \GuzzleHttp\Client(['verify' => false]);
                 $promises = [];
                 for ($page = 2; $page <= $totalPages; $page++) {
                     $promises[$page] = $client->getAsync($vendorApiUrl, [
@@ -904,7 +1156,7 @@ class ReturPembelianController extends Controller
             $data['filter.vendorNo'] = $vendorNo;
         }
 
-        $firstPageResponse = Http::withHeaders([
+        $firstPageResponse = Http::withoutVerifying()->withHeaders([
             'Authorization' => 'Bearer ' . $apiToken,
             'X-Api-Signature' => $signature,
             'X-Api-Timestamp' => $timestamp,
@@ -918,7 +1170,7 @@ class ReturPembelianController extends Controller
                 $totalItems = $responseData['sp']['rowCount'] ?? 0;
                 $totalPages = ceil($totalItems / 20);
                 if ($totalPages > 1) {
-                    $client = new \GuzzleHttp\Client();
+                    $client = new \GuzzleHttp\Client(['verify' => false]);
                     $promises = [];
                     for ($page = 2; $page <= $totalPages; $page++) {
                         $queryParams = ['sp.page' => $page, 'sp.pageSize' => 20, 'fields' => 'number,vendor'];
@@ -973,7 +1225,7 @@ class ReturPembelianController extends Controller
             $data['filter.vendorNo'] = $vendorNo;
         }
 
-        $firstPageResponse = Http::withHeaders([
+        $firstPageResponse = Http::withoutVerifying()->withHeaders([
             'Authorization' => 'Bearer ' . $apiToken,
             'X-Api-Signature' => $signature,
             'X-Api-Timestamp' => $timestamp,
@@ -987,7 +1239,7 @@ class ReturPembelianController extends Controller
                 $totalItems = $responseData['sp']['rowCount'] ?? 0;
                 $totalPages = ceil($totalItems / 20);
                 if ($totalPages > 1) {
-                    $client = new \GuzzleHttp\Client();
+                    $client = new \GuzzleHttp\Client(['verify' => false]);
                     $promises = [];
                     for ($page = 2; $page <= $totalPages; $page++) {
                         $queryParams = ['sp.page' => $page, 'sp.pageSize' => 20, 'fields' => 'number,vendor'];

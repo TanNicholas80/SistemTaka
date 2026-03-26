@@ -168,6 +168,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/retur-pembelian/create', [ReturPembelianController::class, 'create'])->name('retur_pembelian.create');
         Route::get('/retur-pembelian/receive-items', [ReturPembelianController::class, 'getReceiveItemsAjax'])->name('retur_pembelian.receive_items');
         Route::get('/retur-pembelian/invoices', [ReturPembelianController::class, 'getInvoicesAjax'])->name('retur_pembelian.invoices');
+        Route::get('/retur-pembelian/purchase-orders', [ReturPembelianController::class, 'getPurchaseOrdersAjax'])->name('retur_pembelian.purchase_orders');
+        Route::get('/retur-pembelian/serials-from-receive-item', [ReturPembelianController::class, 'getSerialsFromReceiveItemAjax'])->name('retur_pembelian.serials_from_receive_item');
         Route::get('/retur-pembelian/referensi-detail', [ReturPembelianController::class, 'getReferensiDetailAjax'])->name('retur_pembelian.referensi_detail');
         Route::post('/retur-pembelian/store', [ReturPembelianController::class, 'store'])->name('retur_pembelian.store');
     });
