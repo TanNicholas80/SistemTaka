@@ -17,16 +17,9 @@ return new class extends Migration
             $table->string('no_retur')->unique();
             $table->date('tanggal_retur');
             $table->string('pelanggan_id');
-            $table->enum('return_type', ['delivery', 'invoice', 'invoice_dp', 'no_invoice'])->default('invoice');
+            $table->string('return_type')->default('invoice');
             $table->enum('return_status_type', ['not_returned', 'partially_returned', 'returned'])->default('not_returned');
-            $table->string('faktur_penjualan_id')->nullable();
-            $table->string('pengiriman_pesanan_id')->nullable();
-            $table->string('alamat')->nullable();
-            $table->string('keterangan')->nullable();
-            $table->string('syarat_bayar')->nullable();
-            $table->boolean('kena_pajak')->nullable();
-            $table->boolean('total_termasuk_pajak')->nullable();
-            $table->string('diskon_keseluruhan')->nullable();
+            $table->string('no_faktur_penjualan')->nullable();
             $table->timestamps();
         });
     }

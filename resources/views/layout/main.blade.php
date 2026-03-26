@@ -374,9 +374,9 @@
                         </li>
 
                         <li
-                            class="nav-item {{ Request::routeIs('pelanggan.*') || Request::routeIs('cashier.*') || Request::routeIs('pengiriman_pesanan.*') || Request::routeIs('retur_penjualan.*') ? 'menu-open' : '' }}">
+                            class="nav-item {{ Request::routeIs('pelanggan.*') || Request::routeIs('cashier.*') || Request::routeIs('pengiriman_pesanan.*') || Request::routeIs('retur_penjualan.*') || Request::routeIs('print_barcode_retur.*') ? 'menu-open' : '' }}">
                             <a href="#"
-                                class="nav-link {{ Request::routeIs('pelanggan.*') || Request::routeIs('cashier.*') || Request::routeIs('pengiriman_pesanan.*') || Request::routeIs('retur_penjualan.*') ? 'active' : '' }}">
+                                class="nav-link {{ Request::routeIs('pelanggan.*') || Request::routeIs('cashier.*') || Request::routeIs('pengiriman_pesanan.*') || Request::routeIs('retur_penjualan.*') || Request::routeIs('print_barcode_retur.*') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-tags"></i>
                                 <p>Penjualan <i class="right fas fa-angle-left"></i></p>
                             </a>
@@ -396,12 +396,25 @@
                                         <p>Pengiriman Pesanan</p>
                                     </a>
                                 </li>
-                                <li class="nav-item">
-                                    <a href="{{ route('retur_penjualan.index') }}"
-                                        class="nav-link {{ Request::routeIs('retur_penjualan.index') ? 'active' : '' }}">
+                                <li class="nav-item {{ Request::routeIs('retur_penjualan.*') || Request::routeIs('print_barcode_retur.*') ? 'menu-open' : '' }}">
+                                    <a href="#" class="nav-link {{ Request::routeIs('retur_penjualan.*') || Request::routeIs('print_barcode_retur.*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
-                                        <p>Retur Penjualan</p>
+                                        <p>Retur <i class="right fas fa-angle-left"></i></p>
                                     </a>
+                                    <ul class="nav nav-treeview ml-3">
+                                        <li class="nav-item">
+                                            <a href="{{ route('retur_penjualan.index') }}" class="nav-link {{ Request::routeIs('retur_penjualan.*') ? 'active' : '' }}">
+                                                <i class="far fa-dot-circle nav-icon"></i>
+                                                <p>Retur Penjualan</p>
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{{ route('print_barcode_retur.index') }}" class="nav-link {{ Request::routeIs('print_barcode_retur.*') ? 'active' : '' }}">
+                                                <i class="far fa-dot-circle nav-icon"></i>
+                                                <p>Print Barcode Retur</p>
+                                            </a>
+                                        </li>
+                                    </ul>
                                 </li>
                             </ul>
                         </li>
