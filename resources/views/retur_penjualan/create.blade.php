@@ -957,6 +957,12 @@
                 if (isNaN(idx) || !item.detailSerialNumber[idx]) return;
                 item.detailSerialNumber[idx].quantity = safeNumber(inp.value, safeNumber(item.detailSerialNumber[idx].quantity, 0));
             });
+
+            // Jika item berbasis serial, jumlah kuantitas item harus mengikuti total qty serial
+            const sumQty = item.detailSerialNumber.reduce(function(sum, sn) {
+                return sum + safeNumber(sn && sn.quantity, 0);
+            }, 0);
+            item.quantity = sumQty;
         }
 
         fillTableWithDetailItems(detailItems);

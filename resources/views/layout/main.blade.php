@@ -179,7 +179,7 @@
         <!-- Main Sidebar Container -->
         <aside class="main-sidebar sidebar-light-primary elevation-4">
             <!-- Brand Logo -->
-            <a href="{{ route('dashboard') }}" class="brand-link">
+            <a href="{{ route('barang_master.index') }}" class="brand-link">
                 <img src="{{ asset('images/logo.svg') }}" alt="Duniatex Logo" class="brand-image" style="opacity: .8">
                 <span class="brand-text font-weight-bold">
                     <span style="color: #08332c;">TAKA TEXTILE</span>
@@ -209,13 +209,13 @@
                         data-accordion="false">
 
                         <!-- Dashboard Menu -->
-                        <li class="nav-item">
+                        <!-- <li class="nav-item">
                             <a href="{{ route('dashboard') }}"
                                 class="nav-link {{ Request::routeIs('dashboard') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-tachometer-alt"></i>
                                 <p>Dashboard</p>
                             </a>
-                        </li>
+                        </li> -->
 
                         <!-- User Menu -->
                         @if (Auth::user()->role === 'super_admin')
@@ -550,6 +550,8 @@
                 '#surat_jalan',
                 '#surat_jalan_detail',
                 '#barang_masuk',
+                '#barang_master',
+                '#pemasok',
                 '#activityTable',
                 '#pengiriman_pesanan',
                 '#faktur_penjualan',

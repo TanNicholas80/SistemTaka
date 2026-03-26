@@ -548,6 +548,101 @@ class ReturPenjualanController extends Controller
                 }
             }
 
+            // --- Tahap 3: Kurangi sisa serial/quantity berdasarkan retur yang sudah ada di lokal ---
+            // Tujuan: jika faktur sudah pernah diretur, modal harus menampilkan sisa yang masih bisa diretur.
+            $localReturNos = ReturPenjualan::where('no_faktur_penjualan', $number)
+                ->where('kode_customer', $branch->customer_id ?? null)
+                ->pluck('no_retur')
+                ->toArray();
+
+            if (is_array($localReturNos) && $localReturNos !== []) {
+                $returnedSerialQtyByItemNo = [];
+                $returnedQtyByItemNo = [];
+
+                foreach ($localReturNos as $noRetur) {
+                    if (empty($noRetur)) continue;
+
+                    try {
+                        $srUrl = $baseUrl . '/sales-return/detail.do';
+                        $srResp = Http::withHeaders([
+                            'Authorization' => 'Bearer ' . $apiToken,
+                            'X-Api-Signature' => $signature,
+                            'X-Api-Timestamp' => $timestamp,
+                        ])->get($srUrl, ['number' => $noRetur]);
+
+                        if (!$srResp->successful() || !isset($srResp->json()['d'])) {
+                            Log::warning('Kurangi serial: gagal ambil sales-return/detail.do', [
+                                'invoiceNo' => $number,
+                                'noRetur' => $noRetur,
+                                'status' => $srResp->status(),
+                            ]);
+                            continue;
+                        }
+
+                        $srDetail = $srResp->json()['d'];
+                        $srDetailItems = $srDetail['detailItem'] ?? [];
+                        if (is_array($srDetailItems) && $srDetailItems !== []) {
+                            $this->mergeReturnedSerialMapsFromDetailItems($srDetailItems, $returnedSerialQtyByItemNo, $returnedQtyByItemNo);
+                        }
+                    } catch (\Exception $e) {
+                        Log::error('Exception kurangi serial berdasarkan sales-return detail', [
+                            'invoiceNo' => $number,
+                            'noRetur' => $noRetur,
+                            'message' => $e->getMessage(),
+                        ]);
+                    }
+                }
+
+                // Terapkan sisa ke detailItems
+                foreach ($detailItems as $idx => $di) {
+                    $itemNo = data_get($di, 'item.no');
+                    if (empty($itemNo)) continue;
+                    $itemNo = trim((string) $itemNo);
+
+                    $serials = data_get($di, 'detailSerialNumber', []);
+                    if (is_array($serials) && $serials !== []) {
+                        $remainingSerials = [];
+                        $sumQty = 0.0;
+                        foreach ($serials as $sn) {
+                            if (!is_array($sn)) continue;
+                            $serialNo = $this->normalizeSerialNumberNo($sn);
+                            if (empty($serialNo)) continue;
+                            $qtyOriginal = (float) ($sn['quantity'] ?? 0);
+                            if ($qtyOriginal <= 0) continue;
+
+                            $qtyReturned = (float) ($returnedSerialQtyByItemNo[$itemNo][$serialNo] ?? 0);
+                            $remainingQty = $qtyOriginal - $qtyReturned;
+                            if ($remainingQty > 0.0000001) {
+                                $sn['serialNumberNo'] = $serialNo;
+                                $sn['quantity'] = $remainingQty;
+                                $remainingSerials[] = $sn;
+                                $sumQty += $remainingQty;
+                            }
+                        }
+
+                        $detailItems[$idx]['detailSerialNumber'] = $remainingSerials;
+                        $detailItems[$idx]['quantity'] = $sumQty;
+                    } else {
+                        // fallback jika item tidak serial-based
+                        $qtyOriginal = (float) ($di['quantity'] ?? 0);
+                        $qtyReturned = (float) ($returnedQtyByItemNo[$itemNo] ?? 0);
+                        $remainingQty = $qtyOriginal - $qtyReturned;
+                        if ($remainingQty < 0) $remainingQty = 0;
+                        $detailItems[$idx]['quantity'] = $remainingQty;
+                        if ($remainingQty <= 0) {
+                            $detailItems[$idx]['detailSerialNumber'] = [];
+                        }
+                    }
+                }
+
+                // Filter item yang sudah tersisa 0
+                $detailItems = array_values(array_filter($detailItems, function ($di) {
+                    if (!is_array($di)) return false;
+                    $qty = (float) ($di['quantity'] ?? 0);
+                    return $qty > 0.0000001;
+                }));
+            }
+
             return response()->json([
                 'success' => true,
                 'detailItems' => $detailItems,
@@ -951,28 +1046,300 @@ class ReturPenjualanController extends Controller
         });
         $salesInvoicesAllowed = array_values($salesInvoicesAllowed);
 
-        // Get all existing no_faktur_penjualan from local database filtered by kode_customer
+        // Build map: invoiceNo => list(no_retur) dari database lokal
         $kodeCustomerFilter = !empty($customerNo) ? $customerNo : ($branch->customer_id ?? null);
-        $existingFakturPenjualanIds = $kodeCustomerFilter
-            ? ReturPenjualan::where('kode_customer', $kodeCustomerFilter)->pluck('no_faktur_penjualan')->toArray()
-            : ReturPenjualan::pluck('no_faktur_penjualan')->toArray();
+        $allowedInvoiceNos = array_values(array_unique(array_map(function ($inv) {
+            return $inv['number'] ?? null;
+        }, $salesInvoicesAllowed)));
+        $allowedInvoiceNos = array_values(array_filter($allowedInvoiceNos, function ($x) { return !empty($x); }));
 
-        // Filter out invoices that already have retur in local database
-        $salesInvoices = array_filter($salesInvoicesAllowed, function ($salesInvoice) use ($existingFakturPenjualanIds) {
-            return !in_array($salesInvoice['number'], $existingFakturPenjualanIds);
+        $localRetursQuery = ReturPenjualan::whereIn('no_faktur_penjualan', $allowedInvoiceNos);
+        if (!empty($kodeCustomerFilter)) {
+            $localRetursQuery->where('kode_customer', $kodeCustomerFilter);
+        }
+
+        $localReturs = $localRetursQuery->get(['no_faktur_penjualan', 'no_retur']);
+        $localReturNosByInvoice = [];
+        foreach ($localReturs as $r) {
+            $invoiceNo = $r->no_faktur_penjualan;
+            $noRetur = $r->no_retur;
+            if (empty($invoiceNo) || empty($noRetur)) continue;
+            if (!isset($localReturNosByInvoice[$invoiceNo])) $localReturNosByInvoice[$invoiceNo] = [];
+            $localReturNosByInvoice[$invoiceNo][] = $noRetur;
+        }
+
+        // Filter invoices:
+        // - tampilkan jika belum pernah diretur di lokal
+        // - tampilkan juga jika sudah pernah diretur tapi sisa qty return (serial) masih ada
+        $salesInvoices = array_filter($salesInvoicesAllowed, function ($salesInvoice) use ($localReturNosByInvoice, $branch, $baseUrl, $apiToken, $timestamp, $signature) {
+            $invoiceNo = $salesInvoice['number'] ?? null;
+            if (empty($invoiceNo)) return false;
+
+            if (empty($localReturNosByInvoice[$invoiceNo])) {
+                return true;
+            }
+
+            $noReturs = $localReturNosByInvoice[$invoiceNo] ?? [];
+            if (!is_array($noReturs) || $noReturs === []) return true;
+
+            return $this->invoiceHasRemainingReturnQtyBySerials(
+                $branch,
+                $baseUrl,
+                $invoiceNo,
+                $noReturs,
+                $apiToken,
+                $timestamp,
+                $signature
+            );
         });
 
-        // Reset array indexes after filtering
         $salesInvoices = array_values($salesInvoices);
 
         Log::info('Sales Invoices filtered successfully (Belum Lunas + Lunas):', [
             'total_from_api' => count($allSalesInvoices),
             'allowed_count' => count($salesInvoicesAllowed),
-            'existing_in_database' => count($existingFakturPenjualanIds),
+            'used_in_database' => count($localReturs),
             'filtered_available' => count($salesInvoices)
         ]);
 
         return $salesInvoices;
+    }
+
+    private function invoiceHasRemainingReturnQtyBySerials(
+        Branch $branch,
+        string $baseUrl,
+        string $invoiceNo,
+        array $noReturs,
+        string $apiToken,
+        string $timestamp,
+        string $signature
+    ): bool {
+        try {
+            $clientHeaders = [
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ];
+
+            // 1) Ambil detail sales invoice untuk menemukan delivery order yang terkait
+            $salesInvoiceDetailUrl = $baseUrl . '/sales-invoice/detail.do';
+            $invoiceResp = Http::withHeaders($clientHeaders)->get($salesInvoiceDetailUrl, ['number' => $invoiceNo]);
+            if (!$invoiceResp->successful() || !isset($invoiceResp->json()['d'])) {
+                // Kalau gagal ambil detail, jangan menyembunyikan invoice
+                Log::warning('invoiceHasRemainingReturnQtyBySerials: gagal ambil sales-invoice/detail.do', [
+                    'invoiceNo' => $invoiceNo,
+                    'status' => $invoiceResp->status(),
+                ]);
+                return true;
+            }
+
+            $invoiceDetail = $invoiceResp->json()['d'];
+            $detailItems = $invoiceDetail['detailItem'] ?? [];
+
+            $doNumbersSet = [];
+            if (is_array($detailItems)) {
+                foreach ($detailItems as $di) {
+                    $doNum = data_get($di, 'deliveryOrder.number');
+                    if (is_string($doNum) && trim($doNum) !== '') {
+                        $doNumbersSet[trim($doNum)] = true;
+                    }
+                }
+            }
+
+            $doNumbers = array_keys($doNumbersSet);
+
+            // 2) Ambil original serials dari delivery-order/detail.do
+            // Tapi pilih serial yang sesuai dengan baris item pada sales-invoice/detail.do
+            // (mengikuti mekanisme di getReferensiDetailAjax yang memakai heuristic quantity match).
+            $allDoDetailLinesByItemNo = [];
+            if ($doNumbers !== []) {
+                foreach ($doNumbers as $doNumber) {
+                    $doUrl = $baseUrl . '/delivery-order/detail.do';
+                    $doResp = Http::withHeaders($clientHeaders)->get($doUrl, ['number' => $doNumber]);
+                    if (!$doResp->successful() || !isset($doResp->json()['d'])) continue;
+
+                    $doDetail = $doResp->json()['d'];
+                    $doDetailItems = $doDetail['detailItem'] ?? [];
+                    if (!is_array($doDetailItems)) continue;
+
+                    foreach ($doDetailItems as $doLine) {
+                        $itemNo = data_get($doLine, 'item.no');
+                        if (!is_string($itemNo) || trim($itemNo) === '') continue;
+                        $itemNo = trim($itemNo);
+                        if (!isset($allDoDetailLinesByItemNo[$itemNo])) $allDoDetailLinesByItemNo[$itemNo] = [];
+                        $allDoDetailLinesByItemNo[$itemNo][] = $doLine;
+                    }
+                }
+            }
+
+            $originalSerialQtyByItemNo = [];
+            $originalQtyByItemNo = [];
+            if (is_array($detailItems)) {
+                foreach ($detailItems as $di) {
+                    if (!is_array($di)) continue;
+                    $salesItemNo = data_get($di, 'item.no');
+                    if (!is_string($salesItemNo) || trim($salesItemNo) === '') continue;
+                    $salesItemNo = trim($salesItemNo);
+
+                    $salesQty = (float) (data_get($di, 'quantity', 0));
+                    $candidates = $allDoDetailLinesByItemNo[$salesItemNo] ?? [];
+                    if ($candidates === []) continue;
+
+                    // Prefer kandidat yang quantity paling mirip
+                    $picked = null;
+                    foreach ($candidates as $cand) {
+                        $candQty = (float) data_get($cand, 'quantity', 0);
+                        if ($salesQty > 0 && abs($candQty - $salesQty) < 0.0001) {
+                            $picked = $cand;
+                            break;
+                        }
+                    }
+                    // Jika tidak ada match kuantitas, ambil yang punya serial
+                    if ($picked === null) {
+                        foreach ($candidates as $cand) {
+                            $serials = data_get($cand, 'detailSerialNumber');
+                            if (is_array($serials) && $serials !== []) {
+                                $picked = $cand;
+                                break;
+                            }
+                        }
+                    }
+                    // Fallback: kandidat pertama
+                    if ($picked === null) $picked = $candidates[0] ?? null;
+                    if (!is_array($picked)) continue;
+
+                    $pickedSerials = data_get($picked, 'detailSerialNumber', []);
+                    if (is_array($pickedSerials) && $pickedSerials !== []) {
+                        foreach ($pickedSerials as $sn) {
+                            if (!is_array($sn)) continue;
+                            $serialNo = $this->normalizeSerialNumberNo($sn);
+                            $qty = (float) ($sn['quantity'] ?? 0);
+                            if (empty($serialNo) || $qty <= 0) continue;
+                            if (!isset($originalSerialQtyByItemNo[$salesItemNo])) $originalSerialQtyByItemNo[$salesItemNo] = [];
+                            if (!isset($originalSerialQtyByItemNo[$salesItemNo][$serialNo])) $originalSerialQtyByItemNo[$salesItemNo][$serialNo] = 0;
+                            $originalSerialQtyByItemNo[$salesItemNo][$serialNo] += $qty;
+                            $originalQtyByItemNo[$salesItemNo] = ($originalQtyByItemNo[$salesItemNo] ?? 0) + $qty;
+                        }
+                    } else {
+                        $originalQtyByItemNo[$salesItemNo] = ($originalQtyByItemNo[$salesItemNo] ?? 0) + $salesQty;
+                    }
+                }
+            }
+
+            // 3) Ambil serials yang sudah diretur dari sales-return/detail.do (berdasarkan no_retur lokal)
+            $returnedSerialQtyByItemNo = [];
+            $returnedQtyByItemNo = [];
+            foreach ($noReturs as $noRetur) {
+                if (empty($noRetur)) continue;
+                $srUrl = $baseUrl . '/sales-return/detail.do';
+                $srResp = Http::withHeaders($clientHeaders)->get($srUrl, ['number' => $noRetur]);
+                if (!$srResp->successful() || !isset($srResp->json()['d'])) {
+                    // Jika gagal ambil detail retur, jangan menyembunyikan
+                    Log::warning('invoiceHasRemainingReturnQtyBySerials: gagal ambil sales-return/detail.do', [
+                        'invoiceNo' => $invoiceNo,
+                        'noRetur' => $noRetur,
+                        'status' => $srResp->status(),
+                    ]);
+                    return true;
+                }
+
+                $srDetail = $srResp->json()['d'];
+                $srDetailItems = $srDetail['detailItem'] ?? [];
+                if (!is_array($srDetailItems)) continue;
+
+                $this->mergeReturnedSerialMapsFromDetailItems($srDetailItems, $returnedSerialQtyByItemNo, $returnedQtyByItemNo);
+            }
+
+            // 4) Hitung sisa
+            $hasAnySerials = !empty($originalSerialQtyByItemNo);
+            if ($hasAnySerials) {
+                foreach ($originalSerialQtyByItemNo as $itemNo => $serialMap) {
+                    foreach ($serialMap as $serialNo => $qtyOriginal) {
+                        $qtyReturned = (float) (($returnedSerialQtyByItemNo[$itemNo][$serialNo] ?? 0));
+                        $remaining = (float) $qtyOriginal - (float) $qtyReturned;
+                        if ($remaining > 0.0000001) return true;
+                    }
+                }
+                return false;
+            }
+
+            // fallback jika tidak ada serial detail
+            foreach ($originalQtyByItemNo as $itemNo => $qtyOriginal) {
+                $qtyReturned = $returnedQtyByItemNo[$itemNo] ?? 0;
+                $remaining = (float) $qtyOriginal - (float) $qtyReturned;
+                if ($remaining > 0.0000001) return true;
+            }
+            return false;
+        } catch (\Exception $e) {
+            Log::error('invoiceHasRemainingReturnQtyBySerials exception:', [
+                'invoiceNo' => $invoiceNo,
+                'message' => $e->getMessage(),
+            ]);
+            return true; // fail-open
+        }
+    }
+
+    private function mergeOriginalSerialMapsFromDetailItems(array $detailItems, array &$serialQtyByItemNo, array &$qtyByItemNo): void
+    {
+        foreach ($detailItems as $di) {
+            if (!is_array($di)) continue;
+            $itemNo = data_get($di, 'item.no');
+            if (!is_string($itemNo) || trim($itemNo) === '') continue;
+            $itemNo = trim($itemNo);
+
+            $qtyByItemNo[$itemNo] = ($qtyByItemNo[$itemNo] ?? 0) + (float) (data_get($di, 'quantity', 0));
+
+            $serials = data_get($di, 'detailSerialNumber', []);
+            if (!is_array($serials) || $serials === []) continue;
+
+            foreach ($serials as $sn) {
+                if (!is_array($sn)) continue;
+                $serialNo = $this->normalizeSerialNumberNo($sn);
+                $qty = (float) ($sn['quantity'] ?? 0);
+                if (empty($serialNo) || $qty <= 0) continue;
+
+                if (!isset($serialQtyByItemNo[$itemNo])) $serialQtyByItemNo[$itemNo] = [];
+                if (!isset($serialQtyByItemNo[$itemNo][$serialNo])) $serialQtyByItemNo[$itemNo][$serialNo] = 0;
+                $serialQtyByItemNo[$itemNo][$serialNo] += $qty;
+            }
+        }
+    }
+
+    private function mergeReturnedSerialMapsFromDetailItems(array $detailItems, array &$serialQtyByItemNo, array &$qtyByItemNo): void
+    {
+        foreach ($detailItems as $di) {
+            if (!is_array($di)) continue;
+            $itemNo = data_get($di, 'item.no');
+            if (!is_string($itemNo) || trim($itemNo) === '') continue;
+            $itemNo = trim($itemNo);
+
+            $qtyByItemNo[$itemNo] = ($qtyByItemNo[$itemNo] ?? 0) + (float) (data_get($di, 'quantity', 0));
+
+            $serials = data_get($di, 'detailSerialNumber', []);
+            if (!is_array($serials) || $serials === []) continue;
+
+            foreach ($serials as $sn) {
+                if (!is_array($sn)) continue;
+                $serialNo = $this->normalizeSerialNumberNo($sn);
+                $qty = (float) ($sn['quantity'] ?? 0);
+                if (empty($serialNo) || $qty <= 0) continue;
+
+                if (!isset($serialQtyByItemNo[$itemNo])) $serialQtyByItemNo[$itemNo] = [];
+                if (!isset($serialQtyByItemNo[$itemNo][$serialNo])) $serialQtyByItemNo[$itemNo][$serialNo] = 0;
+                $serialQtyByItemNo[$itemNo][$serialNo] += $qty;
+            }
+        }
+    }
+
+    private function normalizeSerialNumberNo($sn): string
+    {
+        if (!is_array($sn)) return '';
+        $serialNo = $sn['serialNumberNo'] ?? null;
+        if (empty($serialNo) && isset($sn['serialNumber']['number'])) {
+            $serialNo = $sn['serialNumber']['number'];
+        }
+        $serialNo = isset($serialNo) ? trim((string) $serialNo) : '';
+        return $serialNo;
     }
 
     public function store(Request $request)
