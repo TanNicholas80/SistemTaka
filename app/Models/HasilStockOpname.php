@@ -125,15 +125,16 @@ class HasilStockOpname extends Model
                 return "{$prefix}00001";
             }
 
-            // Validasi credentials API Accurate dari Branch
-            if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
-                Log::warning('Kredensial API Accurate untuk cabang belum diatur saat generate NOP, menggunakan default');
+            // Validasi credentials API Accurate dari user aktif (via UserAccurateAPI)
+            $user = Auth::user();
+            if (!$user || !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null)) {
+                Log::warning('Kredensial API Accurate user belum diatur untuk branch aktif saat generate NOP, menggunakan default');
                 return "{$prefix}00001";
             }
 
-            // Get API credentials from branch (auto-decrypted by model accessors)
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            // Ambil API credentials (auto-decrypted via accessor di User model)
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null);
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 

@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Crypt;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class User extends Authenticatable
 {
@@ -19,8 +20,6 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
-        'accurate_api_token',
-        'accurate_signature_secret',
     ];
 
     protected $hidden = [
@@ -28,38 +27,82 @@ class User extends Authenticatable
         'remember_token',
     ];
 
-    public function setAccurateApiTokenAttribute($value)
-    {
-        $this->attributes['accurate_api_token'] = $value ? Crypt::encryptString($value) : null;
-    }
-
-    public function setAccurateSignatureSecretAttribute($value)
-    {
-        $this->attributes['accurate_signature_secret'] = $value ? Crypt::encryptString($value) : null;
-    }
-
-    public function getAccurateApiTokenAttribute($value)
-    {
-        return $value ? Crypt::decryptString($value) : null;
-    }
-
-    public function getAccurateSignatureSecretAttribute($value)
-    {
-        return $value ? Crypt::decryptString($value) : null;
-    }
-
     public function branches()
     {
         return $this->belongsToMany(Branch::class, 'branch_user', 'user_id', 'branch_id');
     }
 
-        /**
+    public function accurateApis(): HasMany
+    {
+        return $this->hasMany(UserAccurateAPI::class, 'user_id');
+    }
+
+    /**
+     * Ambil record Accurate untuk branch aktif (memoized per request).
+     */
+    private function accurateApiForActiveBranch(): ?UserAccurateAPI
+    {
+        $activeBranchId = session('active_branch');
+        if (!$activeBranchId) {
+            return null;
+        }
+
+        $userId = $this->id ?? 0;
+        $key = $userId . ':' . (string) $activeBranchId;
+
+        static $memo = [];
+        if (array_key_exists($key, $memo)) {
+            return $memo[$key];
+        }
+
+        $api = null;
+        if ($this->relationLoaded('accurateApis')) {
+            $api = $this->accurateApis->firstWhere('branch_id', (string) $activeBranchId);
+        } else {
+            $api = $this->accurateApis()->where('branch_id', $activeBranchId)->first();
+        }
+
+        $memo[$key] = $api;
+        return $api;
+    }
+
+    /**
+     * Ambil Accurate API token berdasarkan branch aktif (session `active_branch`).
+     * Ini menggantikan sumber lama yang tersimpan langsung di tabel `users`.
+     */
+    public function getAccurateApiTokenAttribute($value)
+    {
+        $accurateApi = $this->accurateApiForActiveBranch();
+        if ($accurateApi) {
+            return $accurateApi->accurate_api_token;
+        }
+
+        // Tidak ada konfigurasi Accurate untuk branch aktif.
+        return null;
+    }
+
+    /**
+     * Ambil Accurate signature secret berdasarkan branch aktif (session `active_branch`).
+     * Ini menggantikan sumber lama yang tersimpan langsung di tabel `users`.
+     */
+    public function getAccurateSignatureSecretAttribute($value)
+    {
+        $accurateApi = $this->accurateApiForActiveBranch();
+        if ($accurateApi) {
+            return $accurateApi->accurate_signature_secret;
+        }
+
+        // Tidak ada konfigurasi Accurate untuk branch aktif.
+        return null;
+    }
+
+    /**
      * Konfigurasi activity log untuk model User
      */
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['name', 'role', 'username', 'accurate_api_token', 'accurate_signature_secret']) // Tidak log password untuk keamanan
+            ->logOnly(['name', 'role', 'username']) // Tidak log password untuk keamanan
             ->logOnlyDirty() // Hanya log perubahan yang benar-benar terjadi
             ->dontSubmitEmptyLogs() // Jangan submit log kosong
             ->useLogName('Manajemen User') // Set log name sesuai permintaan
@@ -104,8 +147,6 @@ class User extends Authenticatable
                         'name' => $this->name,
                         'role' => $this->role,
                         'username' => $this->username,
-                        'accurate_api_token' => $this->accurate_api_token,
-                        'accurate_signature_secret' => $this->accurate_signature_secret,
                         'created_at' => $this->created_at
                     ],
                     'causer_info' => $causerInfo,
@@ -117,10 +158,6 @@ class User extends Authenticatable
                 // Untuk updated, tampilkan before dan after data
                 $changes = $this->getChanges();
                 $original = array_intersect_key($this->getOriginal(), $changes);
-                $original['accurate_api_token'] = $this->accurate_api_token;
-                $original['accurate_signature_secret'] = $this->accurate_signature_secret;
-                $changes['accurate_api_token'] = $this->accurate_api_token;
-                $changes['accurate_signature_secret'] = $this->accurate_signature_secret;
                 
                 $activity->description = "Data user '{$this->name}' telah diupdate";
                 $activity->properties = $activity->properties->merge([
@@ -142,8 +179,6 @@ class User extends Authenticatable
                         'name' => $this->name,
                         'role' => $this->role,
                         'username' => $this->username,
-                        'accurate_api_token' => $this->accurate_api_token,
-                        'accurate_signature_secret' => $this->accurate_signature_secret,
                         'deleted_at' => now()
                     ],
                     'causer_info' => $causerInfo,

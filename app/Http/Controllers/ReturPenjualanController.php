@@ -34,7 +34,7 @@ class ReturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -61,8 +61,8 @@ class ReturPenjualanController extends Controller
         }
 
         // Get API credentials from branch (auto-decrypted by model accessors)
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
@@ -286,7 +286,7 @@ class ReturPenjualanController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -323,7 +323,7 @@ class ReturPenjualanController extends Controller
         }
 
         $branch = Branch::find($activeBranchId);
-        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!$branch || !Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return response()->json(['deliveryOrders' => [], 'error' => 'Kredensial API tidak tersedia.'], 400);
         }
 
@@ -346,7 +346,7 @@ class ReturPenjualanController extends Controller
         }
 
         $branch = Branch::find($activeBranchId);
-        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!$branch || !Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return response()->json(['salesInvoices' => [], 'error' => 'Kredensial API tidak tersedia.'], 400);
         }
 
@@ -380,13 +380,13 @@ class ReturPenjualanController extends Controller
         }
 
         $branch = Branch::find($activeBranchId);
-        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!$branch || !Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return response()->json(['success' => false, 'message' => 'Kredensial API tidak tersedia.'], 400);
         }
 
         $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -694,8 +694,8 @@ class ReturPenjualanController extends Controller
      */
     private function fetchCustomersFromAccurate(Branch $branch, string $baseUrl): array
     {
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
         $customerApiUrl = $this->buildApiUrl($branch, 'customer/list.do');
@@ -791,8 +791,8 @@ class ReturPenjualanController extends Controller
      */
     private function getDeliveryOrdersFromAccurate(Branch $branch, string $baseUrl, ?string $customerNo = null)
     {
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -934,8 +934,8 @@ class ReturPenjualanController extends Controller
      */
     private function getSalesInvoicesFromAccurate(Branch $branch, string $baseUrl, ?string $customerNo = null)
     {
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1370,7 +1370,7 @@ class ReturPenjualanController extends Controller
             return back()->with('error', 'Data cabang tidak ditemukan.');
         }
 
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -1446,8 +1446,8 @@ class ReturPenjualanController extends Controller
             $validatedData = $validator->validated();
             $returnType = $validatedData['return_type'];
 
-            $apiToken = Auth::user()->accurate_api_token;
-            $signatureSecret = Auth::user()->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
             $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
@@ -1838,7 +1838,7 @@ class ReturPenjualanController extends Controller
             return back()->with('error', 'Data cabang tidak ditemukan.');
         }
 
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -1860,8 +1860,8 @@ class ReturPenjualanController extends Controller
         $apiSuccess = false;
 
         try {
-            $apiToken = Auth::user()->accurate_api_token;
-            $signatureSecret = Auth::user()->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
             $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');

@@ -39,11 +39,11 @@ class PrintBarcodeReturController extends Controller
             throw new \RuntimeException('Cabang tidak valid.');
         }
 
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             throw new \RuntimeException('Kredensial API Accurate belum dikonfigurasi.');
         }
 
-        return [$branch, Auth::user()->accurate_api_token, Auth::user()->accurate_signature_secret];
+        return [$branch, (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null), (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)];
     }
 
     /**

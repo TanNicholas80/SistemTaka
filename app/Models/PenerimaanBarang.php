@@ -187,16 +187,16 @@ class PenerimaanBarang extends Model
             $user = Auth::user();
             if (
                 !$user ||
-                !$user->accurate_api_token ||
-                !$user->accurate_signature_secret
+                !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null) ||
+                !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null)
             ) {
                 Log::warning('Kredensial API Accurate user belum diatur saat generate npb, menggunakan default');
                 return "{$prefix}00001";
             }
 
             // Get API credentials from user
-            $apiToken = $user->accurate_api_token;
-            $signatureSecret = $user->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null);
 
             $maxIter = 0;
 

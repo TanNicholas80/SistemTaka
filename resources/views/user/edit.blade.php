@@ -76,20 +76,56 @@
 
                                     @if (Auth::user()->role === 'super_admin')
                                         <div id="accurateFields" class="border rounded p-3 bg-light">
-                                            <h6 class="mb-3">Accurate Credentials</h6>
-                                            <div class="form-group">
-                                                <label>API Token Accurate</label>
-                                                <textarea name="accurate_api_token" id="accurate_api_token" class="form-control" rows="2"
-                                                    placeholder="Masukkan API Token Accurate">{{ old('accurate_api_token', $user->accurate_api_token) }}</textarea>
-                                                @error('accurate_api_token')
-                                                    <small class="text-danger">{{ $message }}</small>
-                                                @enderror
-                                            </div>
-                                            <div class="form-group mb-0">
-                                                <label>Signature Secret</label>
-                                                <textarea name="accurate_signature_secret" id="accurate_signature_secret" class="form-control" rows="2"
-                                                    placeholder="Masukkan Signature Secret">{{ old('accurate_signature_secret', $user->accurate_signature_secret) }}</textarea>
-                                                @error('accurate_signature_secret')
+                                            <h6 class="mb-3">Accurate Credentials per Cabang</h6>
+                                            <small class="text-muted d-block mb-2">Isi Customer ID, API Token, dan Signature Secret untuk setiap cabang yang dipilih.</small>
+                                            @php
+                                                $selectedBranches = old('branches', $user->branches->pluck('id')->toArray());
+                                                $selectedBranchIds = array_map('strval', $selectedBranches);
+                                            @endphp
+                                            @foreach ($branches as $branch)
+                                                @php
+                                                    $accurateApi = $accurateApisByBranch[$branch->id] ?? null;
+                                                    $isSelected = in_array((string) $branch->id, $selectedBranchIds, true);
+                                                @endphp
+                                                <div class="branch-credential border rounded p-2 mb-3 {{ $isSelected ? '' : 'd-none' }}"
+                                                    data-branch-id="{{ $branch->id }}">
+                                                    <h6 class="mb-2">{{ $branch->name }}</h6>
+
+                                                    <div class="form-group">
+                                                        <label>Customer ID</label>
+                                                        <input type="text"
+                                                            name="accurate_credentials[{{ $branch->id }}][customer_id]"
+                                                            class="form-control"
+                                                            value="{{ old('accurate_credentials.' . $branch->id . '.customer_id', $accurateApi->customer_id ?? '') }}"
+                                                            placeholder="Masukkan Customer ID">
+                                                        @error('accurate_credentials.' . $branch->id . '.customer_id')
+                                                            <small class="text-danger">{{ $message }}</small>
+                                                        @enderror
+                                                    </div>
+
+                                                    <div class="form-group">
+                                                        <label>API Token Accurate</label>
+                                                        <textarea name="accurate_credentials[{{ $branch->id }}][accurate_api_token]"
+                                                            class="form-control" rows="2"
+                                                            placeholder="Masukkan API Token Accurate">{{ old('accurate_credentials.' . $branch->id . '.accurate_api_token', $accurateApi->accurate_api_token ?? '') }}</textarea>
+                                                        @error('accurate_credentials.' . $branch->id . '.accurate_api_token')
+                                                            <small class="text-danger">{{ $message }}</small>
+                                                        @enderror
+                                                    </div>
+
+                                                    <div class="form-group mb-0">
+                                                        <label>Signature Secret</label>
+                                                        <textarea name="accurate_credentials[{{ $branch->id }}][accurate_signature_secret]"
+                                                            class="form-control" rows="2"
+                                                            placeholder="Masukkan Signature Secret">{{ old('accurate_credentials.' . $branch->id . '.accurate_signature_secret', $accurateApi->accurate_signature_secret ?? '') }}</textarea>
+                                                        @error('accurate_credentials.' . $branch->id . '.accurate_signature_secret')
+                                                            <small class="text-danger">{{ $message }}</small>
+                                                        @enderror
+                                                    </div>
+                                                </div>
+                                            @endforeach
+                                            <div class="mb-0">
+                                                @error('accurate_credentials')
                                                     <small class="text-danger">{{ $message }}</small>
                                                 @enderror
                                             </div>
@@ -98,10 +134,10 @@
 
                                     <div class="form-group">
                                         <label>Toko</label>
-                                        <select name="branches[]" class="form-control" multiple>
+                                        <select name="branches[]" id="branches" class="form-control" multiple>
                                             @foreach ($branches as $branch)
                                                 <option value="{{ $branch->id }}"
-                                                    {{ $user->branches->contains($branch->id) ? 'selected' : '' }}>
+                                                    {{ in_array((string) $branch->id, $selectedBranchIds, true) ? 'selected' : '' }}>
                                                     {{ $branch->name }}
                                                 </option>
                                             @endforeach
@@ -127,5 +163,28 @@
         }
 
         document.title = "Edit User";
+
+        const branchesSelect = document.getElementById('branches');
+        const credentialBlocks = document.querySelectorAll('.branch-credential');
+
+        function toggleCredentialBlocks() {
+            if (!branchesSelect) return;
+
+            const selectedBranchIds = Array.from(branchesSelect.selectedOptions).map(option => option.value);
+
+            credentialBlocks.forEach(block => {
+                const branchId = block.getAttribute('data-branch-id');
+                if (selectedBranchIds.includes(branchId)) {
+                    block.classList.remove('d-none');
+                } else {
+                    block.classList.add('d-none');
+                }
+            });
+        }
+
+        if (branchesSelect) {
+            branchesSelect.addEventListener('change', toggleCredentialBlocks);
+            toggleCredentialBlocks();
+        }
     </script>
 @endsection

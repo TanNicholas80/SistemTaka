@@ -24,8 +24,8 @@ class PrintBarcodeController extends Controller
         $user = Auth::user();
         $timestamp = Carbon::now()->toIsoString();
         return [
-            'Authorization' => 'Bearer ' . $user->accurate_api_token,
-            'X-Api-Signature' => hash_hmac('sha256', $timestamp, $user->accurate_signature_secret),
+            'Authorization' => 'Bearer ' . (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null),
+            'X-Api-Signature' => hash_hmac('sha256', $timestamp, (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null)),
             'X-Api-Timestamp' => $timestamp,
         ];
     }
