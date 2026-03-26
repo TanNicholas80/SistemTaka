@@ -222,104 +222,6 @@ class SalesController extends Controller
         return view('sales_cashier.index', compact('salesOrders', 'errorMessage'));
     }
 
-
-    /**
-     * Mengambil detail sales order dalam batch untuk mengoptimalkan performa
-     */
-    private function fetchSalesOrderDetailsInBatches($kasirPenjualanCollection, $branch, $apiToken, $signature, $timestamp, $batchSize = 5)
-    {
-        $detailPP = [];
-        $validItems = $kasirPenjualanCollection->filter(function ($item) {
-            return !empty($item->npj);
-        });
-
-        $batches = $validItems->chunk($batchSize);
-        $hasApiError = false; // Flag error untuk fungsi ini
-
-        foreach ($batches as $batch) {
-            $promises = [];
-            $client = new \GuzzleHttp\Client();
-
-            foreach ($batch as $item) {
-                $detailUrl = $this->buildApiUrl($branch, 'sales-order/detail.do?number=' . $item->npj);
-                $promises[$item->npj] = $client->getAsync($detailUrl, [
-                    'headers' => [
-                        'Authorization' => 'Bearer ' . $apiToken,
-                        'X-Api-Signature' => $signature,
-                        'X-Api-Timestamp' => $timestamp,
-                    ]
-                ]);
-            }
-
-            if (empty($promises))
-                continue;
-
-            // Jalankan batch promise secara paralel
-            $results = Utils::settle($promises)->wait();
-
-            // Proses hasil dari setiap promise
-            foreach ($results as $npj => $result) {
-                if ($result['state'] === 'fulfilled') {
-                    $detailResponse = json_decode($result['value']->getBody(), true);
-
-                    if (isset($detailResponse['d'])) {
-                        $json = $detailResponse;
-
-                        // pastikan struktur data sesuai
-                        if (isset($json['d']['customer']['contactInfo']['name']) && isset($json['d']['statusName']) && isset($json['d']['totalAmount'])) {
-                            $detailPP[$npj] = [
-                                'customer_name' => $json['d']['customer']['contactInfo']['name'],
-                                'status' => $json['d']['statusName'],
-                                'total_amount' => $json['d']['totalAmount'],
-                                'description' => $json['d']['description'] ?? null
-                            ];
-                        } else {
-                            // fallback jika struktur data tidak lengkap
-                            $detailPP[$npj] = [
-                                'customer_name' => null,
-                                'status' => null,
-                                'total_amount' => null,
-                                'description' => null
-                            ];
-                        }
-                    } else {
-                        $detailPP[$npj] = [
-                            'customer_name' => null,
-                            'status' => null,
-                            'total_amount' => null,
-                            'description' => null
-                        ];
-                    }
-
-                    Log::info("Sales order detail fetched for NPJ: {$npj}");
-                } else {
-                    $reason = $result['reason'];
-                    Log::error("Failed to fetch sales order detail for NPJ {$npj}: " . $reason->getMessage());
-
-                    // Check if it's a rate limiting error
-                    if ($reason instanceof \GuzzleHttp\Exception\ClientException && $reason->getResponse()->getStatusCode() == 429) {
-                        $hasApiError = true;
-                    }
-
-                    $detailPP[$npj] = [
-                        'customer_name' => null,
-                        'status' => null,
-                        'total_amount' => null,
-                        'description' => null
-                    ];
-                }
-            }
-
-            // Tambahkan delay kecil antara batch untuk menghindari rate limiting
-            usleep(200000); // 200ms
-        }
-
-        return [
-            'details' => $detailPP,
-            'has_error' => $hasApiError
-        ];
-    }
-
     public function show($npj, Request $request)
     {
         $activeBranchId = session('active_branch');
@@ -356,8 +258,9 @@ class SalesController extends Controller
         }
 
         try {
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            // Kredensial Accurate mengikuti user login (konsisten dengan method index)
+            $apiToken = Auth::user()->accurate_api_token;
+            $signatureSecret = Auth::user()->accurate_signature_secret;
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -380,6 +283,11 @@ class SalesController extends Controller
                 ], $cacheDuration * 60);
 
             } else {
+                Log::error('Gagal fetch SO detail dari Accurate', [
+                    'npj' => $npj,
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
                 $errorMessage = "Gagal mengambil data SO {$npj} dari Accurate.";
             }
 

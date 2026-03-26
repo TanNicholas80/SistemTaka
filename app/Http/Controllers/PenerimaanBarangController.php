@@ -785,10 +785,10 @@ class PenerimaanBarangController extends Controller
             }
         }
 
-        // Ambil packing list (approved) dan barcodes-nya
+        // Ambil packing list sesuai status yang diminta dan barcodes-nya
         $packingLists = PackingList::whereIn('id', $packingListIds)
             ->where('kode_customer', $branch->customer_id)
-            ->where('status', PackingList::STATUS_APPROVED)
+            ->where('status', $packingListStatus)
             ->get();
 
         if (empty($packingListIds)) {
@@ -845,7 +845,7 @@ class PenerimaanBarangController extends Controller
         }
 
         if ($packingLists->isEmpty()) {
-            throw new \Exception('Packing list tidak ditemukan atau status belum approved.');
+            throw new \Exception('Packing list tidak ditemukan atau status tidak sesuai.');
         }
 
         $nplList = $packingLists->pluck('npl')->toArray();
@@ -1395,7 +1395,8 @@ class PenerimaanBarangController extends Controller
                     $validatedData['npb'],
                     $packingListIds,
                     true,  // Update id_pb pada barcode
-                    true   // Include vendor
+                    true,  // Include vendor
+                    PackingList::STATUS_APPROVED
                 );
 
                 $itemDetails = $result['items'];
@@ -1770,7 +1771,7 @@ class PenerimaanBarangController extends Controller
             $penerimaanBarang = PenerimaanBarang::where('npb', $npb)->firstOrFail();
 
             // Ambil packing list IDs dari penerimaan barang
-            $packingListIds = $penerimaanBarang->packingLists()->pluck('id')->toArray();
+            $packingListIds = $penerimaanBarang->packingLists()->pluck('packing_list.id')->toArray();
             if (!empty($packingListIds)) {
                 // Mode packing_list: gunakan matching barcode permanen dari packing list
                 $itemDetailsData = $this->mapItemDetailsFromPackingLists(
@@ -1778,7 +1779,8 @@ class PenerimaanBarangController extends Controller
                     $penerimaanBarang->npb,
                     $packingListIds,
                     false,
-                    false
+                    false,
+                    PackingList::STATUS_CLOSED
                 );
 
                 $matchedItems = $itemDetailsData['items'];

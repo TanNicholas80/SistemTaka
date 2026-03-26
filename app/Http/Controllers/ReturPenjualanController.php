@@ -184,14 +184,28 @@ class ReturPenjualanController extends Controller
             }
         }
 
-        // Simpan data ke cache
-        $dataToCache = [
-            'returPenjualan' => $returPenjualan,
-            'errorMessage' => $errorMessage
-        ];
-
-        Cache::put($cacheKey, $dataToCache, $cacheDuration * 60);
-        Log::info('Data retur penjualan disimpan ke cache');
+        // Simpan data ke cache:
+        // - Hindari menimpa cache dengan array kosong bila API gagal (agar tidak "menghilangkan" data lama).
+        // - Cache hanya diupdate kalau API sukses, atau minimal ada data yang berhasil didapat.
+        $shouldWriteCache = $apiSuccess || (!empty($returPenjualan) && !$hasApiError);
+        if ($shouldWriteCache) {
+            $dataToCache = [
+                'returPenjualan' => $returPenjualan,
+                'errorMessage' => $errorMessage,
+            ];
+            Cache::put($cacheKey, $dataToCache, $cacheDuration * 60);
+            Log::info('Data retur penjualan disimpan ke cache', [
+                'cache_key' => $cacheKey,
+                'count' => is_array($returPenjualan) ? count($returPenjualan) : null,
+                'hasApiError' => $hasApiError,
+            ]);
+        } else {
+            Log::warning('Skip cache write karena API gagal dan data kosong', [
+                'cache_key' => $cacheKey,
+                'apiSuccess' => $apiSuccess,
+                'hasApiError' => $hasApiError,
+            ]);
+        }
 
         return view('retur_penjualan.index', compact('returPenjualan', 'errorMessage'));
     }
@@ -226,16 +240,16 @@ class ReturPenjualanController extends Controller
             $results = Utils::settle($promises)->wait();
 
             // Proses hasil dari setiap promise
-            foreach ($results as $invoiceId => $result) {
+            foreach ($results as $returnId => $result) {
                 if ($result['state'] === 'fulfilled') {
                     $detailResponse = json_decode($result['value']->getBody(), true);
                     if (isset($detailResponse['d'])) {
                         $salesReturnDetails[] = $detailResponse['d'];
-                        Log::info("Retur penjualan detail fetched for ID: {$return['id']}");
+                        Log::info("Retur penjualan detail fetched for ID: {$returnId}");
                     }
                 } else {
                     $reason = $result['reason'];
-                    Log::error("Failed to fetch retur penjualan detail for ID {$invoiceId}: " . $reason->getMessage());
+                    Log::error("Failed to fetch retur penjualan detail for ID {$returnId}: " . $reason->getMessage());
                     
                     // Check if it's a rate limiting error
                     if ($reason instanceof \GuzzleHttp\Exception\ClientException && $reason->getResponse()->getStatusCode() == 429) {
@@ -321,9 +335,6 @@ class ReturPenjualanController extends Controller
     public function getSalesInvoicesAjax(Request $request)
     {
         $customerNo = $request->query('filter.customerNo') ?? $request->query('filter_customerNo');
-        if (empty($customerNo)) {
-            return response()->json(['salesInvoices' => [], 'message' => 'customerNo wajib diisi']);
-        }
 
         $activeBranchId = session('active_branch');
         if (!$activeBranchId) {
@@ -336,7 +347,10 @@ class ReturPenjualanController extends Controller
         }
 
         $baseUrl = rtrim($branch->url_accurate ?? 'https://iris.accurate.id/accurate/api', '/');
-        $salesInvoices = $this->getSalesInvoicesFromAccurate($branch, $baseUrl, $customerNo);
+        // customerNo opsional:
+        // - jika ada, list faktur difilter per customer (flow lama)
+        // - jika kosong, kembalikan semua faktur yang diizinkan (Belum Lunas + Lunas) sesuai logika controller (flow baru)
+        $salesInvoices = $this->getSalesInvoicesFromAccurate($branch, $baseUrl, $customerNo ?: null);
 
         return response()->json(['salesInvoices' => $salesInvoices]);
     }
@@ -372,19 +386,14 @@ class ReturPenjualanController extends Controller
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
-        $detailApiUrl = null;
-        if ($returnType === 'delivery') {
-            $detailApiUrl = $baseUrl . '/delivery-order/detail.do';
-        } elseif (in_array($returnType, ['invoice', 'invoice_dp'])) {
-            $detailApiUrl = $baseUrl . '/sales-invoice/detail.do';
-        }
-
-        if (!$detailApiUrl) {
+        // Dikunci hanya untuk invoice
+        if ($returnType !== 'invoice') {
             return response()->json([
                 'success' => false,
-                'message' => 'Tipe retur tidak valid untuk mengambil detail.',
+                'message' => 'Tipe retur dikunci ke invoice.',
             ], 400);
         }
+        $detailApiUrl = $baseUrl . '/sales-invoice/detail.do';
 
         try {
             $response = Http::withHeaders([
@@ -416,9 +425,137 @@ class ReturPenjualanController extends Controller
             $detail = $responseData['d'];
             $detailItems = $detail['detailItem'] ?? [];
 
+            // --- Tahap 2: ambil info No Seri/Produksi dari Delivery Order (DO) ---
+            // Sales invoice detail terkadang tidak mengirim detailSerialNumber.
+            // Dari sales invoice detailItem, kita dapat deliveryOrder.number -> DO.XXXX.
+            // Lalu kita ambil delivery-order/detail.do untuk mendapatkan detailSerialNumber.
+            if (is_array($detailItems) && $detailItems !== []) {
+                $doNumbersSet = [];
+                foreach ($detailItems as $di) {
+                    $doNum = data_get($di, 'deliveryOrder.number');
+                    if (is_string($doNum) && trim($doNum) !== '') {
+                        $doNumbersSet[trim($doNum)] = true;
+                    }
+                }
+
+                $doNumbers = array_keys($doNumbersSet);
+
+                if ($doNumbers !== []) {
+                    $baseUrlDoDetailApiUrl = $baseUrl . '/delivery-order/detail.do';
+
+                    $allDoDetailLinesByItemNo = [];
+
+                    foreach ($doNumbers as $doNumber) {
+                        try {
+                            $doResp = Http::withHeaders([
+                                'Authorization' => 'Bearer ' . $apiToken,
+                                'X-Api-Signature' => $signature,
+                                'X-Api-Timestamp' => $timestamp,
+                            ])->get($baseUrlDoDetailApiUrl, ['number' => $doNumber]);
+
+                            if (!$doResp->successful()) {
+                                Log::warning('DO detail API gagal (untuk enrichment serial)', [
+                                    'do_number' => $doNumber,
+                                    'status' => $doResp->status(),
+                                ]);
+                                continue;
+                            }
+
+                            $doBody = $doResp->json();
+                            $doD = $doBody['d'] ?? null;
+                            if (!is_array($doD)) continue;
+
+                            $doDetailItems = $doD['detailItem'] ?? [];
+                            if (!is_array($doDetailItems)) continue;
+
+                            // Flatten semua DO detail lines ke map by itemNo
+                            foreach ($doDetailItems as $doLine) {
+                                $itemNo = data_get($doLine, 'item.no');
+                                if (!is_string($itemNo) || trim($itemNo) === '') continue;
+                                $itemNo = trim($itemNo);
+
+                                $allDoDetailLinesByItemNo[$itemNo][] = $doLine;
+                            }
+                        } catch (\Exception $e) {
+                            Log::error('Exception enrichment serial dari DO detail.do: ' . $e->getMessage(), [
+                                'do_number' => $doNumber,
+                            ]);
+                        }
+                    }
+
+                    // Enrich setiap detailItem sales invoice dengan detailSerialNumber dari DO
+                    foreach ($detailItems as $idx => $di) {
+                        $salesItemNo = data_get($di, 'item.no');
+                        if (!is_string($salesItemNo) || trim($salesItemNo) === '') continue;
+                        $salesItemNo = trim($salesItemNo);
+
+                        $salesQty = (float) (data_get($di, 'quantity', 0));
+                        $candidates = $allDoDetailLinesByItemNo[$salesItemNo] ?? [];
+                        if ($candidates === []) continue;
+
+                        // Prefer kandidat yang quantity-nya paling mirip
+                        $picked = null;
+                        foreach ($candidates as $cand) {
+                            $candQty = (float) (data_get($cand, 'quantity', 0));
+                            if ($salesQty > 0 && abs($candQty - $salesQty) < 0.0001) {
+                                $picked = $cand;
+                                break;
+                            }
+                        }
+                        // Kalau tidak ada match qty, ambil kandidat pertama yang punya detailSerialNumber
+                        if ($picked === null) {
+                            foreach ($candidates as $cand) {
+                                $serials = $cand['detailSerialNumber'] ?? null;
+                                if (is_array($serials) && $serials !== []) {
+                                    $picked = $cand;
+                                    break;
+                                }
+                            }
+                        }
+                        // Fallback: kandidat pertama
+                        if ($picked === null) $picked = $candidates[0] ?? null;
+                        if (!is_array($picked)) continue;
+
+                        $serials = $picked['detailSerialNumber'] ?? [];
+                        if (!is_array($serials)) $serials = [];
+
+                        // Normalisasi agar frontend/backend nyaman: tambahkan serialNumberNo jika perlu
+                        $normalizedSerials = [];
+                        foreach ($serials as $sn) {
+                            if (!is_array($sn)) continue;
+
+                            $serialNumberNo = $sn['serialNumberNo'] ?? null;
+                            if (empty($serialNumberNo) && isset($sn['serialNumber']['number'])) {
+                                $serialNumberNo = $sn['serialNumber']['number'];
+                            }
+                            $serialNumberNo = isset($serialNumberNo) ? trim((string) $serialNumberNo) : '';
+
+                            $qty = (float) ($sn['quantity'] ?? 0);
+                            if ($serialNumberNo === '' || $qty <= 0) continue;
+
+                            $sn['serialNumberNo'] = $serialNumberNo;
+                            $normalizedSerials[] = $sn;
+                        }
+
+                        // Enrich: overwrite detailSerialNumber dari sales invoice dengan DO serial jika ada
+                        if ($normalizedSerials !== []) {
+                            $detailItems[$idx]['detailSerialNumber'] = $normalizedSerials;
+                        } else {
+                            // Jika DO serial kosong, biarkan detailSerialNumber dari sales invoice apa adanya
+                            // (tapi biasanya memang kosong, jadi serial tetap tidak tampil)
+                        }
+                    }
+                }
+            }
+
             return response()->json([
                 'success' => true,
                 'detailItems' => $detailItems,
+                // Agar form bisa mengisi pelanggan otomatis setelah klik "Lanjut"
+                'customer' => $detail['customer'] ?? null,
+                // Agar form bisa menampilkan ringkasan Diskon & Total
+                'cashDiscPercent' => $detail['cashDiscPercent'] ?? null,
+                'cashDiscount' => $detail['cashDiscount'] ?? null,
             ]);
         } catch (Exception $e) {
             Log::error('Exception getReferensiDetailAjax: ' . $e->getMessage());
@@ -655,11 +792,12 @@ class ReturPenjualanController extends Controller
             return [];
         }
 
-        // Get all existing pengiriman_id from local database filtered by kode_customer
+        // Ambil nomor referensi yang sudah pernah dipakai untuk retur (kolom yang ada di DB: no_faktur_penjualan).
+        // Catatan: sebelumnya memakai `faktur_penjualan_id` namun kolom tsb tidak ada di tabel `retur_penjualans`.
         $kodeCustomerFilter = !empty($customerNo) ? $customerNo : ($branch->customer_id ?? null);
         $existingPengirimanIds = $kodeCustomerFilter
-            ? ReturPenjualan::where('kode_customer', $kodeCustomerFilter)->pluck('faktur_penjualan_id')->toArray()
-            : ReturPenjualan::pluck('faktur_penjualan_id')->toArray();
+            ? ReturPenjualan::where('kode_customer', $kodeCustomerFilter)->pluck('no_faktur_penjualan')->toArray()
+            : ReturPenjualan::pluck('no_faktur_penjualan')->toArray();
 
         // Filter out delivery orders that already exist in local database
         $deliveryOrders = array_filter($allDeliveryOrders, function ($deliveryOrder) use ($existingPengirimanIds) {
@@ -797,31 +935,39 @@ class ReturPenjualanController extends Controller
             return [];
         }
 
-        // Hanya faktur dengan status "Belum Lunas" yang bisa di-retur (sesuai aturan Accurate)
-        $statusBelumLunas = 'Belum Lunas';
-        $salesInvoicesBelumLunas = array_filter($allSalesInvoices, function ($invoice) use ($statusBelumLunas) {
-            $status = trim((string) ($invoice['statusName'] ?? ''));
-            return strcasecmp($status, $statusBelumLunas) === 0;
-        });
-        $salesInvoicesBelumLunas = array_values($salesInvoicesBelumLunas);
+        // Faktur yang boleh di-retur: "Belum Lunas" dan "Lunas"
+        // Ikuti normalisasi/heuristic yang dipakai di PrintBarcodeReturController.
+        $salesInvoicesAllowed = array_filter($allSalesInvoices, function ($invoice) {
+            $statusNameUpper = strtoupper(trim((string) ($invoice['statusName'] ?? '')));
+            if ($statusNameUpper === 'BELUM LUNAS') return true;
+            if ($statusNameUpper === 'LUNAS') return true;
 
-        // Get all existing faktur_penjualan_id from local database filtered by kode_customer
+            // Heuristic: beberapa variasi bisa mengandung kedua kata (mis. "BELUM ... LUNAS")
+            if (str_contains($statusNameUpper, 'BELUM') && str_contains($statusNameUpper, 'LUNAS')) {
+                return true;
+            }
+
+            return false;
+        });
+        $salesInvoicesAllowed = array_values($salesInvoicesAllowed);
+
+        // Get all existing no_faktur_penjualan from local database filtered by kode_customer
         $kodeCustomerFilter = !empty($customerNo) ? $customerNo : ($branch->customer_id ?? null);
         $existingFakturPenjualanIds = $kodeCustomerFilter
-            ? ReturPenjualan::where('kode_customer', $kodeCustomerFilter)->pluck('faktur_penjualan_id')->toArray()
-            : ReturPenjualan::pluck('faktur_penjualan_id')->toArray();
+            ? ReturPenjualan::where('kode_customer', $kodeCustomerFilter)->pluck('no_faktur_penjualan')->toArray()
+            : ReturPenjualan::pluck('no_faktur_penjualan')->toArray();
 
         // Filter out invoices that already have retur in local database
-        $salesInvoices = array_filter($salesInvoicesBelumLunas, function ($salesInvoice) use ($existingFakturPenjualanIds) {
+        $salesInvoices = array_filter($salesInvoicesAllowed, function ($salesInvoice) use ($existingFakturPenjualanIds) {
             return !in_array($salesInvoice['number'], $existingFakturPenjualanIds);
         });
 
         // Reset array indexes after filtering
         $salesInvoices = array_values($salesInvoices);
 
-        Log::info('Sales Invoices filtered successfully (hanya status Belum Lunas):', [
+        Log::info('Sales Invoices filtered successfully (Belum Lunas + Lunas):', [
             'total_from_api' => count($allSalesInvoices),
-            'belum_lunas' => count($salesInvoicesBelumLunas),
+            'allowed_count' => count($salesInvoicesAllowed),
             'existing_in_database' => count($existingFakturPenjualanIds),
             'filtered_available' => count($salesInvoices)
         ]);
@@ -845,27 +991,37 @@ class ReturPenjualanController extends Controller
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
-        $returnType = $request->input('return_type');
+        // Support alias: frontend kirim `no_faktur_penjualan`, backend tetap pakai `faktur_penjualan_id`.
+        $noFakturPenjualan = $request->input('no_faktur_penjualan');
+        $fakturPenjualanId = $request->input('faktur_penjualan_id');
+        if (empty($fakturPenjualanId) && !empty($noFakturPenjualan)) {
+            $request->merge(['faktur_penjualan_id' => $noFakturPenjualan]);
+        }
+
+        // UI mengunci tipe retur ke invoice, backend tetap enforce untuk keamanan.
+        $request->merge(['return_type' => 'invoice']);
+        $returnType = 'invoice';
         $returnStatusType = $request->input('return_status_type', 'not_returned');
 
         $rules = [
             'no_retur'                => 'required|string|max:255|unique:retur_penjualans,no_retur',
             'tanggal_retur'           => 'required|date',
             'pelanggan_id'            => 'required|string|max:255',
-            'return_type'             => 'required|in:delivery,invoice,invoice_dp,no_invoice',
+            'return_type'             => 'required|in:invoice',
             'return_status_type'      => 'required|in:not_returned,partially_returned,returned',
+            'diskon_keseluruhan'      => 'nullable|numeric|min:0',
             'detailItems'             => 'required|array|min:1',
             'detailItems.*.kode'      => 'required|string',
             'detailItems.*.kuantitas' => 'required|string',
             'detailItems.*.harga'     => 'required|numeric|min:0',
             'detailItems.*.diskon'    => 'nullable|numeric|min:0',
+            // Optional (kompatibilitas bila frontend sudah mengirim serial)
+            'detailItems.*.detailSerialNumber' => 'nullable|array',
+            'detailItems.*.detailSerialNumber.*.serialNumberNo' => 'nullable|string',
+            'detailItems.*.detailSerialNumber.*.quantity' => 'nullable|numeric|min:0',
         ];
 
-        if ($returnType === 'delivery') {
-            $rules['pengiriman_pesanan_id'] = 'required|string|max:255';
-        } elseif (in_array($returnType, ['invoice', 'invoice_dp'])) {
-            $rules['faktur_penjualan_id'] = 'required|string|max:255';
-        }
+        $rules['faktur_penjualan_id'] = 'required|string|max:255';
 
         if ($returnStatusType === 'partially_returned') {
             $rules['detailItems.*.return_detail_status'] = 'required|in:NOT_RETURNED,RETURNED';
@@ -1007,6 +1163,52 @@ class ReturPenjualanController extends Controller
                     ->where('kode_customer', $branch->customer_id)
                     ->first();
 
+                $invoiceNumber = $validatedData['faktur_penjualan_id'];
+
+                // Selalu ambil detail invoice dari Accurate untuk validasi transDate.
+                // Requirement: validasi tanggal retur tidak boleh sebelum tanggal faktur dari response detail API.
+                try {
+                    $invoiceResponse = Http::withHeaders([
+                        'Authorization' => 'Bearer ' . $apiToken,
+                        'X-Api-Signature' => $signature,
+                        'X-Api-Timestamp' => $timestamp,
+                    ])->get($baseUrl . '/sales-invoice/detail.do', [
+                        'number' => $invoiceNumber,
+                    ]);
+
+                    if (!$invoiceResponse->successful() || !isset($invoiceResponse->json()['d'])) {
+                        DB::rollBack();
+                        return back()->withInput()->with('error', 'Data Faktur Penjualan dengan nomor ' . $invoiceNumber . ' tidak ditemukan di Accurate.');
+                    }
+
+                    $invDetail = $invoiceResponse->json()['d'];
+                } catch (\Exception $e) {
+                    Log::error('Exception saat ambil sales-invoice/detail.do untuk validasi transDate: ' . $e->getMessage());
+                    DB::rollBack();
+                    return back()->withInput()->with('error', 'Data Faktur Penjualan gagal diambil dari Accurate untuk validasi tanggal: ' . $e->getMessage());
+                }
+
+                // Validasi tanggal retur >= transDate faktur.
+                $invoiceTransDateStr = $invDetail['transDate'] ?? null;
+                if (empty($invoiceTransDateStr)) {
+                    DB::rollBack();
+                    return back()->withInput()->with('error', 'Response sales-invoice/detail.do tidak memiliki field `transDate` untuk faktur ' . $invoiceNumber . '.');
+                }
+
+                $tanggalRetur = Carbon::parse($validatedData['tanggal_retur'])->startOfDay();
+                try {
+                    $invoiceTransDate = Carbon::createFromFormat('d/m/Y', (string) $invoiceTransDateStr)->startOfDay();
+                } catch (\Exception $e) {
+                    // Fallback bila format berbeda
+                    $invoiceTransDate = Carbon::parse((string) $invoiceTransDateStr)->startOfDay();
+                }
+
+                if ($tanggalRetur->lt($invoiceTransDate)) {
+                    DB::rollBack();
+                    return back()->withInput()->with('error', 'Tanggal retur tidak boleh sebelum tanggal faktur penjualan (' . $invoiceTransDateStr . ').');
+                }
+
+                // Isi referensi lain (alamat/keterangan/syarat bayar/pajak/diskon keseluruhan)
                 if ($fakturPenjualan) {
                     Log::info('FakturPenjualan data found for retur penjualan (local):', [
                         'no_faktur' => $fakturPenjualan->no_faktur,
@@ -1023,48 +1225,38 @@ class ReturPenjualanController extends Controller
                     $kenaPajak = $fakturPenjualan->kena_pajak;
                     $totalTermasukPajak = $fakturPenjualan->total_termasuk_pajak;
                     $diskonKeseluruhan = $fakturPenjualan->diskon_keseluruhan;
-                } else {
-                    // Fallback: tidak ada di model lokal, ambil dari API sales-invoice/detail.do
-                    Log::info('FakturPenjualan tidak ditemukan di lokal, fallback ke API sales-invoice/detail.do', [
-                        'faktur_penjualan_id' => $validatedData['faktur_penjualan_id'],
-                    ]);
-
-                    try {
-                        $invoiceResponse = Http::withHeaders([
-                            'Authorization' => 'Bearer ' . $apiToken,
-                            'X-Api-Signature' => $signature,
-                            'X-Api-Timestamp' => $timestamp,
-                        ])->get($baseUrl . '/sales-invoice/detail.do', [
-                            'number' => $validatedData['faktur_penjualan_id'],
-                        ]);
-
-                        if ($invoiceResponse->successful() && isset($invoiceResponse->json()['d'])) {
-                            $invDetail = $invoiceResponse->json()['d'];
-                            $alamat = $invDetail['toAddress'] ?? null;
-                            $keterangan = $invDetail['description'] ?? null;
-                            $syaratBayar = !empty($invDetail['paymentTermName']) ? $invDetail['paymentTermName'] : 'C.O.D';
-                            $kenaPajak = $invDetail['taxable'] ?? null;
-                            $totalTermasukPajak = $invDetail['inclusiveTax'] ?? null;
-                            if (isset($invDetail['cashDiscPercent']) && $invDetail['cashDiscPercent'] > 0) {
-                                $diskonKeseluruhan = $invDetail['cashDiscPercent'];
-                            } elseif (isset($invDetail['cashDiscount']) && $invDetail['cashDiscount'] > 0) {
-                                $diskonKeseluruhan = $invDetail['cashDiscount'];
-                            } else {
-                                $diskonKeseluruhan = null;
-                            }
-                            Log::info('Data referensi invoice diambil dari sales-invoice/detail.do');
-                        } else {
-                            DB::rollBack();
-                            return back()->withInput()->with('error', 'Data Faktur Penjualan dengan nomor ' . $validatedData['faktur_penjualan_id'] . ' tidak ditemukan di database lokal maupun di Accurate.');
-                        }
-                    } catch (\Exception $e) {
-                        Log::error('Exception saat fallback sales-invoice/detail.do: ' . $e->getMessage());
-                        DB::rollBack();
-                        return back()->withInput()->with('error', 'Data Faktur Penjualan tidak ditemukan dan gagal mengambil dari Accurate: ' . $e->getMessage());
-                    }
                 }
 
-                $invoiceNumber = $validatedData['faktur_penjualan_id'];
+                // Fallback/upgrade dari Accurate bila data lokal kosong.
+                if (empty($alamat) && !empty($invDetail['toAddress'])) {
+                    $alamat = $invDetail['toAddress'];
+                }
+                if (empty($keterangan) && !empty($invDetail['description'])) {
+                    $keterangan = $invDetail['description'];
+                }
+                if (($syaratBayar === 'C.O.D' || empty($syaratBayar)) && !empty($invDetail['paymentTermName'])) {
+                    $syaratBayar = $invDetail['paymentTermName'];
+                }
+                if ($kenaPajak === null && array_key_exists('taxable', $invDetail)) {
+                    $kenaPajak = $invDetail['taxable'];
+                }
+                if ($totalTermasukPajak === null && array_key_exists('inclusiveTax', $invDetail)) {
+                    $totalTermasukPajak = $invDetail['inclusiveTax'];
+                }
+                if ($diskonKeseluruhan === null || $diskonKeseluruhan === '') {
+                    if (isset($invDetail['cashDiscPercent']) && $invDetail['cashDiscPercent'] > 0) {
+                        $diskonKeseluruhan = $invDetail['cashDiscPercent'];
+                    } elseif (isset($invDetail['cashDiscount']) && $invDetail['cashDiscount'] > 0) {
+                        $diskonKeseluruhan = $invDetail['cashDiscount'];
+                    } else {
+                        $diskonKeseluruhan = null;
+                    }
+                }
+            }
+
+            // Override diskon keseluruhan dari form (jika dikirim frontend)
+            if (array_key_exists('diskon_keseluruhan', $validatedData) && $validatedData['diskon_keseluruhan'] !== null && $validatedData['diskon_keseluruhan'] !== '') {
+                $diskonKeseluruhan = (float) $validatedData['diskon_keseluruhan'];
             }
             // no_invoice: gunakan default (C.O.D, tanpa alamat/keterangan dari referensi)
 
@@ -1074,22 +1266,51 @@ class ReturPenjualanController extends Controller
             $detailItemsForAccurate = [];
             foreach ($validatedData['detailItems'] as $item) {
                 $accurateItem = [
-                    'itemNo'    => $item['kode'],
-                    'quantity'  => $item['kuantitas'],
-                    'unitPrice' => $item['harga'],
+                    'itemNo'         => (string) ($item['kode'] ?? ''),
+                    'quantity'       => (float) ($item['kuantitas'] ?? 0),
+                    'unitPrice'      => (float) ($item['harga'] ?? 0),
+                    'warehouseName'  => 'GUDANG RETUR', // Default statis sesuai requirement
                 ];
 
-                if (isset($item['diskon']) && $item['diskon'] > 0) {
-                    $diskon = (float) $item['diskon'];
-                    if ($diskon > 0 && $diskon <= 100) {
-                        $accurateItem['itemDiscPercent'] = $diskon;
+                // Form mengirim `diskon` sebagai angka input user.
+                // Aturan mapping untuk Accurate:
+                // - 0-100 => itemDiscPercent
+                // - >100  => itemCashDiscount
+                if (isset($item['diskon']) && (float) $item['diskon'] > 0) {
+                    $diskonInput = (float) $item['diskon'];
+                    if ($diskonInput > 0 && $diskonInput <= 100) {
+                        $accurateItem['itemDiscPercent'] = $diskonInput;
                     } else {
-                        $accurateItem['itemCashDiscount'] = $diskon;
+                        $accurateItem['itemCashDiscount'] = $diskonInput;
                     }
                 }
 
                 if ($accurateReturnStatusType === 'PARTIALLY_RETURNED') {
                     $accurateItem['returnDetailStatusType'] = $item['return_detail_status'] ?? 'NOT_RETURNED';
+                }
+
+                // Opsional: dukung detailSerialNumber bila dikirim frontend
+                // (struktur: detailSerialNumber[] berisi {serialNumberNo, quantity})
+                $detailSerials = $item['detailSerialNumber'] ?? null;
+                if (is_array($detailSerials) && $detailSerials !== []) {
+                    $normalizedSerials = [];
+                    foreach ($detailSerials as $sn) {
+                        if (!is_array($sn)) {
+                            continue;
+                        }
+                        $serialNumberNo = trim((string) ($sn['serialNumberNo'] ?? ''));
+                        $qty = (float) ($sn['quantity'] ?? 0);
+                        if ($serialNumberNo === '' || $qty <= 0) {
+                            continue;
+                        }
+                        $normalizedSerials[] = [
+                            'serialNumberNo' => $serialNumberNo,
+                            'quantity' => $qty,
+                        ];
+                    }
+                    if ($normalizedSerials !== []) {
+                        $accurateItem['detailSerialNumber'] = $normalizedSerials;
+                    }
                 }
 
                 $detailItemsForAccurate[] = $accurateItem;
@@ -1151,13 +1372,33 @@ class ReturPenjualanController extends Controller
 
             if (!$response->successful()) {
                 DB::rollBack();
+                Log::error('Accurate API /sales-return/save.do HTTP failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'postDataForAccurate' => $postDataForAccurate,
+                ]);
                 return back()->withInput()->with('error', 'Gagal mengirim data ke Accurate API. HTTP Status: ' . $response->status());
             }
 
-            $responseData = $response->json();
+            $responseData = null;
+            try {
+                $responseData = $response->json();
+            } catch (\Exception $e) {
+                // Jika body bukan JSON, tetap log biar ada petunjuk
+                Log::warning('Accurate API /sales-return/save.do non-JSON response', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                    'postDataForAccurate' => $postDataForAccurate,
+                ]);
+            }
 
             if (isset($responseData['s']) && $responseData['s'] === false) {
                 DB::rollBack();
+                Log::error('Accurate API /sales-return/save.do returned s=false', [
+                    'responseData' => $responseData,
+                    'rawBody' => $response->body(),
+                    'postDataForAccurate' => $postDataForAccurate,
+                ]);
                 return back()->withInput()->with('error', 'Accurate API mengembalikan error: ' . ($responseData['m'] ?? 'Unknown error'));
             }
 
@@ -1168,8 +1409,8 @@ class ReturPenjualanController extends Controller
                 'pelanggan_id'          => $validatedData['pelanggan_id'],
                 'return_type'           => $returnType,
                 'return_status_type'    => $validatedData['return_status_type'],
-                'faktur_penjualan_id'   => $validatedData['faktur_penjualan_id'] ?? null,
-                'pengiriman_pesanan_id' => $validatedData['pengiriman_pesanan_id'] ?? null,
+                // Kolom DB yang ada: no_faktur_penjualan (lihat migration 2026_02_16_082641_create_retur_penjualans_table.php)
+                'no_faktur_penjualan'   => $validatedData['faktur_penjualan_id'] ?? null,
                 'alamat'                => $alamat,
                 'keterangan'            => $keterangan,
                 'syarat_bayar'          => $syaratBayar,
@@ -1251,8 +1492,8 @@ class ReturPenjualanController extends Controller
                     ->where('kode_customer', $branch->customer_id)
                     ->first();
                 $referenceType = 'delivery';
-            } elseif (in_array($returnType, ['invoice', 'invoice_dp']) && $returPenjualan->faktur_penjualan_id) {
-                $fakturPenjualanRef = FakturPenjualan::where('no_faktur', $returPenjualan->faktur_penjualan_id)
+            } elseif (in_array($returnType, ['invoice', 'invoice_dp']) && $returPenjualan->no_faktur_penjualan) {
+                $fakturPenjualanRef = FakturPenjualan::where('no_faktur', $returPenjualan->no_faktur_penjualan)
                     ->where('kode_customer', $branch->customer_id)
                     ->first();
                 $referenceType = 'invoice';
@@ -1294,16 +1535,16 @@ class ReturPenjualanController extends Controller
                         'status' => $deliveryResponse->status(),
                     ]);
                 }
-            } elseif ($referenceType === 'invoice' && $returPenjualan->faktur_penjualan_id) {
+            } elseif ($referenceType === 'invoice' && $returPenjualan->no_faktur_penjualan) {
                 $invoiceResponse = $httpClient->get($baseUrl . '/sales-invoice/detail.do', [
-                    'number' => $returPenjualan->faktur_penjualan_id,
+                    'number' => $returPenjualan->no_faktur_penjualan,
                 ]);
 
                 if ($invoiceResponse->successful() && isset($invoiceResponse->json()['d'])) {
                     $accurateReferenceDetail = $invoiceResponse->json()['d'];
                 } else {
                     Log::warning('Gagal fetch detail sales invoice untuk retur penjualan', [
-                        'faktur_penjualan_id' => $returPenjualan->faktur_penjualan_id,
+                        'no_faktur_penjualan' => $returPenjualan->no_faktur_penjualan,
                         'status' => $invoiceResponse->status(),
                     ]);
                 }
