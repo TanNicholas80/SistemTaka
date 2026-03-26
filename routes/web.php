@@ -144,6 +144,7 @@ Route::middleware(['auth'])->group(function () {
         // Pengiriman Pesanan - For Non-Owner
         Route::get('/pengiriman-pesanan/create', [PengirimanPesananController::class, 'create'])->name('pengiriman_pesanan.create');
         Route::get('/pengiriman-pesanan/customer/{number}', [PengirimanPesananController::class, 'getCustomerByAjax'])->name('pengiriman_pesanan.getCustomer');
+        Route::post('/pengiriman-pesanan/scan-accurate', [PengirimanPesananController::class, 'scanBarcodeAccurate'])->name('pengiriman_pesanan.scan_accurate');
         Route::post('/pengiriman-pesanan/store', [PengirimanPesananController::class, 'store'])->name('pengiriman_pesanan.store');
 
         // Faktur Penjualan - Full CRUD
