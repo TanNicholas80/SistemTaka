@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\Barcode;
+use App\Models\BarcodeNonPL;
 use App\Models\Branch;
 use App\Models\PenerimaanBarang;
 use App\Models\ReturPembelian;
@@ -1056,6 +1058,26 @@ class ReturPembelianController extends Controller
                 'return_type' => $returnType,
                 'faktur_pembelian_id' => $validatedData['faktur_pembelian_id'] ?? null,
             ]);
+
+            // Update item flags to 'retur_pembelian' for all returned barcodes
+            foreach ($validatedData['detailItems'] as $item) {
+                if (!empty($item['detailSerialNumber']) && is_array($item['detailSerialNumber'])) {
+                    foreach ($item['detailSerialNumber'] as $sn) {
+                        $barcodeStr = trim((string) ($sn['serialNumberNo'] ?? ''));
+                        if ($barcodeStr === '') continue;
+
+                        // Update Barcode table
+                        Barcode::where('barcode', $barcodeStr)
+                            ->where('kode_customer', $branch->customer_id)
+                            ->update(['item_flag' => 'retur_pembelian']);
+
+                        // Update BarcodeNonPL table
+                        BarcodeNonPL::where('barcode', $barcodeStr)
+                            ->where('kode_customer', $branch->customer_id)
+                            ->update(['item_flag' => 'retur_pembelian']);
+                    }
+                }
+            }
 
             DB::commit();
             Cache::forget('accurate_retur_pembelian_list_branch_' . $activeBranchId);

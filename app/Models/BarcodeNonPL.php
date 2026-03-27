@@ -16,6 +16,7 @@ class BarcodeNonPL extends Model
         'npb',
         'item_no',
         'item_name',
+        'item_flag',
     ];
 
     private static $prefixMap = [

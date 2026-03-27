@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\Barcode;
+use App\Models\BarcodeNonPL;
 use App\Models\Branch;
 use App\Models\FakturPenjualan;
 use App\Models\PengirimanPesanan;
@@ -1445,6 +1447,27 @@ class ReturPenjualanController extends Controller
                 'diskon_keseluruhan' => $diskonKeseluruhan,
                 'kode_customer' => $branch->customer_id,
             ]);
+
+            // Update item flags to 'retur_penjualan' for all returned barcodes
+            foreach ($validatedData['detailItems'] as $item) {
+                $detailSerials = $item['detailSerialNumber'] ?? null;
+                if (is_array($detailSerials)) {
+                    foreach ($detailSerials as $sn) {
+                        $barcodeStr = trim((string) ($sn['serialNumberNo'] ?? ''));
+                        if ($barcodeStr === '') continue;
+
+                        // Update Barcode table
+                        Barcode::where('barcode', $barcodeStr)
+                            ->where('kode_customer', $branch->customer_id)
+                            ->update(['item_flag' => 'retur_penjualan']);
+
+                        // Update BarcodeNonPL table
+                        BarcodeNonPL::where('barcode', $barcodeStr)
+                            ->where('kode_customer', $branch->customer_id)
+                            ->update(['item_flag' => 'retur_penjualan']);
+                    }
+                }
+            }
 
             DB::commit();
 
