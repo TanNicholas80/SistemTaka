@@ -99,7 +99,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/branch/{branch}', [BranchController::class, 'destroy'])->name('branch.destroy');
     });
 
-    Route::middleware(['role:toko,super_admin'])->group(function () {
+    Route::middleware(['role:kepala_toko,super_admin'])->group(function () {
         Route::get('/barcode', [BarcodeController::class, 'index'])->name('barcode.index');
 
         // Barang Masuk (Scan Barang) - hanya fitur yang dipakai

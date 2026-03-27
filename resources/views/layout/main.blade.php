@@ -249,11 +249,11 @@
 
                         @if (Auth::user()->role !== 'owner')
                             <li
-                                class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('print_barcode.*') ? 'menu-open' : '' }}">
+                                class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('retur_pembelian.*') ? 'menu-open' : '' }}">
                                 <a href="#"
-                                    class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('print_barcode.*') ? 'active' : '' }}">
+                                    class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('retur_pembelian.*') ? 'active' : '' }}">
                                     <i class="nav-icon fas fa-warehouse"></i>
-                                    <p>Penerimaan <i class="right fas fa-angle-left"></i></p>
+                                    <p>Pembelian <i class="right fas fa-angle-left"></i></p>
                                 </a>
                                 <ul class="nav nav-treeview">
                                     <li class="nav-item">
@@ -315,10 +315,10 @@
                                         </a>
                                     </li>
                                     <li class="nav-item">
-                                        <a href="{{ route('print_barcode.index') }}"
-                                            class="nav-link {{ Request::routeIs('print_barcode.*') ? 'active' : '' }}">
+                                        <a href="{{ route('retur_pembelian.index') }}"
+                                            class="nav-link {{ Request::is('retur-pembelian*') ? 'active' : '' }}">
                                             <i class="far fa-circle nav-icon"></i>
-                                            <p>Reprint Barcode</p>
+                                            <p>Retur Pembelian</p>
                                         </a>
                                     </li>
                                 </ul>
@@ -326,9 +326,9 @@
                         @endif
 
                         <li
-                            class="nav-item {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') ? 'menu-open' : '' }}">
+                            class="nav-item {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') || Request::routeIs('print_barcode.*') ? 'menu-open' : '' }}">
                             <a href="#"
-                                class="nav-link {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') ? 'active' : '' }}">
+                                class="nav-link {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') || Request::routeIs('print_barcode.*') ? 'active' : '' }}">
                                 <i class="nav-icon fa-solid fa-cart-flatbed"></i>
                                 <p>Persediaan <i class="right fas fa-angle-left"></i></p>
                             </a>
@@ -354,22 +354,13 @@
                                         <p>Barang & Jasa</p>
                                     </a>
                                 </li>
-                            </ul>
-                        </li>
-
-                        <li class="nav-item {{ Request::routeIs('retur_pembelian.*') ? 'menu-open' : '' }}">
-                            <a href="#" class="nav-link {{ Request::routeIs('retur_pembelian.*') ? 'active' : '' }}">
-                                <i class="nav-icon fa-solid fa-cart-shopping"></i>
-                                <p>Pembelian <i class="right fas fa-angle-left"></i></p>
-                            </a>
-                            <ul class="nav nav-treeview">
                                 <li class="nav-item">
-                                    <a href="{{ route('retur_pembelian.index') }}"
-                                        class="nav-link {{ Request::is('retur-pembelian*') ? 'active' : '' }}">
-                                        <i class="far fa-circle nav-icon"></i>
-                                        <p>Retur Pembelian</p>
-                                    </a>
-                                </li>
+                                        <a href="{{ route('print_barcode.index') }}"
+                                            class="nav-link {{ Request::routeIs('print_barcode.*') ? 'active' : '' }}">
+                                            <i class="far fa-circle nav-icon"></i>
+                                            <p>Reprint Barcode</p>
+                                        </a>
+                                    </li>
                             </ul>
                         </li>
 
