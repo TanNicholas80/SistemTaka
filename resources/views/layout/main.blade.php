@@ -255,7 +255,7 @@
                                     <i class="nav-icon fas fa-warehouse"></i>
                                     <p>Pembelian <i class="right fas fa-angle-left"></i></p>
                                 </a>
-                                <ul class="nav nav-treeview">
+                                <ul class="nav nav-treeview ml-3">
                                     <li class="nav-item">
                                         <a href="{{ route('pesanan_pembelian.index') }}"
                                             class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
@@ -332,7 +332,7 @@
                                 <i class="nav-icon fa-solid fa-cart-flatbed"></i>
                                 <p>Persediaan <i class="right fas fa-angle-left"></i></p>
                             </a>
-                            <ul class="nav nav-treeview">
+                            <ul class="nav nav-treeview ml-3">
                                 {{-- <li class="nav-item">
                                     <a href="{{ route('perintah_stock_opname.index') }}"
                                         class="nav-link {{ Request::is('perintah-stock-opname*') ? 'active' : '' }}">
@@ -371,7 +371,7 @@
                                 <i class="nav-icon fas fa-tags"></i>
                                 <p>Penjualan <i class="right fas fa-angle-left"></i></p>
                             </a>
-                            <ul class="nav nav-treeview">
+                            <ul class="nav nav-treeview ml-3">
 
                                 <li class="nav-item">
                                     <a href="{{ route('cashier.index') }}"

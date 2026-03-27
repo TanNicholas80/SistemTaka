@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Barcode;
+use App\Models\BarcodeNonPL;
 use App\Models\Branch;
 use App\Models\KasirPenjualan;
 use App\Models\PengirimanPesanan;
@@ -1140,6 +1142,26 @@ class PengirimanPesananController extends Controller
                 'is_partial' => $isPartial,
                 'kode_customer' => $branch->customer_id,
             ]);
+
+            // Update item flags to 'penjualan' for all scanned barcodes
+            foreach ($serialsMap as $itemNo => $serials) {
+                if (is_array($serials)) {
+                    foreach (array_keys($serials) as $barcode) {
+                        $barcodeStr = trim((string) $barcode);
+                        if ($barcodeStr === '') continue;
+
+                        // Update Barcode table
+                        Barcode::where('barcode', $barcodeStr)
+                            ->where('kode_customer', $branch->customer_id)
+                            ->update(['item_flag' => 'penjualan']);
+
+                        // Update BarcodeNonPL table
+                        BarcodeNonPL::where('barcode', $barcodeStr)
+                            ->where('kode_customer', $branch->customer_id)
+                            ->update(['item_flag' => 'penjualan']);
+                    }
+                }
+            }
 
             // Clear related cache per branch
             Cache::forget('accurate_delivery_order_list_branch_' . $activeBranchId);
