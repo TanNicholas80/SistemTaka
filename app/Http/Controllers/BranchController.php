@@ -118,6 +118,6 @@ class BranchController extends Controller
             $successMessage = 'Toko tidak ditemukan.';
         }
 
-        return redirect()->route('dashboard')->with('success', $successMessage);
+        return redirect()->route('barang_master.index')->with('success', $successMessage);
     }
 }

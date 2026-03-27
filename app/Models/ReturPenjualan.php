@@ -114,15 +114,15 @@ class ReturPenjualan extends Model
             $user = Auth::user();
             if (
                 !$user ||
-                !$user->accurate_api_token ||
-                !$user->accurate_signature_secret
+                !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null) ||
+                !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null)
             ) {
                 Log::warning('Kredensial API Accurate user belum diatur saat generate no_retur retur penjualan, menggunakan default');
                 return $prefix . '00001';
             }
 
-            $apiToken = $user->accurate_api_token;
-            $signatureSecret = $user->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null);
 
             $maxIter = 0;
 

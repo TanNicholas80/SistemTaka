@@ -41,7 +41,7 @@ class PesananPembelianController extends Controller
             return back()->with('error', 'Cabang tidak valid.');
         }
 
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -63,8 +63,8 @@ class PesananPembelianController extends Controller
             return view('pesanan_pembelian.index', compact('pesananPembelian', 'errorMessage'));
         }
 
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
         $apiUrl = $this->buildApiUrl($branch, 'purchase-order/list.do');
@@ -158,7 +158,7 @@ class PesananPembelianController extends Controller
             return back()->with('error', 'Cabang tidak valid.');
         }
 
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -172,8 +172,8 @@ class PesananPembelianController extends Controller
         $errorMessage = null;
         $detail = null;
 
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
         $detailApiUrl = $this->buildApiUrl($branch, 'purchase-order/detail.do?number=' . $number);

@@ -44,7 +44,7 @@
                         </div>
 
                         <div class="card-body">
-                            <table id="pemasok" class="table table-head-fixed text-nowrap">
+                            <table id="barang_master" class="table table-bordered table-striped text-nowrap w-100">
                                 <thead>
                                     <tr>
                                         <th>Nama Barang</th>

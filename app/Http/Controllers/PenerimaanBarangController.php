@@ -7,6 +7,7 @@ use App\Models\PackingList;
 use App\Models\PenerimaanBarang;
 use App\Models\Branch;
 use App\Models\BarcodeNonPL;
+use App\Models\UserAccurateAPI;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
 use GuzzleHttp\Promise\Utils;
@@ -92,6 +93,223 @@ class PenerimaanBarangController extends Controller
         return $baseUrl . $apiPath . '/' . ltrim($endpoint, '/');
     }
 
+    /**
+     * Ambil kredensial Accurate untuk mode antar toko:
+     * - primary: cabang aktif
+     * - secondary: customer_id lain milik user login
+     */
+    private function getInterStoreCredentials(Branch $branch): array
+    {
+        $primary = UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'));
+
+        $secondary = null;
+        if (Auth::check()) {
+            $secondaryRecord = UserAccurateAPI::query()
+                ->where('user_id', Auth::id())
+                ->where('customer_id', '!=', $branch->customer_id)
+                ->whereNotNull('accurate_api_token')
+                ->whereNotNull('accurate_signature_secret')
+                ->orderBy('id')
+                ->first();
+
+            if ($secondaryRecord) {
+                $secondary = [
+                    'customer_id' => $secondaryRecord->customer_id,
+                    'accurate_api_token' => $secondaryRecord->accurate_api_token,
+                    'accurate_signature_secret' => $secondaryRecord->accurate_signature_secret,
+                ];
+            }
+        }
+
+        return [
+            'primary' => $primary,
+            'secondary' => $secondary,
+        ];
+    }
+
+    /**
+     * Ambil detail DO dengan fallback kredensial (primary -> secondary).
+     */
+    private function fetchDeliveryOrderDetailWithFallback(Branch $branch, string $doNumber): array
+    {
+        $credentials = $this->getInterStoreCredentials($branch);
+        $attempts = [];
+
+        // Konsistensi mode antar_toko:
+        // gunakan secondary (customer berbeda) sebagai sumber utama detail DO.
+        if (!empty($credentials['secondary'])) {
+            $attempts[] = ['source' => 'secondary', 'cred' => $credentials['secondary']];
+        } elseif (!empty($credentials['primary'])) {
+            // Fallback terakhir hanya jika secondary tidak tersedia sama sekali.
+            $attempts[] = ['source' => 'primary', 'cred' => $credentials['primary']];
+        }
+
+        if (empty($attempts)) {
+            throw new \Exception('Kredensial Accurate antar toko tidak ditemukan.');
+        }
+
+        $lastError = null;
+        foreach ($attempts as $attempt) {
+            $apiToken = $attempt['cred']['accurate_api_token'] ?? null;
+            $signatureSecret = $attempt['cred']['accurate_signature_secret'] ?? null;
+            $customerId = $attempt['cred']['customer_id'] ?? null;
+            if (!$apiToken || !$signatureSecret) {
+                continue;
+            }
+
+            $timestamp = Carbon::now()->toIso8601String();
+            $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+            try {
+                $response = Http::timeout(30)->withoutVerifying()->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'X-Api-Signature' => $signature,
+                    'X-Api-Timestamp' => $timestamp,
+                ])->get($this->buildApiUrl($branch, 'delivery-order/detail.do'), [
+                            'number' => $doNumber,
+                        ]);
+
+                if ($response->successful() && isset($response->json()['d'])) {
+                    $detailCount = count($response->json('d.detailItem') ?? []);
+                    Log::info('Berhasil ambil DO detail mode antar_toko', [
+                        'number' => $doNumber,
+                        'credential_source' => $attempt['source'],
+                        'credential_customer_id' => $customerId,
+                        'detail_item_count' => $detailCount,
+                    ]);
+
+                    return [
+                        'data' => $response->json(),
+                        'credential_source' => $attempt['source'],
+                        'credential_customer_id' => $customerId,
+                    ];
+                }
+
+                $lastError = 'HTTP ' . $response->status() . ' - ' . $response->body();
+                Log::warning('Gagal ambil DO detail, mencoba kredensial berikutnya', [
+                    'number' => $doNumber,
+                    'credential_source' => $attempt['source'],
+                    'credential_customer_id' => $customerId,
+                    'status' => $response->status(),
+                ]);
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+                Log::warning('Exception ambil DO detail, mencoba kredensial berikutnya', [
+                    'number' => $doNumber,
+                    'credential_source' => $attempt['source'],
+                    'credential_customer_id' => $customerId,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        throw new \Exception('Gagal mengambil detail Delivery Order. ' . ($lastError ? ('Detail: ' . $lastError) : ''));
+    }
+
+    /**
+     * Ambil list DO untuk dropdown mode antar_toko.
+     * Prioritas: kredensial customer berbeda (secondary), lalu cabang aktif (primary).
+     */
+    private function fetchInterStoreDeliveryOrdersForCreate(Branch $branch): array
+    {
+        $credentials = $this->getInterStoreCredentials($branch);
+        $attempts = [];
+
+        if (!empty($credentials['secondary'])) {
+            $attempts[] = ['source' => 'secondary', 'cred' => $credentials['secondary']];
+        }
+        if (!empty($credentials['primary'])) {
+            $attempts[] = ['source' => 'primary', 'cred' => $credentials['primary']];
+        }
+
+        $deliveryOrders = [];
+        $lastError = null;
+        foreach ($attempts as $attempt) {
+            $apiToken = $attempt['cred']['accurate_api_token'] ?? null;
+            $signatureSecret = $attempt['cred']['accurate_signature_secret'] ?? null;
+            $credentialCustomerId = $attempt['cred']['customer_id'] ?? null;
+            if (!$apiToken || !$signatureSecret) {
+                continue;
+            }
+
+            $timestamp = Carbon::now()->toIso8601String();
+            $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+            Log::info('PB create - request DO list antar_toko', [
+                'active_branch_id' => session('active_branch'),
+                'active_customer_id' => $branch->customer_id,
+                'credential_source' => $attempt['source'],
+                'credential_customer_id' => $credentialCustomerId,
+            ]);
+
+            try {
+                $doResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
+                    'Authorization' => 'Bearer ' . $apiToken,
+                    'X-Api-Signature' => $signature,
+                    'X-Api-Timestamp' => $timestamp,
+                ])->get($this->buildApiUrl($branch, 'delivery-order/list.do'), [
+                            'sp.page' => 1,
+                            'sp.pageSize' => 200,
+                            'fields' => 'number,transDate,status',
+                        ]);
+
+                $rowCount = (int) data_get($doResponse->json(), 'sp.rowCount', 0);
+                Log::info('PB create - response DO list antar_toko', [
+                    'credential_source' => $attempt['source'],
+                    'credential_customer_id' => $credentialCustomerId,
+                    'status' => $doResponse->status(),
+                    'row_count' => $rowCount,
+                ]);
+
+                if (!$doResponse->successful()) {
+                    $lastError = 'HTTP ' . $doResponse->status() . ' - ' . $doResponse->body();
+                    continue;
+                }
+
+                $rows = $doResponse->json('d') ?? [];
+                if (!is_array($rows) || empty($rows)) {
+                    Log::warning('PB create - DO list kosong untuk kredensial ini', [
+                        'credential_source' => $attempt['source'],
+                        'credential_customer_id' => $credentialCustomerId,
+                    ]);
+                    continue;
+                }
+
+                foreach ($rows as $row) {
+                    $deliveryOrders[] = [
+                        'number' => $row['number'] ?? '',
+                        'transDate' => $row['transDate'] ?? '',
+                        'status' => $row['status'] ?? '',
+                    ];
+                }
+
+                Log::info('PB create - DO list terisi dari kredensial', [
+                    'credential_source' => $attempt['source'],
+                    'credential_customer_id' => $credentialCustomerId,
+                    'total_orders' => count($deliveryOrders),
+                ]);
+                break;
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+                Log::warning('PB create - exception ambil DO list antar_toko', [
+                    'credential_source' => $attempt['source'],
+                    'credential_customer_id' => $credentialCustomerId,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if (empty($deliveryOrders)) {
+            Log::warning('PB create - semua percobaan DO list antar_toko kosong/gagal', [
+                'active_branch_id' => session('active_branch'),
+                'active_customer_id' => $branch->customer_id,
+                'last_error' => $lastError,
+            ]);
+        }
+
+        return $deliveryOrders;
+    }
+
     public function index(Request $request)
     {
         // Validasi cabang aktif
@@ -106,7 +324,7 @@ class PenerimaanBarangController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -144,8 +362,8 @@ class PenerimaanBarangController extends Controller
         if ($penerimaanBarang->isNotEmpty()) {
             try {
                 // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-                $apiToken = Auth::user()->accurate_api_token;
-                $signatureSecret = Auth::user()->accurate_signature_secret;
+                $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+                $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
                 $timestamp = Carbon::now()->toIso8601String();
                 $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -301,13 +519,13 @@ class PenerimaanBarangController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             throw new \Exception('Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
         // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -432,12 +650,13 @@ class PenerimaanBarangController extends Controller
             return back()->with('error', 'Cabang tidak valid.');
         }
 
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
         // Get data directly from API (sudah menggunakan kredensial dari cabang di dalam fungsi)
         $purchase_order = $this->getPurchaseOrdersFromAccurate();
+        $delivery_orders = $this->fetchInterStoreDeliveryOrdersForCreate($branch);
 
         // Generate NPB & No Terima (preview untuk form)
         $npb = PenerimaanBarang::generateNpb($branch->customer_id);
@@ -450,7 +669,7 @@ class PenerimaanBarangController extends Controller
             ->orderBy('tanggal', 'desc')
             ->get();
 
-        return view('penerimaan_barang.create', compact('purchase_order', 'npb', 'noTerima', 'packingLists', 'kodeCustomer'));
+        return view('penerimaan_barang.create', compact('purchase_order', 'delivery_orders', 'npb', 'noTerima', 'packingLists', 'kodeCustomer'));
     }
 
     public function getDetailPo(Request $request)
@@ -460,12 +679,14 @@ class PenerimaanBarangController extends Controller
         $rules = [
             'no_po' => 'required|string',
             'npb' => 'required|string',
-            'mode' => 'sometimes|in:packing_list,non_packing_list',
+            'mode' => 'sometimes|in:packing_list,non_packing_list,antar_toko',
         ];
 
         if ($mode === 'packing_list') {
             $rules['packing_list_ids'] = 'required|array';
             $rules['packing_list_ids.*'] = 'integer|exists:packing_list,id';
+        } elseif ($mode === 'antar_toko') {
+            $rules['no_do'] = 'required|string';
         }
 
         $validated = $request->validate($rules);
@@ -473,14 +694,124 @@ class PenerimaanBarangController extends Controller
         $activeBranchId = session('active_branch');
         $branch = Branch::find($activeBranchId);
 
-        if (!$branch || !Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        $activeCred = UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'));
+        $hasActiveCred = !empty($activeCred['accurate_api_token']) && !empty($activeCred['accurate_signature_secret']);
+        $hasInterStoreCred = false;
+        if ($mode === 'antar_toko' && $branch && Auth::check()) {
+            $interStoreCred = $this->getInterStoreCredentials($branch);
+            $hasInterStoreCred = !empty($interStoreCred['primary']) || !empty($interStoreCred['secondary']);
+        }
+
+        if (
+            !$branch
+            || !Auth::check()
+            || ($mode !== 'antar_toko' && !$hasActiveCred)
+            || ($mode === 'antar_toko' && !$hasInterStoreCred)
+        ) {
             return response()->json(['error' => true, 'message' => 'Konfigurasi cabang tidak valid.'], 400);
         }
 
         try {
+            if ($mode === 'antar_toko') {
+                $doNumber = (string) ($validated['no_do'] ?? '');
+                $doResult = $this->fetchDeliveryOrderDetailWithFallback($branch, $doNumber);
+                $doData = $doResult['data']['d'] ?? [];
+                $doDetails = $doData['detailItem'] ?? [];
+
+                // Untuk mode antar_toko, field "Terima Dari" wajib mengikuti PO
+                // agar konsisten dengan mode packing_list & non_packing_list.
+                $vendorNo = null;
+                $vendorName = null;
+                if (!empty($activeCred['accurate_api_token']) && !empty($activeCred['accurate_signature_secret'])) {
+                    $tsPoVendor = Carbon::now()->toIso8601String();
+                    $sigPoVendor = hash_hmac('sha256', $tsPoVendor, $activeCred['accurate_signature_secret']);
+
+                    $poVendorResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
+                        'Authorization' => 'Bearer ' . $activeCred['accurate_api_token'],
+                        'X-Api-Signature' => $sigPoVendor,
+                        'X-Api-Timestamp' => $tsPoVendor,
+                    ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
+                                'number' => $validated['no_po'],
+                            ]);
+
+                    if ($poVendorResponse->successful()) {
+                        $vendorNo = data_get($poVendorResponse->json(), 'd.vendor.vendorNo');
+                        $vendorName = data_get($poVendorResponse->json(), 'd.vendor.name');
+                    } else {
+                        Log::warning('Mode antar_toko: gagal mengambil vendor dari PO detail', [
+                            'no_po' => $validated['no_po'],
+                            'status' => $poVendorResponse->status(),
+                        ]);
+                    }
+                }
+
+                // Fallback terakhir agar tidak null jika PO gagal diambil
+                $vendorNo = $vendorNo
+                    ?? data_get($doData, 'vendor.vendorNo')
+                    ?? data_get($doData, 'customer.customerNo')
+                    ?? data_get($doData, 'customer.no');
+                $vendorName = $vendorName
+                    ?? data_get($doData, 'vendor.name')
+                    ?? data_get($doData, 'customer.name');
+                $vendorData = [
+                    'vendorNo' => $vendorNo,
+                    'vendorName' => $vendorName,
+                ];
+
+                $barangList = [];
+                foreach ($doDetails as $detail) {
+                    $itemNo = $detail['item']['no'] ?? null;
+                    $itemName = $detail['item']['name'] ?? null;
+                    if (!$itemNo) {
+                        continue;
+                    }
+
+                    $qty = (float) ($detail['quantity'] ?? 0);
+                    $detailSerial = $detail['detailSerialNumber'] ?? [];
+                    $firstBarcode = null;
+                    $expectedSerials = [];
+                    if (is_array($detailSerial) && !empty($detailSerial)) {
+                        $firstBarcode = data_get($detailSerial[0], 'serialNumber.number');
+                        foreach ($detailSerial as $sn) {
+                            $snNumber = trim((string) data_get($sn, 'serialNumber.number', ''));
+                            $snQty = (float) data_get($sn, 'quantity', 0);
+                            if ($snNumber !== '') {
+                                $expectedSerials[] = [
+                                    'barcode' => $snNumber,
+                                    'quantity' => $snQty,
+                                ];
+                            }
+                        }
+                    }
+                    $unitName = $detail['itemUnit']['name'] ?? ($detail['item']['unit1']['name'] ?? 'METER');
+                    $unitPrice = (float) ($detail['unitPrice'] ?? 0);
+
+                    $barangList[] = [
+                        'nama_barang' => $itemName,
+                        'kode_barang' => $itemNo,
+                        'barcode' => $firstBarcode,
+                        'kuantitas' => $qty,
+                        'uom' => $unitName,
+                        'unit_price' => $unitPrice,
+                        'expected_serial_numbers' => $expectedSerials,
+                    ];
+                }
+
+                if (empty($barangList)) {
+                    throw new \Exception('Detail Delivery Order tidak memiliki item.');
+                }
+
+                return response()->json([
+                    'barang' => $barangList,
+                    'vendor' => $vendorData,
+                    'mode' => 'antar_toko',
+                    'kode_customer' => $branch->customer_id,
+                ]);
+            }
+
             // 1. Ambil vendor + detail item dari Accurate PO
-            $apiToken = Auth::user()->accurate_api_token;
-            $signatureSecret = Auth::user()->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -498,7 +829,10 @@ class PenerimaanBarangController extends Controller
             if ($poResponse->successful()) {
                 $resData = $poResponse->json();
                 if (isset($resData['d']['vendor'])) {
-                    $vendorData = ['vendorNo' => $resData['d']['vendor']['vendorNo'] ?? null];
+                    $vendorData = [
+                        'vendorNo' => $resData['d']['vendor']['vendorNo'] ?? null,
+                        'vendorName' => $resData['d']['vendor']['name'] ?? null,
+                    ];
                 }
                 foreach ($resData['d']['detailItem'] ?? [] as $detail) {
                     $itemNo = $detail['item']['no'] ?? null;
@@ -747,12 +1081,12 @@ class PenerimaanBarangController extends Controller
             throw new \Exception('Cabang tidak valid.');
         }
 
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             throw new \Exception('Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1153,10 +1487,10 @@ class PenerimaanBarangController extends Controller
             $activeBranchId = session('active_branch');
             $branch = Branch::find($activeBranchId);
 
-            if ($branch && Auth::check() && Auth::user()->accurate_api_token && Auth::user()->accurate_signature_secret) {
+            if ($branch && Auth::check() && (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) && (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
                 try {
-                    $apiToken = Auth::user()->accurate_api_token;
-                    $signatureSecret = Auth::user()->accurate_signature_secret;
+                    $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+                    $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
                     $timestamp = Carbon::now()->toIso8601String();
                     $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1314,13 +1648,20 @@ class PenerimaanBarangController extends Controller
             return back()->with('error', 'Cabang tidak valid.');
         }
 
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
-            return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
-        }
-
         Log::info('Received form data:', $request->all());
 
         $mode = $request->input('mode', 'packing_list');
+
+        $activeCred = UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'));
+        $hasActiveCred = Auth::check() && !empty($activeCred['accurate_api_token']) && !empty($activeCred['accurate_signature_secret']);
+        $hasInterStoreCred = false;
+        if (Auth::check()) {
+            $interStoreCred = $this->getInterStoreCredentials($branch);
+            $hasInterStoreCred = !empty($interStoreCred['primary']) || !empty($interStoreCred['secondary']);
+        }
+        if (!$hasActiveCred && !($mode === 'antar_toko' && $hasInterStoreCred)) {
+            return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
+        }
 
         $rules = [
             'no_po' => 'required|string|max:255',
@@ -1328,7 +1669,7 @@ class PenerimaanBarangController extends Controller
             'no_terima' => 'required|string|max:255|unique:penerimaan_barangs,no_terima',
             'npb' => 'required|string|max:255|unique:penerimaan_barangs,npb',
             'tanggal' => 'required|date',
-            'mode' => 'sometimes|in:packing_list,non_packing_list',
+            'mode' => 'sometimes|in:packing_list,non_packing_list,antar_toko',
         ];
 
         if ($mode === 'packing_list') {
@@ -1336,6 +1677,9 @@ class PenerimaanBarangController extends Controller
             $rules['packing_list_ids.*'] = 'integer|exists:packing_list,id';
         } elseif ($mode === 'non_packing_list') {
             $rules['non_pl_items'] = 'required|string';
+        } elseif ($mode === 'antar_toko') {
+            $rules['no_do'] = 'required|string|max:255';
+            $rules['antar_toko_items'] = 'required|string';
         }
 
         $validator = Validator::make($request->all(), $rules, [
@@ -1460,7 +1804,7 @@ class PenerimaanBarangController extends Controller
                     return redirect()->route('penerimaan-barang.index')
                         ->with('error', 'Tidak ada barang yang cocok dengan data Accurate');
                 }
-            } else {
+            } elseif ($mode === 'non_packing_list') {
                 // Mode Non Packing List: ambil data dari non_pl_items (JSON dari frontend)
                 $nonPlItemsRaw = json_decode($request->input('non_pl_items', '[]'), true);
 
@@ -1471,8 +1815,8 @@ class PenerimaanBarangController extends Controller
                 }
 
                 // Ambil vendor dari Accurate PO
-                $apiToken = Auth::user()->accurate_api_token;
-                $signatureSecret = Auth::user()->accurate_signature_secret;
+                $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+                $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
                 $tsVendor = Carbon::now()->toIso8601String();
                 $sigVendor = hash_hmac('sha256', $tsVendor, $signatureSecret);
 
@@ -1582,11 +1926,132 @@ class PenerimaanBarangController extends Controller
                     'vendor_data' => $vendorData,
                     'total_barcodes' => \App\Models\BarcodeNonPL::where('npb', $penerimaan->npb)->count(),
                 ]);
+            } elseif ($mode === 'antar_toko') {
+                $doNumber = (string) ($validatedData['no_do'] ?? '');
+                $doResult = $this->fetchDeliveryOrderDetailWithFallback($branch, $doNumber);
+                $doData = $doResult['data']['d'] ?? [];
+                $antarTokoItemsRaw = json_decode((string) ($request->input('antar_toko_items', '[]')), true);
+                if (!is_array($antarTokoItemsRaw) || empty($antarTokoItemsRaw)) {
+                    $penerimaan->delete();
+                    DB::rollBack();
+                    return back()->with('error', 'Data scan serial mode antar toko tidak valid atau kosong.');
+                }
+                // Untuk mode antar_toko, vendorNo harus mengikuti field form `vendor`
+                // (sudah dipopulasi dari purchase-order/detail.do pada tahap getDetailPo).
+                $vendorNoFromForm = trim((string) ($validatedData['vendor'] ?? ''));
+                $vendorNoFallback = data_get($doData, 'vendor.vendorNo')
+                    ?? data_get($doData, 'customer.customerNo')
+                    ?? data_get($doData, 'customer.no');
+                $vendorData = ['vendorNo' => $vendorNoFromForm !== '' ? $vendorNoFromForm : $vendorNoFallback];
+
+                $doDetailItems = $doData['detailItem'] ?? [];
+                $submittedByItemNo = [];
+                foreach ($antarTokoItemsRaw as $item) {
+                    $itemNoKey = trim((string) ($item['kode_barang'] ?? ''));
+                    if ($itemNoKey !== '') {
+                        $submittedByItemNo[$itemNoKey] = $item;
+                    }
+                }
+
+                foreach ($doDetailItems as $detail) {
+                    $itemNo = $detail['item']['no'] ?? null;
+                    if (!$itemNo) {
+                        continue;
+                    }
+
+                    $unitName = $detail['itemUnit']['name'] ?? ($detail['item']['unit1']['name'] ?? 'METER');
+                    $unitPrice = (float) ($detail['unitPrice'] ?? 0);
+                    $quantity = (float) ($detail['quantity'] ?? 0);
+                    $detailSerialNumber = [];
+                    $expectedSerialMap = [];
+
+                    foreach (($detail['detailSerialNumber'] ?? []) as $sn) {
+                        $serialNo = data_get($sn, 'serialNumber.number');
+                        $serialQty = (float) data_get($sn, 'quantity', 0);
+                        if ($serialNo && $serialQty > 0) {
+                            $detailSerialNumber[] = [
+                                'serialNumberNo' => $serialNo,
+                                'quantity' => $serialQty,
+                            ];
+                            $expectedSerialMap[$serialNo] = $serialQty;
+                        }
+                    }
+
+                    $submittedItem = $submittedByItemNo[$itemNo] ?? null;
+                    $submittedSerials = is_array($submittedItem['serial_numbers'] ?? null) ? $submittedItem['serial_numbers'] : [];
+
+                    if (!empty($expectedSerialMap)) {
+                        $scannedSerialMap = [];
+                        foreach ($submittedSerials as $sn) {
+                            $snNo = trim((string) ($sn['barcode'] ?? ''));
+                            if ($snNo === '') {
+                                continue;
+                            }
+                            $snQty = (float) ($sn['quantity'] ?? 0);
+                            $scannedSerialMap[$snNo] = $snQty;
+                        }
+
+                        $expectedKeys = array_keys($expectedSerialMap);
+                        $scannedKeys = array_keys($scannedSerialMap);
+                        sort($expectedKeys);
+                        sort($scannedKeys);
+                        if ($expectedKeys !== $scannedKeys) {
+                            throw new \Exception("Serial number item {$itemNo} belum lengkap atau tidak sesuai detail Delivery Order.");
+                        }
+
+                        foreach ($expectedSerialMap as $snNo => $expectedQty) {
+                            $actualQty = (float) ($scannedSerialMap[$snNo] ?? 0);
+                            if (abs($actualQty - $expectedQty) > 1e-6) {
+                                throw new \Exception("Kuantitas serial {$snNo} untuk item {$itemNo} tidak sesuai detail Delivery Order.");
+                            }
+                        }
+                    }
+
+                    if ($quantity <= 0 && !empty($detailSerialNumber)) {
+                        $quantity = array_sum(array_column($detailSerialNumber, 'quantity'));
+                    }
+                    if ($quantity <= 0) {
+                        continue;
+                    }
+
+                    $detailItems[] = [
+                        'itemNo' => $itemNo,
+                        'quantity' => $quantity,
+                        'unitPrice' => $unitPrice,
+                        'itemUnitName' => $unitName,
+                        'purchaseOrderNumber' => $validatedData['no_po'],
+                        'warehouseName' => 'GUDANG STOK',
+                        'detailSerialNumber' => $detailSerialNumber,
+                    ];
+                }
+
+                if (empty($detailItems)) {
+                    $penerimaan->delete();
+                    DB::rollBack();
+                    return redirect()->route('penerimaan-barang.index')
+                        ->with('error', 'Tidak ada item Delivery Order yang valid untuk mode antar toko.');
+                }
+
+                Log::info('Antar toko mode - detail items prepared:', [
+                    'items_count' => count($detailItems),
+                    'no_do' => $doNumber,
+                    'vendor_no_form' => $validatedData['vendor'] ?? null,
+                    'vendor_no_selected' => $vendorData['vendorNo'] ?? null,
+                    'credential_source' => $doResult['credential_source'] ?? null,
+                    'credential_customer_id' => $doResult['credential_customer_id'] ?? null,
+                    'save_target_credential' => 'primary',
+                ]);
             }
 
             // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-            $apiToken = Auth::user()->accurate_api_token;
-            $signatureSecret = Auth::user()->accurate_signature_secret;
+            // Catatan:
+            // - Mode antar_toko: secondary hanya untuk ambil data DO (list/detail).
+            // - Eksekusi receive-item/save.do WAJIB ke company/cabang primary (active branch).
+            $apiToken = ($activeCred['accurate_api_token'] ?? null);
+            $signatureSecret = ($activeCred['accurate_signature_secret'] ?? null);
+            if (!$apiToken || !$signatureSecret) {
+                throw new \Exception('Kredensial Accurate tidak tersedia untuk proses simpan.');
+            }
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1800,9 +2265,9 @@ class PenerimaanBarangController extends Controller
                         $branch = Branch::where('customer_id', $penerimaanBarang->kode_customer)->first();
                     }
 
-                    if ($branch && Auth::check() && Auth::user()->accurate_api_token && Auth::user()->accurate_signature_secret) {
-                        $apiToken = Auth::user()->accurate_api_token;
-                        $signatureSecret = Auth::user()->accurate_signature_secret;
+                    if ($branch && Auth::check() && (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) && (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
+                        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+                        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
                         $timestamp = Carbon::now()->toIso8601String();
                         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 

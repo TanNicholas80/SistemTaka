@@ -33,6 +33,10 @@
                                 <input type="radio" name="mode" value="non_packing_list" class="mode-radio accent-blue-600">
                                 <span class="font-medium text-gray-700">Non Packing List</span>
                             </label>
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="mode" value="antar_toko" class="mode-radio accent-blue-600">
+                                <span class="font-medium text-gray-700">Antar Toko</span>
+                            </label>
                         </div>
 
                         <!-- Form Nomor PO -->
@@ -66,6 +70,36 @@
                             </div>
                         </div>
 
+                        <!-- Form Nomor DO - Hanya tampil saat mode Antar Toko -->
+                        <div id="do-section" class="contents" style="display:none;">
+                            <label for="no_do" class="text-gray-800 font-medium flex items-center">
+                                Nomor DO <span class="text-red-600 ml-1">*</span>
+                                <span class="ml-1"
+                                    data-toggle="tooltip"
+                                    data-placement="top"
+                                    title="Silakan cari & pilih nomor delivery order dari dropdown"
+                                    style="cursor: help;">
+                                    <i class="fas fa-info-circle"></i>
+                                </span>
+                            </label>
+
+                            <div class="relative max-w-md w-full">
+                                <div class="flex items-center border border-gray-300 rounded overflow-hidden max-w-[300px]">
+                                    <input
+                                        id="no_do"
+                                        name="no_do"
+                                        type="search"
+                                        placeholder="Cari/Pilih Nomor Delivery Order..."
+                                        class="flex-grow px-2 py-1 outline-none text-sm" />
+                                    <button type="button" id="no-do-search-btn" class="px-2 text-gray-600 hover:text-gray-900">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                                <div id="dropdown-no-do" class="absolute left-0 right-0 z-10 bg-white border border-gray-300 rounded shadow mt-1 hidden max-h-40 overflow-y-auto text-sm max-w-[300px]">
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Form Nomor Pemesanan Barang -->
                         <label for="npb" class="text-gray-800 font-medium flex items-center">
                             Nomor Form <span class="text-red-600 ml-1">*</span>
@@ -94,14 +128,20 @@
                         <label for="vendor" class="text-gray-800 font-medium flex items-center">
                             Terima dari <span class="text-red-600 ml-1">*</span>
                         </label>
-                        <input
-                            id="vendor"
-                            name="vendor"
-                            type="text"
-                            placeholder="Vendor Terisi Otomatis"
-                            value="{{ $vendor ?? '' }}"
-                            class="border border-gray-300 rounded px-2 py-1 w-full max-w-[300px] bg-[#f3f4f6]"
-                            required readonly />
+                        <div class="w-full max-w-[300px]">
+                            <input
+                                id="vendor_display"
+                                type="text"
+                                placeholder="Vendor Terisi Otomatis"
+                                value="{{ $vendorName ?? '' }}"
+                                class="border border-gray-300 rounded px-2 py-1 w-full bg-[#f3f4f6]"
+                                readonly />
+                            <input
+                                id="vendor"
+                                name="vendor"
+                                type="hidden"
+                                value="{{ $vendor ?? '' }}" />
+                        </div>
 
                         <!-- Form Tanggal -->
                         <label for="tanggal" class="text-gray-800 font-medium flex items-center">
@@ -271,12 +311,21 @@
             <div id="content-seri" class="p-4 overflow-y-auto flex-1 hidden">
                 <div class="space-y-3 text-sm">
                     <!-- Input kuantitas per barcode -->
-                    <div class="flex items-center gap-3">
+                    <div id="nonpl-generate-row" class="flex items-center gap-3">
                         <label class="w-20 text-gray-600 font-medium">Kuantitas</label>
                         <input id="modal-sn-qty-input" type="number" step="0.001" min="0.001" placeholder="Qty per barcode" class="w-24 border rounded px-2 py-1 text-right" onkeypress="if(event.key==='Enter'){event.preventDefault();addSerialNumber();}">
                     </div>
+                    <div id="interstore-scan-row" class="hidden flex items-center gap-3">
+                        <label class="w-20 text-gray-600 font-medium">Scan</label>
+                        <div class="flex-1 flex items-center gap-2">
+                            <input id="modal-scan-barcode-input" type="text" placeholder="Scan barcode serial number..." class="flex-1 border rounded px-2 py-1" onkeypress="if(event.key==='Enter'){event.preventDefault();scanInterStoreSerial();}">
+                            <button type="button" id="btn-scan-interstore" onclick="scanInterStoreSerial()" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm whitespace-nowrap">
+                                <i class="fas fa-barcode mr-1"></i>Scan
+                            </button>
+                        </div>
+                    </div>
                     <!-- Input barcode (auto-generate) -->
-                    <div class="flex items-center gap-3">
+                    <div id="nonpl-number-row" class="flex items-center gap-3">
                         <label class="w-20 text-gray-600 font-medium">Nomor #</label>
                         <div class="flex-1 flex items-center gap-2">
                             <input type="text" class="flex-1 border rounded px-2 py-1 bg-gray-100 text-gray-500" placeholder="Auto-generate dari sistem" readonly>
@@ -292,7 +341,7 @@
                             <thead class="bg-[#607d8b] text-white sticky top-0 z-10">
                                 <tr>
                                     <th class="px-2 py-1.5 w-10"></th>
-                                    <th class="px-2 py-1.5 w-10 text-center">Print</th>
+                                    <th id="modal-sn-print-header" class="px-2 py-1.5 w-10 text-center">Print</th>
                                     <th class="px-2 py-1.5 text-left">Nomor #</th>
                                     <th class="px-2 py-1.5 text-right">Kuantitas</th>
                                 </tr>
@@ -303,7 +352,7 @@
                         </table>
                     </div>
 
-                    <div class="flex justify-end pt-2">
+                    <div id="bulk-print-row" class="flex justify-end pt-2">
                         <button
                             type="button"
                             onclick="bulkPrintNonPlSerial()"
@@ -329,6 +378,7 @@
 
 <script>
     const nomor_po = JSON.parse(`{!! addslashes(json_encode($purchase_order)) !!}`);
+    const nomor_do = JSON.parse(`{!! addslashes(json_encode($delivery_orders ?? [])) !!}`);
     const printNonPlPdfEndpoint = "{{ route('penerimaan-barang.non-pl.print-pdf') }}";
 
     console.log('Nomor PO data:', nomor_po);
@@ -339,15 +389,20 @@
         npb: '',
         no_terima: '',
         vendor: '',
+        vendor_name: '',
         tanggal: '',
         mode: 'packing_list',
+        no_do: '',
         packing_list_ids: []
     };
 
     // Non Packing List state
     let nonPlItems = [];
     let nonPlKodeCustomer = '';
+    let interStoreItems = [];
+    let currentModalMode = 'non_packing_list';
     let currentModalItemIndex = -1;
+    let interStoreAutoScanLock = false;
 
     // Flag untuk mencegah form submit tidak diinginkan
     let isFormLocked = false;
@@ -362,7 +417,9 @@
         const npbInput = document.getElementById('npb');
         const noTerimaInput = document.getElementById('no_terima');
         const vendorInput = document.getElementById('vendor');
+        const vendorDisplayInput = document.getElementById('vendor_display');
         const tanggalInput = document.getElementById('tanggal');
+        const noDOInput = document.getElementById('no_do');
         const selectedMode = document.querySelector('input[name="mode"]:checked')?.value || 'packing_list';
         const packingListCheckboxes = document.querySelectorAll('.packing-list-cb:checked');
 
@@ -375,15 +432,19 @@
         console.log('No Terima:', noTerimaInput?.value);
         console.log('Vendor:', vendorInput.value);
         console.log('Tanggal:', tanggalInput.value);
+        console.log('No DO:', noDOInput?.value);
         console.log('Packing List IDs:', packingListIds);
 
         // Validasi form - packing list hanya wajib jika mode = packing_list
         const baseFieldsMissing = !noPOInput.value.trim() || !npbInput.value.trim() || !tanggalInput.value.trim();
         const packingListMissing = selectedMode === 'packing_list' && packingListIds.length === 0;
+        const doMissing = selectedMode === 'antar_toko' && !(noDOInput?.value || '').trim();
 
-        if (baseFieldsMissing || packingListMissing) {
+        if (baseFieldsMissing || packingListMissing || doMissing) {
             const msg = packingListMissing
                 ? 'Harap lengkapi No PO, Tanggal, dan pilih minimal satu packing list!'
+                : doMissing
+                ? 'Harap lengkapi No PO, Tanggal, dan pilih Nomor DO!'
                 : 'Harap lengkapi No PO dan Tanggal!';
             Swal.fire({
                 icon: 'warning',
@@ -403,8 +464,10 @@
         formData.npb = npbInput.value;
         formData.no_terima = noTerimaInput.value;
         formData.vendor = vendorInput.value;
+        formData.vendor_name = vendorDisplayInput?.value || '';
         formData.tanggal = tanggalInput.value;
         formData.mode = selectedMode;
+        formData.no_do = selectedMode === 'antar_toko' ? (noDOInput?.value || '') : '';
         formData.packing_list_ids = selectedMode === 'packing_list' ? packingListIds : [];
 
         console.log('Form data saved temporarily:', formData);
@@ -420,7 +483,7 @@
         isFormLocked = true;
 
         // Panggil function untuk mengambil detail PO
-        fetchDetailPO(formData.no_po, formData.npb, formData.packing_list_ids, formData.mode)
+        fetchDetailPO(formData.no_po, formData.npb, formData.packing_list_ids, formData.mode, formData.no_do)
             .then(() => {
                 console.log('Detail PO berhasil dimuat');
                 // Setelah berhasil, tombol Save akan ditampilkan di setFormReadonly(true)
@@ -438,7 +501,7 @@
     }
 
     // Function untuk mengambil detail PO dari packing list dengan AJAX
-    function fetchDetailPO(noPO, npb, packingListIds, mode) {
+    function fetchDetailPO(noPO, npb, packingListIds, mode, noDO = '') {
         return new Promise((resolve, reject) => {
             // Tampilkan loading indicator
             const tableBody = document.getElementById('table-barang-body');
@@ -451,6 +514,8 @@
             data.append('mode', mode || 'packing_list');
             if (mode === 'packing_list') {
                 packingListIds.forEach(id => data.append('packing_list_ids[]', id));
+            } else if (mode === 'antar_toko') {
+                data.append('no_do', noDO);
             }
 
             // Tambahkan CSRF token
@@ -480,9 +545,14 @@
                     // Update vendor jika ada
                     if (data.vendor && data.vendor.vendorNo) {
                         const vendorInput = document.getElementById('vendor');
+                        const vendorDisplayInput = document.getElementById('vendor_display');
                         vendorInput.value = data.vendor.vendorNo;
+                        if (vendorDisplayInput) {
+                            vendorDisplayInput.value = data.vendor.vendorName || data.vendor.vendorNo;
+                        }
                         formData.vendor = data.vendor.vendorNo;
-                        console.log('Vendor updated in formData:', formData.vendor);
+                        formData.vendor_name = data.vendor.vendorName || data.vendor.vendorNo || '';
+                        console.log('Vendor updated in formData:', formData.vendor, formData.vendor_name);
                     }
 
                     if (data.mode === 'non_packing_list') {
@@ -506,6 +576,18 @@
                         updateNonPlTable();
                         // Tombol Save tampil setelah semua item complete
                         checkNonPlComplete();
+                    } else if (data.mode === 'antar_toko') {
+                        interStoreItems = (data.barang || []).map(item => ({
+                            kode_barang: item.kode_barang,
+                            nama_barang: item.nama_barang,
+                            kuantitas: item.kuantitas || 0,
+                            unit_price: item.unit_price || 0,
+                            uom: item.uom || 'METER',
+                            expected_serial_numbers: Array.isArray(item.expected_serial_numbers) ? item.expected_serial_numbers : [],
+                            serial_numbers: [],
+                        }));
+                        updateInterStoreTable();
+                        checkInterStoreComplete();
                     } else {
                         // Mode packing_list: tidak lagi butuh upload TXT / scan fisik.
                         // Setelah detail barang dimuat, tombol Save langsung bisa dipakai.
@@ -597,6 +679,60 @@
 
     // ===================== NON PACKING LIST FUNCTIONS =====================
 
+    function isInterStoreItemComplete(item) {
+        const expected = Array.isArray(item.expected_serial_numbers) ? item.expected_serial_numbers : [];
+        if (expected.length === 0) return true;
+        const scannedMap = {};
+        (item.serial_numbers || []).forEach(sn => {
+            scannedMap[(sn.barcode || '').trim()] = true;
+        });
+        return expected.every(sn => scannedMap[(sn.barcode || '').trim()] === true);
+    }
+
+    function updateInterStoreTable() {
+        const tableBody = document.getElementById('table-barang-body');
+        tableBody.innerHTML = '';
+
+        if (interStoreItems.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="border border-gray-400 px-2 py-3 text-center"><i class="fas fa-info-circle mr-2"></i>Tidak ada item dari Delivery Order</td></tr>';
+            return;
+        }
+
+        interStoreItems.forEach((item, index) => {
+            const expectedCount = (item.expected_serial_numbers || []).length;
+            const scannedCount = (item.serial_numbers || []).length;
+            const isComplete = isInterStoreItemComplete(item);
+
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-blue-50 cursor-pointer transition-colors';
+            row.title = 'Double-click untuk scan serial number';
+            row.addEventListener('dblclick', () => openItemSerialModal(index, 'antar_toko'));
+
+            row.innerHTML = `
+                <td class="border border-gray-400 px-1 py-3 text-center align-top">${index + 1}</td>
+                <td class="border border-gray-400 px-2 py-3 text-left align-top">${item.nama_barang || '-'}</td>
+                <td class="border border-gray-400 px-2 py-3 align-top">${item.kode_barang || '-'}</td>
+                <td class="border border-gray-400 px-2 py-3 align-top text-center">
+                    ${isComplete
+                        ? '<span class="text-green-600 font-semibold"><i class="fas fa-check-circle mr-1"></i>' + scannedCount + '/' + expectedCount + ' SN</span>'
+                        : '<span class="text-orange-500"><i class="fas fa-exclamation-circle mr-1"></i>' + scannedCount + '/' + expectedCount + ' SN</span>'}
+                </td>
+                <td class="border border-gray-400 px-2 py-3 align-top font-semibold text-right">${item.kuantitas}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function checkInterStoreComplete() {
+        const allComplete = interStoreItems.length > 0 && interStoreItems.every(item => isInterStoreItemComplete(item));
+        const saveBtn = document.getElementById('save-btn');
+        if (allComplete) {
+            saveBtn.classList.remove('hidden');
+        } else {
+            saveBtn.classList.add('hidden');
+        }
+    }
+
     function updateNonPlTable() {
         const tableBody = document.getElementById('table-barang-body');
         tableBody.innerHTML = '';
@@ -610,7 +746,7 @@
             const row = document.createElement('tr');
             row.className = 'hover:bg-blue-50 cursor-pointer transition-colors';
             row.title = 'Double-click untuk atur serial number';
-            row.addEventListener('dblclick', () => openNonPlModal(index));
+            row.addEventListener('dblclick', () => openItemSerialModal(index, 'non_packing_list'));
 
             const totalAssigned = item.serial_numbers.reduce((s, sn) => s + (parseFloat(sn.quantity) || 0), 0);
             const isComplete = totalAssigned >= item.kuantitas && item.serial_numbers.length > 0;
@@ -646,9 +782,14 @@
 
     // --- MODAL FUNCTIONS ---
 
-    function openNonPlModal(itemIndex) {
+    function getCurrentModalItems() {
+        return currentModalMode === 'antar_toko' ? interStoreItems : nonPlItems;
+    }
+
+    function openItemSerialModal(itemIndex, mode = 'non_packing_list') {
+        currentModalMode = mode;
         currentModalItemIndex = itemIndex;
-        const item = nonPlItems[itemIndex];
+        const item = getCurrentModalItems()[itemIndex];
         if (!item) return;
 
         document.getElementById('modal-kode-barang').textContent = item.kode_barang + ' - ' + (item.nama_barang || '');
@@ -656,6 +797,29 @@
         document.getElementById('modal-kuantitas').value = item.kuantitas;
         document.getElementById('modal-unit').textContent = item.uom || 'METER';
         document.getElementById('modal-gudang').textContent = 'GUDANG STOK';
+
+        const nonPlGenerateRow = document.getElementById('nonpl-generate-row');
+        const nonPlNumberRow = document.getElementById('nonpl-number-row');
+        const interStoreScanRow = document.getElementById('interstore-scan-row');
+        const bulkPrintRow = document.getElementById('bulk-print-row');
+        const printHeader = document.getElementById('modal-sn-print-header');
+        if (mode === 'antar_toko') {
+            nonPlGenerateRow?.classList.add('hidden');
+            nonPlNumberRow?.classList.add('hidden');
+            interStoreScanRow?.classList.remove('hidden');
+            bulkPrintRow?.classList.add('hidden');
+            if (printHeader) printHeader.classList.add('hidden');
+            const scanInput = document.getElementById('modal-scan-barcode-input');
+            if (scanInput) {
+                scanInput.value = '';
+            }
+        } else {
+            nonPlGenerateRow?.classList.remove('hidden');
+            nonPlNumberRow?.classList.remove('hidden');
+            interStoreScanRow?.classList.add('hidden');
+            bulkPrintRow?.classList.remove('hidden');
+            if (printHeader) printHeader.classList.remove('hidden');
+        }
 
         switchModalTab('rincian');
         renderModalSerialNumbers();
@@ -665,8 +829,13 @@
     function closeNonPlModal() {
         document.getElementById('non-pl-modal').classList.add('hidden');
         currentModalItemIndex = -1;
-        updateNonPlTable();
-        checkNonPlComplete();
+        if (currentModalMode === 'antar_toko') {
+            updateInterStoreTable();
+            checkInterStoreComplete();
+        } else {
+            updateNonPlTable();
+            checkNonPlComplete();
+        }
     }
 
     function switchModalTab(tab) {
@@ -688,42 +857,103 @@
             rincianTab.className = 'px-4 py-2 text-sm cursor-pointer ' + inactiveClass;
             seriContent.classList.remove('hidden');
             rincianContent.classList.add('hidden');
-            document.getElementById('modal-sn-qty-input').focus();
+            if (currentModalMode === 'antar_toko') {
+                document.getElementById('modal-scan-barcode-input')?.focus();
+            } else {
+                document.getElementById('modal-sn-qty-input')?.focus();
+            }
         }
     }
 
     function renderModalSerialNumbers() {
         if (currentModalItemIndex < 0) return;
-        const item = nonPlItems[currentModalItemIndex];
+        const item = getCurrentModalItems()[currentModalItemIndex];
         const tbody = document.getElementById('modal-sn-tbody');
         tbody.innerHTML = '';
+        const printHeader = document.getElementById('modal-sn-print-header');
+        const isInterStore = currentModalMode === 'antar_toko';
+        if (printHeader) {
+            if (isInterStore) {
+                printHeader.classList.add('hidden');
+            } else {
+                printHeader.classList.remove('hidden');
+            }
+        }
 
         if (item.serial_numbers.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="px-2 py-4 text-center text-gray-400 border-b">Belum ada serial number</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${isInterStore ? 3 : 4}" class="px-2 py-4 text-center text-gray-400 border-b">Belum ada serial number</td></tr>`;
         } else {
             item.serial_numbers.forEach((sn, snIdx) => {
                 const tr = document.createElement('tr');
                 tr.className = 'border-b hover:bg-gray-50';
-                tr.innerHTML = `
-                    <td class="px-2 py-2 text-center w-10">
-                        <button type="button" onclick="removeSerialNumber(${snIdx})" class="bg-red-700 text-white text-xs px-2 py-1 rounded hover:bg-red-800">X</button>
-                    </td>
-                    <td class="px-2 py-2 text-center w-10">
-                        <button type="button" onclick="printNonPlSerial(${snIdx})" class="bg-gray-800 text-white text-xs px-2 py-1 rounded hover:bg-gray-900" title="Print label">
-                            <i class="fas fa-print"></i>
-                        </button>
-                    </td>
-                    <td class="px-2 py-2 font-mono">${sn.barcode}</td>
-                    <td class="px-2 py-2 text-right">
-                        <input type="number" step="0.001" min="0.001" value="${sn.quantity}" class="w-20 text-right border rounded px-1 py-0.5 text-sm" onchange="updateSnQty(${snIdx}, this.value)">
-                    </td>
-                `;
+                if (isInterStore) {
+                    tr.innerHTML = `
+                        <td class="px-2 py-2 text-center w-10">
+                            <button type="button" onclick="removeSerialNumber(${snIdx})" class="bg-red-700 text-white text-xs px-2 py-1 rounded hover:bg-red-800">X</button>
+                        </td>
+                        <td class="px-2 py-2 font-mono">${sn.barcode}</td>
+                        <td class="px-2 py-2 text-right">
+                            <span class="inline-block w-20 text-right">${(parseFloat(sn.quantity) || 0)}</span>
+                        </td>
+                    `;
+                } else {
+                    tr.innerHTML = `
+                        <td class="px-2 py-2 text-center w-10">
+                            <button type="button" onclick="removeSerialNumber(${snIdx})" class="bg-red-700 text-white text-xs px-2 py-1 rounded hover:bg-red-800">X</button>
+                        </td>
+                        <td class="px-2 py-2 text-center w-10">
+                            <button type="button" onclick="printNonPlSerial(${snIdx})" class="bg-gray-800 text-white text-xs px-2 py-1 rounded hover:bg-gray-900" title="Print label">
+                                <i class="fas fa-print"></i>
+                            </button>
+                        </td>
+                        <td class="px-2 py-2 font-mono">${sn.barcode}</td>
+                        <td class="px-2 py-2 text-right">
+                            <input type="number" step="0.001" min="0.001" value="${(parseFloat(sn.quantity) || 0)}" class="w-20 text-right border rounded px-1 py-0.5 text-sm" onchange="updateSnQty(${snIdx}, this.value)">
+                        </td>
+                    `;
+                }
                 tbody.appendChild(tr);
             });
         }
 
         const totalQty = item.serial_numbers.reduce((s, sn) => s + (parseFloat(sn.quantity) || 0), 0);
-        document.getElementById('modal-sn-summary').textContent = `${item.serial_numbers.length} No Seri/Produksi, Jumlah ${totalQty % 1 === 0 ? totalQty : totalQty.toFixed(3)}`;
+        if (currentModalMode === 'antar_toko') {
+            const expectedCount = (item.expected_serial_numbers || []).length;
+            document.getElementById('modal-sn-summary').textContent = `${item.serial_numbers.length}/${expectedCount} serial ter-scan, Jumlah ${totalQty % 1 === 0 ? totalQty : totalQty.toFixed(3)}`;
+        } else {
+            document.getElementById('modal-sn-summary').textContent = `${item.serial_numbers.length} No Seri/Produksi, Jumlah ${totalQty % 1 === 0 ? totalQty : totalQty.toFixed(3)}`;
+        }
+    }
+
+    function scanInterStoreSerial() {
+        if (currentModalMode !== 'antar_toko' || currentModalItemIndex < 0) return;
+        const item = interStoreItems[currentModalItemIndex];
+        const scanInput = document.getElementById('modal-scan-barcode-input');
+        const scanned = (scanInput?.value || '').trim();
+        if (!scanned) return;
+
+        const expected = item.expected_serial_numbers || [];
+        const expectedMatch = expected.find(sn => (sn.barcode || '').trim() === scanned);
+        if (!expectedMatch) {
+            Swal.fire({ icon: 'error', title: 'Barcode tidak cocok', text: 'Barcode ini tidak ada pada detail DO item terkait.', timer: 2500, showConfirmButton: false, toast: true, position: 'top-end' });
+            scanInput.value = '';
+            return;
+        }
+
+        const already = (item.serial_numbers || []).some(sn => (sn.barcode || '').trim() === scanned);
+        if (already) {
+            Swal.fire({ icon: 'warning', title: 'Barcode sudah discan', text: 'Serial number ini sudah pernah diinput.', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
+            scanInput.value = '';
+            return;
+        }
+
+        item.serial_numbers.push({
+            barcode: scanned,
+            quantity: parseFloat(expectedMatch.quantity) || 0,
+        });
+        renderModalSerialNumbers();
+        scanInput.value = '';
+        scanInput.focus();
     }
 
     function printNonPlSerial(snIdx) {
@@ -898,13 +1128,15 @@
 
     function removeSerialNumber(snIdx) {
         if (currentModalItemIndex < 0) return;
-        nonPlItems[currentModalItemIndex].serial_numbers.splice(snIdx, 1);
+        const items = getCurrentModalItems();
+        items[currentModalItemIndex].serial_numbers.splice(snIdx, 1);
         renderModalSerialNumbers();
     }
 
     function updateSnQty(snIdx, newVal) {
+        if (currentModalMode === 'antar_toko') return;
         if (currentModalItemIndex < 0) return;
-        const item = nonPlItems[currentModalItemIndex];
+        const item = getCurrentModalItems()[currentModalItemIndex];
         const qty = parseFloat(newVal) || 0;
         if (qty <= 0) return;
 
@@ -947,7 +1179,8 @@
             cancelButtonText: 'Batal'
         }).then(r => {
             if (r.isConfirmed) {
-                nonPlItems[currentModalItemIndex].serial_numbers = [];
+                const items = getCurrentModalItems();
+                items[currentModalItemIndex].serial_numbers = [];
                 renderModalSerialNumbers();
             }
         });
@@ -973,6 +1206,21 @@
                 position: 'top-end'
             });
             return false;
+        }
+        if (formData.mode === 'antar_toko') {
+            const allComplete = interStoreItems.length > 0 && interStoreItems.every(item => isInterStoreItemComplete(item));
+            if (!allComplete) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Serial Number Belum Lengkap',
+                    text: 'Lengkapi scan serial number semua item terlebih dahulu.',
+                    timer: 3000,
+                    showConfirmButton: false,
+                    toast: true,
+                    position: 'top-end'
+                });
+                return false;
+            }
         }
 
         console.log('Submitting form with data:', formData);
@@ -1000,6 +1248,9 @@
                 document.getElementById('npb').value = formData.npb;
                 document.getElementById('no_terima').value = formData.no_terima;
                 document.getElementById('vendor').value = formData.vendor;
+                if (document.getElementById('vendor_display')) {
+                    document.getElementById('vendor_display').value = formData.vendor_name || formData.vendor;
+                }
                 document.getElementById('tanggal').value = formData.tanggal;
 
                 const form = document.getElementById('penerimaanForm');
@@ -1018,6 +1269,10 @@
                     form.querySelectorAll('input[name="packing_list_ids[]"][type="hidden"]').forEach(el => el.remove());
                     // Hapus non_pl_items hidden lama
                     form.querySelectorAll('input[name="non_pl_items"][type="hidden"]').forEach(el => el.remove());
+                    // Hapus antar_toko_items hidden lama
+                    form.querySelectorAll('input[name="antar_toko_items"][type="hidden"]').forEach(el => el.remove());
+                    // Hapus no_do hidden lama
+                    form.querySelectorAll('input[name="no_do"][type="hidden"]').forEach(el => el.remove());
 
                     if (formData.mode === 'packing_list') {
                         formData.packing_list_ids.forEach(id => {
@@ -1033,6 +1288,18 @@
                         nonPlInput.name = 'non_pl_items';
                         nonPlInput.value = JSON.stringify(nonPlItems);
                         form.appendChild(nonPlInput);
+                    } else if (formData.mode === 'antar_toko') {
+                        const doInput = document.createElement('input');
+                        doInput.type = 'hidden';
+                        doInput.name = 'no_do';
+                        doInput.value = formData.no_do || '';
+                        form.appendChild(doInput);
+
+                        const antarTokoInput = document.createElement('input');
+                        antarTokoInput.type = 'hidden';
+                        antarTokoInput.name = 'antar_toko_items';
+                        antarTokoInput.value = JSON.stringify(interStoreItems);
+                        form.appendChild(antarTokoInput);
                     }
                 }
 
@@ -1144,11 +1411,15 @@
     function setFormReadonly(readonly = true) {
         const noPOInput = document.getElementById('no_po');
         const vendorInput = document.getElementById('vendor');
+        const vendorDisplayInput = document.getElementById('vendor_display');
         const tanggalInput = document.getElementById('tanggal');
+        const noDOInput = document.getElementById('no_do');
         const packingListCbs = document.querySelectorAll('.packing-list-cb');
         const modeRadios = document.querySelectorAll('.mode-radio');
         const dropdownNoPO = document.getElementById('dropdown-no-po');
+        const dropdownNoDO = document.getElementById('dropdown-no-do');
         const searchBtnNoPO = document.getElementById('no-po-search-btn');
+        const searchBtnNoDO = document.getElementById('no-do-search-btn');
         const lanjutBtn = document.getElementById('lanjut-btn');
         const saveBtn = document.getElementById('save-btn');
         const validationSection = document.getElementById('barcode-validation-section');
@@ -1159,24 +1430,33 @@
             noPOInput.setAttribute('readonly', 'readonly');
             noPOInput.readOnly = true;
 
-            vendorInput.setAttribute('readonly', 'readonly');
-            vendorInput.readOnly = true;
-
             tanggalInput.setAttribute('readonly', 'readonly');
             tanggalInput.readOnly = true;
+            if (noDOInput) {
+                noDOInput.setAttribute('readonly', 'readonly');
+                noDOInput.readOnly = true;
+            }
 
             packingListCbs.forEach(cb => { cb.disabled = true; });
             modeRadios.forEach(r => { r.disabled = true; });
 
             if (dropdownNoPO) dropdownNoPO.classList.add('hidden');
+            if (dropdownNoDO) dropdownNoDO.classList.add('hidden');
             if (searchBtnNoPO) searchBtnNoPO.style.display = 'none';
+            if (searchBtnNoDO) searchBtnNoDO.style.display = 'none';
 
             noPOInput.style.backgroundColor = '#f3f4f6';
             noPOInput.style.cursor = 'not-allowed';
-            vendorInput.style.backgroundColor = '#f3f4f6';
-            vendorInput.style.cursor = 'not-allowed';
+            if (vendorDisplayInput) {
+                vendorDisplayInput.style.backgroundColor = '#f3f4f6';
+                vendorDisplayInput.style.cursor = 'not-allowed';
+            }
             tanggalInput.style.backgroundColor = '#f3f4f6';
             tanggalInput.style.cursor = 'not-allowed';
+            if (noDOInput) {
+                noDOInput.style.backgroundColor = '#f3f4f6';
+                noDOInput.style.cursor = 'not-allowed';
+            }
 
             if (lanjutBtn) lanjutBtn.style.display = 'none';
 
@@ -1188,23 +1468,31 @@
             noPOInput.removeAttribute('readonly');
             noPOInput.readOnly = false;
 
-            vendorInput.removeAttribute('readonly');
-            vendorInput.readOnly = false;
-
             tanggalInput.removeAttribute('readonly');
             tanggalInput.readOnly = false;
+            if (noDOInput) {
+                noDOInput.removeAttribute('readonly');
+                noDOInput.readOnly = false;
+            }
 
             packingListCbs.forEach(cb => { cb.disabled = false; });
             modeRadios.forEach(r => { r.disabled = false; });
 
             if (searchBtnNoPO) searchBtnNoPO.style.display = 'block';
+            if (searchBtnNoDO) searchBtnNoDO.style.display = 'block';
 
             noPOInput.style.backgroundColor = '';
             noPOInput.style.cursor = '';
-            vendorInput.style.backgroundColor = '';
-            vendorInput.style.cursor = '';
+            if (vendorDisplayInput) {
+                vendorDisplayInput.style.backgroundColor = '';
+                vendorDisplayInput.style.cursor = '';
+            }
             tanggalInput.style.backgroundColor = '';
             tanggalInput.style.cursor = '';
+            if (noDOInput) {
+                noDOInput.style.backgroundColor = '';
+                noDOInput.style.cursor = '';
+            }
 
             if (lanjutBtn) lanjutBtn.style.display = 'inline-block';
             if (saveBtn) saveBtn.classList.add('hidden');
@@ -1220,21 +1508,39 @@
     // Klik di luar dropdown - hanya untuk PO
     document.addEventListener('click', function(e) {
         const noPOWrapper = document.getElementById('no_po')?.closest('.relative');
+        const noDOWrapper = document.getElementById('no_do')?.closest('.relative');
 
         if (noPOWrapper && !noPOWrapper.contains(e.target)) {
             document.getElementById('dropdown-no-po')?.classList.add('hidden');
         }
+        if (noDOWrapper && !noDOWrapper.contains(e.target)) {
+            document.getElementById('dropdown-no-do')?.classList.add('hidden');
+        }
     });
 
     // Toggle packing list section berdasarkan mode
-    function togglePackingListSection(mode) {
-        const section = document.getElementById('packing-list-section');
-        if (mode === 'non_packing_list') {
-            section.style.display = 'none';
-            // Uncheck semua checkbox packing list
+    function toggleModeSections(mode) {
+        const packingListSection = document.getElementById('packing-list-section');
+        const doSection = document.getElementById('do-section');
+        const noDOInput = document.getElementById('no_do');
+        const saveBtn = document.getElementById('save-btn');
+
+        if (mode === 'packing_list') {
+            packingListSection.style.display = 'contents';
+            doSection.style.display = 'none';
+            if (noDOInput) noDOInput.value = '';
+            saveBtn?.classList.add('hidden');
+        } else if (mode === 'antar_toko') {
+            packingListSection.style.display = 'none';
             document.querySelectorAll('.packing-list-cb').forEach(cb => { cb.checked = false; });
+            doSection.style.display = 'contents';
+            saveBtn?.classList.add('hidden');
         } else {
-            section.style.display = 'contents';
+            packingListSection.style.display = 'none';
+            document.querySelectorAll('.packing-list-cb').forEach(cb => { cb.checked = false; });
+            doSection.style.display = 'none';
+            if (noDOInput) noDOInput.value = '';
+            saveBtn?.classList.add('hidden');
         }
     }
 
@@ -1242,7 +1548,10 @@
     document.addEventListener('DOMContentLoaded', () => {
         const noPOInput = document.getElementById('no_po');
         const searchBtnPO = document.getElementById('no-po-search-btn');
+        const noDOInput = document.getElementById('no_do');
+        const searchBtnDO = document.getElementById('no-do-search-btn');
         const vendorInput = document.getElementById('vendor');
+        const vendorDisplayInput = document.getElementById('vendor_display');
         const tanggalInput = document.getElementById('tanggal');
         const form = document.getElementById('penerimaanForm');
 
@@ -1255,7 +1564,7 @@
         // Event listener untuk mode radio buttons
         document.querySelectorAll('.mode-radio').forEach(radio => {
             radio.addEventListener('change', function() {
-                togglePackingListSection(this.value);
+                toggleModeSections(this.value);
                 formData.mode = this.value;
                 console.log('Mode changed to:', this.value);
             });
@@ -1263,11 +1572,15 @@
 
         // Initialize mode dari state awal
         const initialMode = document.querySelector('input[name="mode"]:checked')?.value || 'packing_list';
-        togglePackingListSection(initialMode);
+        toggleModeSections(initialMode);
 
         if (searchBtnPO) {
             searchBtnPO.addEventListener('click', handleSearchPOClick);
             console.log('Search PO button event listener added');
+        }
+        if (searchBtnDO) {
+            searchBtnDO.addEventListener('click', handleSearchDOClick);
+            console.log('Search DO button event listener added');
         }
 
         // Setup event listener untuk no_po input
@@ -1300,6 +1613,46 @@
             });
         }
 
+        if (noDOInput) {
+            noDOInput.addEventListener('input', () => {
+                if (!noDOInput.readOnly && !noDOInput.hasAttribute('readonly')) {
+                    showDropdownDO(noDOInput);
+                }
+            });
+
+            noDOInput.addEventListener('focus', () => {
+                if (!noDOInput.readOnly && !noDOInput.hasAttribute('readonly')) {
+                    if (noDOInput.value.trim() === '') {
+                        showAllDO();
+                    } else {
+                        showDropdownDO(noDOInput);
+                    }
+                }
+            });
+
+            noDOInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    const dropdownDO = document.getElementById('dropdown-no-do');
+                    dropdownDO.classList.add('hidden');
+                }
+            });
+        }
+
+        const modalScanInput = document.getElementById('modal-scan-barcode-input');
+        if (modalScanInput) {
+            modalScanInput.addEventListener('input', function() {
+                if (currentModalMode !== 'antar_toko') return;
+                const val = (this.value || '').trim();
+                if (val.length >= 10 && !interStoreAutoScanLock) {
+                    interStoreAutoScanLock = true;
+                    scanInterStoreSerial();
+                    setTimeout(() => {
+                        interStoreAutoScanLock = false;
+                    }, 150);
+                }
+            });
+        }
+
         // Set tanggal default
         if (tanggalInput) {
             const today = new Date().toISOString().split('T')[0];
@@ -1325,7 +1678,9 @@
         const npbFromServer = '{{ request("npb") }}';
         const noTerimaFromServer = '{{ request("no_terima") }}';
         const vendorFromServer = '{{ request("vendor") }}';
+        const vendorNameFromServer = '{{ request("vendor_name") }}';
         const tanggalFromServer = '{{ request("tanggal") }}';
+        const noDoFromServer = '{{ request("no_do") }}';
         const formSubmittedFromServer = '{{ request("form_submitted") }}';
 
         if (formSubmittedFromServer === '1' && noPofromServer && npbFromServer && noTerimaFromServer && vendorFromServer && tanggalFromServer) {
@@ -1334,14 +1689,18 @@
             formData.npb = npbFromServer;
             formData.no_terima = noTerimaFromServer;
             formData.vendor = vendorFromServer;
+            formData.vendor_name = vendorNameFromServer || vendorFromServer;
             formData.tanggal = tanggalFromServer;
+            formData.no_do = noDoFromServer;
 
             // Set form values
             if (document.getElementById('npb')) document.getElementById('npb').value = npbFromServer;
             if (document.getElementById('no_terima')) document.getElementById('no_terima').value = noTerimaFromServer;
             if (vendorInput) vendorInput.value = vendorFromServer;
+            if (vendorDisplayInput) vendorDisplayInput.value = vendorNameFromServer || vendorFromServer;
             if (tanggalInput) tanggalInput.value = tanggalFromServer;
             if (noPOInput) noPOInput.value = noPofromServer;
+            if (noDOInput) noDOInput.value = noDoFromServer;
 
             // Set form to readonly
             setFormReadonly(true);
@@ -1508,6 +1867,114 @@
         console.log('All PO dropdown shown');
     }
 
-    // Tahap validasi barcode fisik (upload TXT + scan) sudah tidak digunakan.
+    function showDropdownDO(input) {
+        const dropdownDO = document.getElementById('dropdown-no-do');
+        const query = input.value.toLowerCase().trim();
+
+        if (query === '') {
+            showAllDO();
+            return;
+        }
+
+        const resultDO = nomor_do.filter(doItem => {
+            const no = (doItem.number || '').toLowerCase();
+            const date = (doItem.transDate || '').toLowerCase();
+            return no.includes(query) || date.includes(query);
+        });
+
+        dropdownDO.innerHTML = '';
+        if (resultDO.length === 0) {
+            const noResultItem = document.createElement('div');
+            noResultItem.className = 'px-3 py-2 text-center text-gray-500 border-b';
+            noResultItem.innerHTML = `<i class="fas fa-search mr-2"></i>Tidak ada DO yang cocok dengan "${query}"`;
+            dropdownDO.appendChild(noResultItem);
+        } else {
+            const headerItem = document.createElement('div');
+            headerItem.className = 'px-3 py-2 bg-blue-50 border-b font-semibold text-sm text-blue-700';
+            headerItem.innerHTML = `<i class="fas fa-search mr-2"></i>Hasil Pencarian: ${resultDO.length} DO`;
+            dropdownDO.appendChild(headerItem);
+
+            resultDO.forEach(doItem => {
+                const item = document.createElement('div');
+                item.className = 'px-3 py-2 hover:bg-gray-100 cursor-pointer border-b transition-colors duration-150';
+
+                const number = document.createElement('div');
+                number.className = 'font-semibold text-sm text-gray-800';
+                number.textContent = doItem.number || '-';
+
+                const date = document.createElement('div');
+                date.className = 'text-sm text-gray-500';
+                date.textContent = doItem.transDate || '-';
+
+                item.appendChild(number);
+                item.appendChild(date);
+                item.onclick = () => {
+                    input.value = doItem.number || '';
+                    formData.no_do = doItem.number || '';
+                    dropdownDO.classList.add('hidden');
+                };
+                dropdownDO.appendChild(item);
+            });
+        }
+
+        dropdownDO.classList.remove('hidden');
+    }
+
+    function showAllDO() {
+        const dropdownDO = document.getElementById('dropdown-no-do');
+        dropdownDO.innerHTML = '';
+
+        if (nomor_do.length === 0) {
+            const noDataItem = document.createElement('div');
+            noDataItem.className = 'px-3 py-2 text-center text-gray-500 border-b';
+            noDataItem.innerHTML = '<i class="fas fa-info-circle mr-2"></i>Tidak ada data DO';
+            dropdownDO.appendChild(noDataItem);
+        } else {
+            const headerItem = document.createElement('div');
+            headerItem.className = 'px-3 py-2 bg-gray-50 border-b font-semibold text-sm text-gray-700';
+            headerItem.innerHTML = `<i class="fas fa-list mr-2"></i>Semua Nomor DO (${nomor_do.length})`;
+            dropdownDO.appendChild(headerItem);
+
+            const maxShow = 50;
+            const doToShow = nomor_do.slice(0, maxShow);
+            doToShow.forEach(doItem => {
+                const item = document.createElement('div');
+                item.className = 'px-3 py-2 hover:bg-gray-100 cursor-pointer border-b transition-colors duration-150';
+
+                const number = document.createElement('div');
+                number.className = 'font-semibold text-sm text-gray-800';
+                number.textContent = doItem.number || '-';
+
+                const date = document.createElement('div');
+                date.className = 'text-sm text-gray-500';
+                date.textContent = doItem.transDate || '-';
+
+                item.appendChild(number);
+                item.appendChild(date);
+                item.onclick = () => {
+                    const noDOInput = document.getElementById('no_do');
+                    noDOInput.value = doItem.number || '';
+                    formData.no_do = doItem.number || '';
+                    dropdownDO.classList.add('hidden');
+                };
+                dropdownDO.appendChild(item);
+            });
+        }
+
+        dropdownDO.classList.remove('hidden');
+    }
+
+    function handleSearchDOClick(event) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        const noDOInput = document.getElementById('no_do');
+        const query = noDOInput.value.trim();
+        if (query === '') {
+            showAllDO();
+        } else {
+            showDropdownDO(noDOInput);
+        }
+    }
 </script>
 @endsection
