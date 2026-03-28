@@ -46,12 +46,12 @@
                                 {{-- Permanent toolbar: Bulk Reprint (left) + custom filter (right) --}}
                                 <div id="dt_toolbar" class="d-flex justify-content-between align-items-center mb-2">
                                     @if(Auth::user()->role !== 'owner')
-                                    <div>
-                                        <button id="bulk_reprint_btn" class="btn btn-warning btn-sm" disabled
-                                            onclick="doBulkReprint()">
-                                            <i class="fas fa-print"></i> Bulk Reprint
-                                        </button>
-                                    </div>
+                                        <div>
+                                            <button id="bulk_reprint_btn" class="btn btn-warning btn-sm" disabled
+                                                onclick="doBulkReprint()">
+                                                <i class="fas fa-print"></i> Bulk Reprint
+                                            </button>
+                                        </div>
                                     @endif
                                     <div>
                                         <label class="mb-0">Filter data: <input id="dt_filter_input" type="search"
@@ -168,25 +168,25 @@
                         const reprUrl = '{{ url("print-barcode/reprint") }}/' + encodeURIComponent(row.serialNo ?? '') + '?itemNo=' + encodeURIComponent(itemNo);
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
-                                    <td><input type="checkbox" class="row_check" data-serial="${serial}" data-item="${escapeHtml(itemNo)}"></td>
-                                    <td>${serial}</td>
-                                    <td>${escapeHtml(row.itemName ?? '')}</td>
-                                    <td>${escapeHtml(row.brand ?? '')}</td>
-                                    <td>${escapeHtml(row.motif ?? '')}</td>
-                                    <td>${escapeHtml(row.warna ?? '')}</td>
-                                    <td>${escapeHtml(row.specialTreat ?? '')}</td>
-                                    <td>${row.qty ?? ''}</td>
-                                    <td>${escapeHtml(row.unit ?? '')}</td>
-                                    <td class="text-center">
-                                        @if(Auth::user()->role !== 'owner')
-                                        <a href="${reprUrl}" target="_blank" class="btn btn-sm btn-primary">
-                                            <i class="fas fa-print"></i> Reprint
-                                        </a>
-                                        @else
-                                        <span class="text-muted small">View Only</span>
-                                        @endif
-                                    </td>
-                                `;
+                                            <td><input type="checkbox" class="row_check" data-serial="${serial}" data-item="${escapeHtml(itemNo)}"></td>
+                                            <td>${serial}</td>
+                                            <td>${escapeHtml(row.itemName ?? '')}</td>
+                                            <td>${escapeHtml(row.brand ?? '')}</td>
+                                            <td>${escapeHtml(row.motif ?? '')}</td>
+                                            <td>${escapeHtml(row.warna ?? '')}</td>
+                                            <td>${escapeHtml(row.specialTreat ?? '')}</td>
+                                            <td>${row.qty ?? ''}</td>
+                                            <td>${escapeHtml(row.unit ?? '')}</td>
+                                            <td class="text-center">
+                                                @if(Auth::user()->role !== 'owner')
+                                                    <a href="${reprUrl}" target="_blank" class="btn btn-sm btn-primary">
+                                                        <i class="fas fa-print"></i> Reprint
+                                                    </a>
+                                                @else
+                                                    <span class="text-muted small">View Only</span>
+                                                @endif
+                                            </td>
+                                        `;
                         tbody.appendChild(tr);
                     });
 

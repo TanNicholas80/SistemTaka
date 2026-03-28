@@ -84,8 +84,7 @@
 
                     <div class="relative w-full sm:w-auto">
                         <form method="GET" action="{{ route('branch.select') }}" class="w-full">
-                            <input type="text" name="q" value="{{ request('q') }}"
-                                placeholder="Cari Data Toko"
+                            <input type="text" name="q" value="{{ request('q') }}" placeholder="Cari Data Toko"
                                 class="w-full sm:w-72 border rounded-lg px-3 py-2 focus:ring focus:ring-pink-300 text-sm">
                         </form>
                         <span class="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400"><i
@@ -98,23 +97,21 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 pl-0 md:pl-4">
                 @foreach ($branches as $branch)
                     @if (!request('q') || Str::contains(Str::lower($branch->name), Str::lower(request('q'))))
-                        <div class="h-full relative" data-branch-id="{{ $branch->id }}"
-                            data-branch-name="{{ $branch->name }}" data-branch-photo="{{ $branch->photo ?? '' }}"
+                        <div class="h-full relative" data-branch-id="{{ $branch->id }}" data-branch-name="{{ $branch->name }}"
+                            data-branch-photo="{{ $branch->photo ?? '' }}"
                             data-branch-customer="{{ $branch->customer_id ?? '' }}"
                             data-branch-url-accurate="{{ $branch->url_accurate ?? '' }}">
 
                             @if (Auth::user()->role === 'super_admin')
                                 <div class="absolute top-2 right-2 z-30">
-                                    <button type="button"
-                                        onclick="event.stopPropagation(); toggleMenu('menu-{{ $branch->id }}')"
+                                    <button type="button" onclick="event.stopPropagation(); toggleMenu('menu-{{ $branch->id }}')"
                                         class="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
                                         <i class="fas fa-ellipsis-v"></i>
                                     </button>
 
                                     <div id="menu-{{ $branch->id }}"
                                         class="absolute right-0 mt-1 w-36 bg-white rounded-md shadow-lg py-1 hidden border border-gray-200 z-40">
-                                        <button type="button"
-                                            onclick="event.stopPropagation(); openEditModalFromData(event, this)"
+                                        <button type="button" onclick="event.stopPropagation(); openEditModalFromData(event, this)"
                                             class="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                             <i class="fas fa-edit mr-2"></i>Edit
                                         </button>
@@ -162,8 +159,7 @@
     </div>
 
     <!-- CREATE MODAL -->
-    <div id="createModal"
-        class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+    <div id="createModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-lg">
             <div class="p-6">
                 <div class="flex justify-between items-center mb-4">
@@ -192,8 +188,7 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Foto</label>
-                        <input type="file" name="photo" accept="image/*"
-                            class="w-full border rounded px-3 py-2">
+                        <input type="file" name="photo" accept="image/*" class="w-full border rounded px-3 py-2">
                         <p class="text-xs text-gray-500 mt-1">Format: JPG, PNG (Max: 2MB)</p>
                     </div>
 
@@ -225,8 +220,7 @@
 
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Nama Toko</label>
-                        <input type="text" name="name" id="editName" required
-                            class="w-full border rounded px-3 py-2">
+                        <input type="text" name="name" id="editName" required class="w-full border rounded px-3 py-2">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Customer ID</label>
@@ -241,13 +235,11 @@
                     <div id="currentLogo" class="mt-2"></div>
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Ganti Foto</label>
-                        <input type="file" name="photo" accept="image/*"
-                            class="w-full border rounded px-3 py-2">
+                        <input type="file" name="photo" accept="image/*" class="w-full border rounded px-3 py-2">
                     </div>
 
                     <div class="flex justify-end gap-3 mt-4">
-                        <button type="button" onclick="closeEditModal()"
-                            class="px-4 py-2 border rounded">Batal</button>
+                        <button type="button" onclick="closeEditModal()" class="px-4 py-2 border rounded">Batal</button>
                         <button type="submit" class="px-4 py-2 bg-pink-500 text-white rounded">Update</button>
                     </div>
                 </form>
@@ -256,8 +248,7 @@
     </div>
 
     <!-- DELETE MODAL -->
-    <div id="deleteModal"
-        class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+    <div id="deleteModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
         <div class="bg-white rounded-lg w-full max-w-md shadow-lg">
             <div class="p-6">
                 <div class="flex justify-between items-center mb-4">
@@ -276,8 +267,7 @@
                 <form id="deleteForm" method="POST" class="flex justify-end gap-3">
                     @csrf
                     @method('DELETE')
-                    <button type="button" onclick="closeDeleteModal()"
-                        class="px-4 py-2 border rounded">Batal</button>
+                    <button type="button" onclick="closeDeleteModal()" class="px-4 py-2 border rounded">Batal</button>
                     <button type="submit" class="px-4 py-2 bg-red-600 text-white rounded">Hapus</button>
                 </form>
             </div>
@@ -326,7 +316,7 @@
                 if (m.id !== id) m.classList.add('hidden');
             });
         }
-        document.addEventListener('click', function(e) {
+        document.addEventListener('click', function (e) {
             if (!e.target.closest('[id^="menu-"]') && !e.target.closest('.fa-ellipsis-v')) {
                 document.querySelectorAll('[id^="menu-"]').forEach(m => m.classList.add('hidden'));
             }

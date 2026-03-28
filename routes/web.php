@@ -93,15 +93,11 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/branch/{branch}', [BranchController::class, 'destroy'])->name('branch.destroy');
     });
 
-    Route::middleware(['role:kepala_toko,super_admin'])->group(function () {
-        Route::get('/barcode', [BarcodeController::class, 'index'])->name('barcode.index');
-=======
     // CRU (Create, Read, Update) for Marketing, Kepala Toko, Super Admin
     Route::middleware(['role:marketing,kepala_toko,super_admin,owner'])->group(function () {
         // Profile Update (Owner also according to spreadsheet)
         Route::post('/profile', [UserController::class, 'updateProfile'])->name('user.profile.update');
     });
->>>>>>> Stashed changes
 
     Route::middleware(['role:marketing,kepala_toko,super_admin'])->group(function () {
         // Penjualan (Actions)
