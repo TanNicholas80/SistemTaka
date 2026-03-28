@@ -126,10 +126,218 @@
                 transform: scale(1);
             }
         }
+
+        /* Sidebar Width Consistency */
+        :root {
+            --main-sidebar-width: 300px;
+        }
+
+        /* Default Sidebar Width (Expanded) */
+        body:not(.sidebar-collapse) .main-sidebar,
+        body:not(.sidebar-collapse) .main-sidebar::before {
+            width: var(--main-sidebar-width) !important;
+        }
+
+        /* Sidebar Mini Width (Collapsed) */
+        .sidebar-collapse .main-sidebar,
+        .sidebar-collapse .main-sidebar::before {
+            width: 4.6rem !important;
+            /* Standard Mini Width */
+        }
+
+        /* Hover expansion in Collapsed mode */
+        .sidebar-mini.sidebar-collapse .main-sidebar:hover,
+        .sidebar-mini.sidebar-collapse .main-sidebar.sidebar-focused {
+            width: var(--main-sidebar-width) !important;
+        }
+
+        /* Content-wrapper & Header margin when EXPANDED */
+        body:not(.sidebar-collapse) .content-wrapper,
+        body:not(.sidebar-collapse) .main-footer,
+        body:not(.sidebar-collapse) .main-header {
+            margin-left: var(--main-sidebar-width) !important;
+        }
+
+        /* Content-wrapper & Header margin when COLLAPSED */
+        .sidebar-collapse .content-wrapper,
+        .sidebar-collapse .main-footer,
+        .sidebar-collapse .main-header {
+            margin-left: 4.6rem !important;
+        }
+
+        /* Prevent Horizontal Shift */
+        html,
+        body {
+            overflow-x: hidden !important;
+            width: 100%;
+            position: relative;
+        }
+
+        .wrapper {
+            overflow-x: hidden !important;
+            width: 100%;
+            position: relative;
+        }
+
+        /* Ensure Table takes full width */
+        .table {
+            width: 100% !important;
+        }
+
+        /* Fix DataTable scrollX header alignment */
+        .dataTables_scrollHeadInner,
+        .dataTables_scrollHeadInner>.table {
+            width: 100% !important;
+        }
+
+        /* Profile Image Fix */
+        .user-panel .image img {
+            width: 50px !important;
+            height: 50px !important;
+            object-fit: cover !important;
+            aspect-ratio: 1/1 !important;
+        }
+
+        /* Sidebar Item Improvements */
+        .nav-sidebar .nav-link p {
+            white-space: normal;
+        }
+
+        /* Hide all sub-menus when sidebar is small and NOT hovered */
+        .sidebar-collapse .main-sidebar:not(:hover) .nav-sidebar .nav-treeview {
+            display: none !important;
+        }
+
+        /* Hide text labels and arrows to prevent them from floating when mouse leaves the sidebar */
+        .sidebar-collapse .main-sidebar:not(:hover) .nav-sidebar .nav-link p,
+        .sidebar-collapse .main-sidebar:not(:hover) .nav-sidebar .nav-link .right {
+            display: none !important;
+        }
+
+        /* Hide profile info on collapse */
+        .sidebar-collapse .main-sidebar:not(:hover) .user-panel {
+            display: none !important;
+        }
+
+        /* Reset parent "open" background (the grey) on collapse, but KEEP the active blue */
+        .sidebar-collapse .main-sidebar:not(:hover) .nav-item.menu-open>.nav-link:not(.active) {
+            background-color: transparent !important;
+        }
+
+        /* Ensure Brand Logo remains visible and correctly styled */
+        .brand-link {
+            display: flex !important;
+            align-items: center !important;
+            white-space: nowrap !important;
+        }
+
+        .brand-link .brand-image {
+            margin-right: .8rem !important;
+            max-height: 33px !important;
+            width: auto !important;
+            float: none !important;
+        }
+
+        .brand-text {
+            padding-left: .2rem !important;
+        }
+
+        /* Branding Adjustments in Collapse Mode */
+        .sidebar-collapse .main-sidebar:not(:hover) .brand-link .brand-image {
+            padding-left: .1rem !important;
+            margin-right: 0 !important;
+        }
+
+        .sidebar-collapse .main-sidebar:not(:hover) .brand-text {
+            display: none !important;
+        }
+
+        /* Area Separation: Prevent backgrounds from merging (Ultimate Pill Mode) */
+        /* Neutralize ANY grouping backgrounds on menu containers */
+        .nav-sidebar .nav-treeview,
+        .nav-sidebar .nav-item.menu-open,
+        .nav-sidebar .nav-item {
+            background-color: transparent !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Target links specifically to be "Rounded Rectangles" */
+        ul.nav-sidebar li.nav-item>a.nav-link {
+            width: auto !important;
+            margin-bottom: 6px !important;
+            /* Standard vertical gap */
+            margin-left: 10px !important;
+            /* Horizontal gap from left */
+            margin-right: 10px !important;
+            /* Horizontal gap from right */
+            border-radius: 6px !important;
+            /* Rounded Rectangle shape - NOT Pill */
+            display: block !important;
+            transition: all 0.2s ease !important;
+        }
+
+        /* Standardized Hierarchy Indentation (Consistently shifting 1.2rem per level) */
+        /* Applied when Expanded OR when Collapsed but Hovered */
+
+        /* Level 1: Root */
+        body:not(.sidebar-collapse) .nav-sidebar>.nav-item>.nav-link,
+        .sidebar-collapse .main-sidebar:hover .nav-sidebar>.nav-item>.nav-link {
+            padding-left: 1rem !important;
+        }
+
+        /* Level 2: Sub-menu */
+        body:not(.sidebar-collapse) .nav-sidebar .nav-treeview>.nav-item>.nav-link,
+        .sidebar-collapse .main-sidebar:hover .nav-sidebar .nav-treeview>.nav-item>.nav-link {
+            padding-left: 2.2rem !important;
+        }
+
+        /* Level 3: Nested Sub-menu */
+        body:not(.sidebar-collapse) .nav-sidebar .nav-treeview .nav-treeview>.nav-item>.nav-link,
+        .sidebar-collapse .main-sidebar:hover .nav-sidebar .nav-treeview .nav-treeview>.nav-item>.nav-link {
+            padding-left: 3.4rem !important;
+        }
+
+        /* Ensure nav-treeview links also follow the capsule/pill box style */
+        .nav-sidebar .nav-treeview .nav-link {
+            width: auto !important;
+        }
+
+        /* Centered Icons on Collapse (ONLY when NOT hovered) */
+        .sidebar-collapse .main-sidebar:not(:hover) .nav-sidebar .nav-link {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0.5rem 0 !important;
+            text-align: center !important;
+        }
+
+        .sidebar-collapse .main-sidebar:not(:hover) .nav-sidebar .nav-icon {
+            margin: 0 !important;
+            float: none !important;
+        }
+
+        .nav-sidebar .nav-link {
+            width: 100% !important;
+            margin: 0 !important;
+        }
+
+        .nav-sidebar .nav-treeview {
+            padding-left: 0 !important;
+            margin-left: 0 !important;
+        }
     </style>
 </head>
 
 <body class="hold-transition sidebar-mini layout-fixed">
+    <script>
+        // Apply sidebar state as early as possible to prevent flicker
+        (function () {
+            const sidebarState = localStorage.getItem('sidebar-state');
+            if (sidebarState === 'collapsed') {
+                document.body.classList.add('sidebar-collapse');
+            }
+        })();
+    </script>
     <div class="wrapper">
         <!-- Loading Screen -->
         <div class="loading-screen" id="loadingScreen">
@@ -154,13 +362,13 @@
 
             </ul>
 
-            <ul class="navbar-nav mx-auto" style="flex:1; justify-content:center; display:flex;">
-                <li class="nav-item d-none d-sm-inline-block">
-                    <span class="nav-link font-weight-bold" style="font-size: 1.1rem; color:#09332c;">
-                        Toko {{ session('active_branch_name') ?? (Auth::user()->branches->first()->name ?? '-') }}
-                    </span>
-                </li>
-            </ul>
+            <!-- Centered Store Name -->
+            <div class="navbar-nav mx-auto d-none d-sm-flex"
+                style="position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none;">
+                <span class="nav-link font-weight-bold" style="font-size: 1.1rem; color:#09332c; white-space: nowrap;">
+                    Toko {{ session('active_branch_name') ?? (Auth::user()->branches->first()->name ?? '-') }}
+                </span>
+            </div>
 
             <!-- Right navbar links -->
             <ul class="navbar-nav ml-auto" style="position: relative; display: flex;">
@@ -179,26 +387,29 @@
         <!-- Main Sidebar Container -->
         <aside class="main-sidebar sidebar-light-primary elevation-4">
             <!-- Brand Logo -->
-            <a href="{{ route('barang_master.index') }}" class="brand-link">
+            <div class="brand-link" style="cursor: default;">
                 <img src="{{ asset('images/logo.svg') }}" alt="Duniatex Logo" class="brand-image" style="opacity: .8">
                 <span class="brand-text font-weight-bold">
                     <span style="color: #08332c;">TAKA TEXTILE</span>
                 </span>
-            </a>
+            </div>
 
             <!-- Sidebar -->
             <div class="sidebar">
                 <!-- Sidebar user panel (optional) -->
-                <div class="user-panel mt-3 pb-3 mb-3 d-flex">
+                <div class="user-panel mt-3 pb-3 mb-3 d-flex align-items-center">
                     <div class="image">
-                        <img src="{{ asset('images/av1.png') }}" class="img-circle elevation-2" alt="User Image"
-                            style="width: 50px; height: 50px;">
+                        <img src="{{ asset('images/av1.png') }}" class="img-circle elevation-2" alt="User Image">
                     </div>
-                    <div class="info">
+                    <div class="info py-1">
                         @auth
-                            <label style="font-size: 20px;" class="d-block"><b>{{ Auth::user()->name }}</b></label>
+                            <span class="d-block mb-0"
+                                style="font-size: 18px; font-weight: bold; color: #343a40; line-height: 1.1;">{{ Auth::user()->username }}</span>
+                            <span class="d-block small text-muted" style="text-transform: capitalize; line-height: 1.1;">
+                                {{ str_replace('_', ' ', Auth::user()->role) }}
+                            </span>
                         @else
-                            <label class="d-block">Guest</label>
+                            <label class="d-block mb-0 text-dark">Guest</label>
                         @endauth
                     </div>
                 </div>
@@ -236,8 +447,8 @@
                             </a>
                         </li>
 
-                        <!-- Log Aktivitas Menu -->
-                        @if(Auth::user()->role !== 'owner')
+                        <!-- Log Aktivitas Menu (Restricted to SA & KT) -->
+                        @if(in_array(Auth::user()->role, ['super_admin', 'kepala_toko']))
                             <li class="nav-item">
                                 <a href="{{ route('activity_logs.index') }}"
                                     class="nav-link {{ Request::routeIs('activity_logs.*') ? 'active' : '' }}">
@@ -247,106 +458,79 @@
                             </li>
                         @endif
 
-                        @if (Auth::user()->role !== 'owner')
-                            <li
-                                class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('retur_pembelian.*') ? 'menu-open' : '' }}">
-                                <a href="#"
-                                    class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::routeIs('barcode.*') || Request::routeIs('packing-list.*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('retur_pembelian.*') ? 'active' : '' }}">
-                                    <i class="nav-icon fas fa-warehouse"></i>
-                                    <p>Pembelian <i class="right fas fa-angle-left"></i></p>
-                                </a>
-                                <ul class="nav nav-treeview ml-3">
-                                    <li class="nav-item">
-                                        <a href="{{ route('pesanan_pembelian.index') }}"
-                                            class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Pesanan Pembelian</p>
-                                        </a>
-                                    </li>
-
-                                    <li
-                                        class="nav-item {{ Request::routeIs('barcode.*') || Request::is('packing-list*') || Request::is('barang-masuk*') ? 'menu-open' : '' }}">
-                                        <a href="#"
-                                            class="nav-link {{ Request::routeIs('barcode.*') || Request::is('packing-list*') || Request::is('barang-masuk*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Barcode <i class="right fas fa-angle-left"></i></p>
-                                        </a>
-                                        <ul class="nav nav-treeview ml-3">
-                                            <li class="nav-item">
-                                                <a href="{{ route('barcode.index') }}"
-                                                    class="nav-link {{ Request::routeIs('barcode.*') ? 'active' : '' }}">
-                                                    <i class="far fa-dot-circle nav-icon"></i>
-                                                    <p>Daftar Barcode</p>
-                                                </a>
-                                            </li>
-
-                                            <li
-                                                class="nav-item {{ Request::is('packing-list*') || Request::is('barang-masuk*') ? 'menu-open' : '' }}">
-                                                <a href="#"
-                                                    class="nav-link {{ Request::is('packing-list*') || Request::is('barang-masuk*') ? 'active' : '' }}">
-                                                    <i class="far fa-dot-circle nav-icon"></i>
-                                                    <p>Packing List <i class="right fas fa-angle-left"></i></p>
-                                                </a>
-                                                <ul class="nav nav-treeview ml-3">
-                                                    <li class="nav-item">
-                                                        <a href="{{ route('packing-list.index') }}"
-                                                            class="nav-link {{ Request::is('packing-list*') ? 'active' : '' }}">
-                                                            <i class="fas fa-minus nav-icon"></i>
-                                                            <p>Packing List</p>
-                                                        </a>
-                                                    </li>
-                                                    <li class="nav-item">
-                                                        <a href="{{ route('barang-masuk.index') }}"
-                                                            class="nav-link {{ Request::is('barang-masuk*') ? 'active' : '' }}">
-                                                            <i class="fas fa-minus nav-icon"></i>
-                                                            <p>Scan Barang</p>
-                                                        </a>
-                                                    </li>
-                                                </ul>
-                                            </li>
-                                        </ul>
-                                    </li>
-
-                                    <li class="nav-item">
-                                        <a href="{{ route('penerimaan-barang.index') }}"
-                                            class="nav-link {{ Request::is('penerimaan-barang*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Penerimaan Barang</p>
-                                        </a>
-                                    </li>
-                                    <li class="nav-item">
-                                        <a href="{{ route('retur_pembelian.index') }}"
-                                            class="nav-link {{ Request::is('retur-pembelian*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Retur Pembelian</p>
-                                        </a>
-                                    </li>
-                                </ul>
-                            </li>
-                        @endif
-
                         <li
-                            class="nav-item {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') || Request::routeIs('print_barcode.*') ? 'menu-open' : '' }}">
+                            class="nav-item {{ Request::routeIs('pesanan_pembelian.*') || Request::is('packing-list*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('retur_pembelian.*') ? 'menu-open' : '' }}">
                             <a href="#"
-                                class="nav-link {{ Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') || Request::routeIs('print_barcode.*') ? 'active' : '' }}">
-                                <i class="nav-icon fa-solid fa-cart-flatbed"></i>
-                                <p>Persediaan <i class="right fas fa-angle-left"></i></p>
+                                class="nav-link {{ Request::routeIs('pesanan_pembelian.*') || Request::is('packing-list*') || Request::is('barang-masuk*') || Request::routeIs('penerimaan-barang.*') || Request::routeIs('retur_pembelian.*') ? 'active' : '' }}">
+                                <i class="nav-icon fas fa-warehouse"></i>
+                                <p>Pembelian <i class="right fas fa-angle-left"></i></p>
                             </a>
-                            <ul class="nav nav-treeview ml-3">
-                                {{-- <li class="nav-item">
-                                    <a href="{{ route('perintah_stock_opname.index') }}"
-                                        class="nav-link {{ Request::is('perintah-stock-opname*') ? 'active' : '' }}">
+                            <ul class="nav nav-treeview">
+                                <li class="nav-item">
+                                    <a href="{{ route('pesanan_pembelian.index') }}"
+                                        class="nav-link {{ Request::is('pesanan-pembelian*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
-                                        <p>Perintah Stock Opname</p>
+                                        <p>Pesanan Pembelian</p>
+                                    </a>
+                                </li>
+
+                                <li
+                                    class="nav-item {{ Request::is('packing-list*') || Request::is('barang-masuk*') ? 'menu-open' : '' }}">
+                                    <a href="#"
+                                        class="nav-link {{ Request::is('packing-list*') || Request::is('barang-masuk*') ? 'active' : '' }}">
+                                        <i class="far fa-circle nav-icon"></i>
+                                        <p>Packing List <i class="right fas fa-angle-left"></i></p>
+                                    </a>
+                                    <ul class="nav nav-treeview">
+                                        <li class="nav-item">
+                                            <a href="{{ route('packing-list.index') }}"
+                                                class="nav-link {{ Request::is('packing-list*') ? 'active' : '' }}">
+                                                <i class="fas fa-minus nav-icon"></i>
+                                                <p>Packing List</p>
+                                            </a>
+                                        </li>
+                                        <li class="nav-item">
+                                            <a href="{{ route('barang-masuk.index') }}"
+                                                class="nav-link {{ Request::is('barang-masuk*') ? 'active' : '' }}">
+                                                <i class="fas fa-minus nav-icon"></i>
+                                                <p>Scan Barang</p>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </li>
+
+                                <li class="nav-item">
+                                    <a href="{{ route('penerimaan-barang.index') }}"
+                                        class="nav-link {{ Request::is('penerimaan-barang*') ? 'active' : '' }}">
+                                        <i class="far fa-circle nav-icon"></i>
+                                        <p>Penerimaan Barang</p>
                                     </a>
                                 </li>
                                 <li class="nav-item">
-                                    <a href="{{ route('hasil_stock_opname.index') }}"
-                                        class="nav-link {{ Request::is('hasil-stock-opname*') ? 'active' : '' }}">
+                                    <a href="{{ route('retur_pembelian.index') }}"
+                                        class="nav-link {{ Request::is('retur-pembelian*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
-                                        <p>Hasil Stock Opname</p>
+                                        <p>Retur Pembelian</p>
                                     </a>
-                                </li> --}}
+                                </li>
+                            </ul>
+                        </li>
+
+                        <li
+                            class="nav-item {{ Request::routeIs('barcode.*') || Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') || Request::routeIs('print_barcode.*') ? 'menu-open' : '' }}">
+                            <a href="#"
+                                class="nav-link {{ Request::routeIs('barcode.*') || Request::routeIs('perintah_stock_opname.*') || Request::routeIs('hasil_stock_opname.*') || Request::routeIs('barang_master.*') || Request::routeIs('print_barcode.*') ? 'active' : '' }}">
+                                <i class="nav-icon fa-solid fa-cart-flatbed"></i>
+                                <p>Persediaan <i class="right fas fa-angle-left"></i></p>
+                            </a>
+                            <ul class="nav nav-treeview">
+                                <li class="nav-item">
+                                    <a href="{{ route('barcode.index') }}"
+                                        class="nav-link {{ Request::routeIs('barcode.*') ? 'active' : '' }}">
+                                        <i class="far fa-circle nav-icon"></i>
+                                        <p>Daftar Barcode</p>
+                                    </a>
+                                </li>
                                 <li class="nav-item">
                                     <a href="{{ route('barang_master.index') }}"
                                         class="nav-link {{ Request::is('barang-master*') ? 'active' : '' }}">
@@ -355,12 +539,12 @@
                                     </a>
                                 </li>
                                 <li class="nav-item">
-                                        <a href="{{ route('print_barcode.index') }}"
-                                            class="nav-link {{ Request::routeIs('print_barcode.*') ? 'active' : '' }}">
-                                            <i class="far fa-circle nav-icon"></i>
-                                            <p>Reprint Barcode</p>
-                                        </a>
-                                    </li>
+                                    <a href="{{ route('print_barcode.index') }}"
+                                        class="nav-link {{ Request::routeIs('print_barcode.*') ? 'active' : '' }}">
+                                        <i class="far fa-circle nav-icon"></i>
+                                        <p>Reprint Barcode</p>
+                                    </a>
+                                </li>
                             </ul>
                         </li>
 
@@ -371,7 +555,7 @@
                                 <i class="nav-icon fas fa-tags"></i>
                                 <p>Penjualan <i class="right fas fa-angle-left"></i></p>
                             </a>
-                            <ul class="nav nav-treeview ml-3">
+                            <ul class="nav nav-treeview">
 
                                 <li class="nav-item">
                                     <a href="{{ route('cashier.index') }}"
@@ -387,21 +571,25 @@
                                         <p>Pengiriman Pesanan</p>
                                     </a>
                                 </li>
-                                <li class="nav-item {{ Request::routeIs('retur_penjualan.*') || Request::routeIs('print_barcode_retur.*') ? 'menu-open' : '' }}">
-                                    <a href="#" class="nav-link {{ Request::routeIs('retur_penjualan.*') || Request::routeIs('print_barcode_retur.*') ? 'active' : '' }}">
+                                <li
+                                    class="nav-item {{ Request::routeIs('retur_penjualan.*') || Request::routeIs('print_barcode_retur.*') ? 'menu-open' : '' }}">
+                                    <a href="#"
+                                        class="nav-link {{ Request::routeIs('retur_penjualan.*') || Request::routeIs('print_barcode_retur.*') ? 'active' : '' }}">
                                         <i class="far fa-circle nav-icon"></i>
                                         <p>Retur <i class="right fas fa-angle-left"></i></p>
                                     </a>
-                                    <ul class="nav nav-treeview ml-3">
+                                    <ul class="nav nav-treeview">
                                         <li class="nav-item">
-                                            <a href="{{ route('retur_penjualan.index') }}" class="nav-link {{ Request::routeIs('retur_penjualan.*') ? 'active' : '' }}">
-                                                <i class="far fa-dot-circle nav-icon"></i>
+                                            <a href="{{ route('retur_penjualan.index') }}"
+                                                class="nav-link {{ Request::routeIs('retur_penjualan.*') ? 'active' : '' }}">
+                                                <i class="fas fa-minus nav-icon"></i>
                                                 <p>Retur Penjualan</p>
                                             </a>
                                         </li>
                                         <li class="nav-item">
-                                            <a href="{{ route('print_barcode_retur.index') }}" class="nav-link {{ Request::routeIs('print_barcode_retur.*') ? 'active' : '' }}">
-                                                <i class="far fa-dot-circle nav-icon"></i>
+                                            <a href="{{ route('print_barcode_retur.index') }}"
+                                                class="nav-link {{ Request::routeIs('print_barcode_retur.*') ? 'active' : '' }}">
+                                                <i class="fas fa-minus nav-icon"></i>
                                                 <p>Print Barcode Retur</p>
                                             </a>
                                         </li>
@@ -684,7 +872,7 @@
                 position: 'top-end',
                 icon: 'success',
                 showConfirmButton: false,
-                timer: 1000,
+                timer: 5000,
                 timerProgressBar: true,
             });
 
@@ -722,6 +910,30 @@
                     title: "{{ session('info') }}"
                 });
             @endif
+
+        // Sidebar Collapse/Expand Behavior (Table Resize & Persistence)
+        $('[data-widget="pushmenu"]').on('collapsed.lte.pushmenu shown.lte.pushmenu', function () {
+            const isCollapsed = $('body').hasClass('sidebar-collapse');
+            localStorage.setItem('sidebar-state', isCollapsed ? 'collapsed' : 'expanded');
+
+            // Force table redraw specifically for DataTables on sidebar toggle
+            setTimeout(function () {
+                $(window).trigger('resize');
+                // Recalculate columns for all visible DataTables
+                if ($.fn.DataTable) {
+                    $.fn.dataTable.tables({ visible: true, api: true }).columns.adjust();
+                }
+            }, 400);
+        });
+
+        // "Lock" Sidebar Open on Menu Click (when currently collapsed)
+        $(document).on('click', '.nav-sidebar .nav-link', function (e) {
+            if ($('body').hasClass('sidebar-collapse')) {
+                // If the sidebar is collapsed and you click a menu, expand it permanently
+                $('[data-widget="pushmenu"]').PushMenu('expand');
+                localStorage.setItem('sidebar-state', 'expanded');
+            }
+        });
     </script>
     @stack('scripts')
 </body>

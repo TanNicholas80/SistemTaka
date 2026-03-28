@@ -62,9 +62,13 @@
                         </div>
                         <div class="form-group col-md-3">
                             <label class="d-block" style="visibility:hidden;">Lanjut</label>
+                            @if(Auth::user()->role !== 'owner')
                             <button type="button" id="btn_lanjut" class="btn btn-primary btn-block" {{ empty($customerNo) ? 'disabled' : '' }}>
                                 Lanjut
                             </button>
+                            @else
+                            <button type="button" class="btn btn-secondary btn-block" disabled>View Only</button>
+                            @endif
                         </div>
                     </div>
                 </div>
@@ -74,9 +78,11 @@
                 <div class="card-header">
                     <h3 class="card-title mb-0">Rincian Barcode</h3>
                     <div class="card-tools">
+                        @if(Auth::user()->role !== 'owner')
                         <button type="button" id="btn_bulk_print" class="btn btn-secondary btn-sm" disabled>
                             <i class="fas fa-print"></i> Bulk print
                         </button>
+                        @endif
                     </div>
                 </div>
                 <div class="card-body">
@@ -335,7 +341,11 @@
                     if (!row.printable) {
                         return '<span class="text-muted small">No serial</span>';
                     }
+                    @if(Auth::user()->role !== 'owner')
                     return '<button type="button" class="btn btn-sm btn-primary btn-print-one" data-id="' + $('<div>').text(row.row_id).html() + '">Print Barcode</button>';
+                    @else
+                    return '<span class="text-muted small">Ready</span>';
+                    @endif
                 }
             }
         ]
