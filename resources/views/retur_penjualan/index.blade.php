@@ -33,8 +33,8 @@
             <div class="row">
                 <div class="col-12">
 
-                    <!-- Add Button -->
-                    @if (Auth::user()->role != 'owner')
+                    <!-- Add Button (Restricted to SA & KT) -->
+                    @if (!in_array(Auth::user()->role, ['owner', 'marketing']))
                     <div class="d-flex justify-content-end mb-3">
                         <a href="{{ route('retur_penjualan.create') }}" class="btn btn-primary">
                             <i class="fas fa-plus"></i> Add

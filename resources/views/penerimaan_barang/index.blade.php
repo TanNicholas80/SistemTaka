@@ -34,7 +34,7 @@
                 <div class="col-12">
 
                     <!-- Add Button -->
-                    @if (Auth::user()->role != 'owner')
+                    @if (in_array(Auth::user()->role, ['super_admin', 'kepala_toko', 'marketing']))
                     <div class="d-flex justify-content-end mb-3">
                         <a href="{{ route('penerimaan-barang.create') }}" class="btn btn-primary">
                             <i class="fas fa-plus"></i> Add

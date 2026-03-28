@@ -37,52 +37,46 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::get('/dashboard', [DashboardController::class, 'dashboard'])->name('dashboard');
 
-    // Stock Opname - Full Access
-    Route::get('/perintah-stock-opname', [PerintahStockOpnameController::class, 'index'])->name('perintah_stock_opname.index');
-    Route::get('/perintah-stock-opname/detail/{number}', [PerintahStockOpnameController::class, 'show'])->name('perintah_stock_opname.detail');
+    // Shared Read-Only Access (All Roles: Super Admin, Kepala Toko, Marketing, Owner)
+    Route::middleware(['role:super_admin,kepala_toko,marketing,owner'])->group(function () {
+        // Stock Opname
+        Route::get('/perintah-stock-opname', [PerintahStockOpnameController::class, 'index'])->name('perintah_stock_opname.index');
+        Route::get('/perintah-stock-opname/detail/{number}', [PerintahStockOpnameController::class, 'show'])->name('perintah_stock_opname.detail');
+        Route::get('/hasil-stock-opname', [HasilStockOpnameController::class, 'index'])->name('hasil_stock_opname.index');
+        Route::get('/hasil-stock-opname/detail/{number}', [HasilStockOpnameController::class, 'show'])->name('hasil_stock_opname.detail');
+        Route::get('/hasil-stock-opname/detail/{number}/{namaBarang}', [HasilStockOpnameController::class, 'showApproval'])->name('hasil_stock_opname.showApproval');
 
-    // Hasil Stock Opname - Full Access
-    Route::get('/hasil-stock-opname', [HasilStockOpnameController::class, 'index'])->name('hasil_stock_opname.index');
-    Route::get('/hasil-stock-opname/detail/{number}', [HasilStockOpnameController::class, 'show'])->name('hasil_stock_opname.detail');
-    Route::get('/hasil-stock-opname/detail/{number}/{namaBarang}', [HasilStockOpnameController::class, 'showApproval'])->name('hasil_stock_opname.showApproval');
+        // Barang Master
+        Route::get('/barang-master', [BarangAccurateController::class, 'index'])->name('barang_master.index');
 
-    // Barang Master - Full Access
-    Route::get('/barang-master', [BarangAccurateController::class, 'index'])->name('barang_master.index');
+        // Pelanggan
+        Route::get('/pelanggan', [PelangganController::class, 'index'])->name('pelanggan.index');
 
-    // Pesanan Pembelian - Full Access
-    Route::get('/pesanan-pembelian', [PesananPembelianController::class, 'index'])->name('pesanan_pembelian.index');
-    Route::get('/pesanan-pembelian/detail/{number}', [PesananPembelianController::class, 'show'])->name('pesanan_pembelian.detail');
+        // Penjualan (Read Access)
+        Route::get('/cashier', [SalesController::class, 'index'])->name('cashier.index');
+        Route::get('/cashier/detail/{npj}', [SalesController::class, 'show'])->name('cashier.detail');
+        Route::get('/pengiriman-pesanan', [PengirimanPesananController::class, 'index'])->name('pengiriman_pesanan.index');
+        Route::get('/pengiriman-pesanan/detail/{no_pengiriman}', [PengirimanPesananController::class, 'show'])->name('pengiriman_pesanan.detail');
+        Route::get('/faktur-penjualan', [FakturPenjualanController::class, 'index'])->name('faktur_penjualan.index');
+        Route::get('/faktur-penjualan/detail/{no_faktur}', [FakturPenjualanController::class, 'show'])->name('faktur_penjualan.detail');
+        Route::get('/retur-penjualan', [ReturPenjualanController::class, 'index'])->name('retur_penjualan.index');
+        Route::get('/retur-penjualan/detail/{no_retur}', [ReturPenjualanController::class, 'show'])->name('retur_penjualan.detail');
 
-    // Penerimaan Barang - Full Access
-    Route::get('/penerimaan-barang', [PenerimaanBarangController::class, 'index'])->name('penerimaan-barang.index');
-    Route::get('/penerimaan-barang/create', [PenerimaanBarangController::class, 'create'])->name('penerimaan-barang.create');
-    Route::get('/penerimaan-barang/{npb}', [PenerimaanBarangController::class, 'show'])->name('penerimaan-barang.show');
+        // Pembelian (Read Access)
+        Route::get('/pesanan-pembelian', [PesananPembelianController::class, 'index'])->name('pesanan_pembelian.index');
+        Route::get('/pesanan-pembelian/detail/{number}', [PesananPembelianController::class, 'show'])->name('pesanan_pembelian.detail');
+        Route::get('/penerimaan-barang', [PenerimaanBarangController::class, 'index'])->name('penerimaan-barang.index');
+        Route::get('/penerimaan-barang/{npb}', [PenerimaanBarangController::class, 'show'])->name('penerimaan-barang.show');
+        Route::get('/retur-pembelian', [ReturPembelianController::class, 'index'])->name('retur_pembelian.index');
+        Route::get('/retur-pembelian/detail/{no_retur}', [ReturPembelianController::class, 'show'])->name('retur_pembelian.detail');
+        Route::get('/barcode', [BarcodeController::class, 'index'])->name('barcode.index');
+        Route::get('/barang-masuk', [BarangMasukController::class, 'index'])->name('barang-masuk.index');
+        Route::get('/packing-list', [PackingListController::class, 'index'])->name('packing-list.index');
+        Route::get('/packing-list/detail/{id}', [PackingListController::class, 'show'])->name('packing_list_detail');
 
-    // Pelanggan - Full Access
-    Route::get('/pelanggan', [PelangganController::class, 'index'])->name('pelanggan.index');
-
-    // Cashier - Full Access
-    Route::get('/cashier', [SalesController::class, 'index'])->name('cashier.index');
-    Route::get('/cashier/detail/{npj}', [SalesController::class, 'show'])->name('cashier.detail');
-
-    // Pengiriman Pesanan - Full Access
-    Route::get('/pengiriman-pesanan', [PengirimanPesananController::class, 'index'])->name('pengiriman_pesanan.index');
-    Route::get('/pengiriman-pesanan/detail/{no_pengiriman}', [PengirimanPesananController::class, 'show'])->name('pengiriman_pesanan.detail');
-
-    // Faktur Penjualan - Full Access
-    Route::get('/faktur-penjualan', [FakturPenjualanController::class, 'index'])->name('faktur_penjualan.index');
-    Route::get('/faktur-penjualan/detail/{no_faktur}', [FakturPenjualanController::class, 'show'])->name('faktur_penjualan.detail');
-
-    // Activity Log - For Non-Owner
-    Route::get('/activity-log', [ActivityLogController::class, 'index'])->name('activity_logs.index');
-
-    // Retur Penjualan - Full Access
-    Route::get('/retur-penjualan', [ReturPenjualanController::class, 'index'])->name('retur_penjualan.index');
-    Route::get('/retur-penjualan/detail/{no_retur}', [ReturPenjualanController::class, 'show'])->name('retur_penjualan.detail');
-
-    // Retur Pembelian - Full Access
-    Route::get('/retur-pembelian', [ReturPembelianController::class, 'index'])->name('retur_pembelian.index');
-    Route::get('/retur-pembelian/detail/{no_retur}', [ReturPembelianController::class, 'show'])->name('retur_pembelian.detail');
+        // Profile Detail
+        Route::get('/profile', [UserController::class, 'editProfile'])->name('user.profile');
+    });
 
     // Route yang hanya bisa diakses oleh admin
     Route::middleware('role:super_admin')->group(function () {
@@ -99,72 +93,97 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('/branch/{branch}', [BranchController::class, 'destroy'])->name('branch.destroy');
     });
 
+<<<<<<< Updated upstream
     Route::middleware(['role:toko,super_admin'])->group(function () {
         Route::get('/barcode', [BarcodeController::class, 'index'])->name('barcode.index');
+=======
+    // CRU (Create, Read, Update) for Marketing, Kepala Toko, Super Admin
+    Route::middleware(['role:marketing,kepala_toko,super_admin,owner'])->group(function () {
+        // Profile Update (Owner also according to spreadsheet)
+        Route::post('/profile', [UserController::class, 'updateProfile'])->name('user.profile.update');
+    });
+>>>>>>> Stashed changes
 
-        // Barang Masuk (Scan Barang) - hanya fitur yang dipakai
-        Route::get('/barang-masuk', [BarangMasukController::class, 'index'])->name('barang-masuk.index');
+    Route::middleware(['role:marketing,kepala_toko,super_admin'])->group(function () {
+        // Penjualan (Actions)
+        Route::get('/cashier/create', [SalesController::class, 'create'])->name('cashier.create');
+        Route::post('/cashier/store', [SalesController::class, 'store'])->name('cashier.store');
+        Route::post('/cashier/barcode/information', [SalesController::class, 'getBarcodeAjax']);
+        Route::post('/cashier/customer/information', [SalesController::class, 'getCustomerInfo']);
+
+        Route::get('/pengiriman-pesanan/create', [PengirimanPesananController::class, 'create'])->name('pengiriman_pesanan.create');
+        Route::get('/pengiriman-pesanan/customer/{number}', [PengirimanPesananController::class, 'getCustomerByAjax'])->name('pengiriman_pesanan.getCustomer');
+        Route::post('/pengiriman-pesanan/scan-accurate', [PengirimanPesananController::class, 'scanBarcodeAccurate'])->name('pengiriman_pesanan.scan_accurate');
+        Route::post('/pengiriman-pesanan/store', [PengirimanPesananController::class, 'store'])->name('pengiriman_pesanan.store');
+
+        Route::get('/faktur-penjualan/create', [FakturPenjualanController::class, 'create'])->name('faktur_penjualan.create');
+        Route::get('/faktur-penjualan/customer/{number}', [FakturPenjualanController::class, 'getCustomerByAjax'])->name('faktur_penjualan.getCustomer');
+        Route::post('/faktur-penjualan/store', [FakturPenjualanController::class, 'store'])->name('faktur_penjualan.store');
+
+        // Print Barcode Retur (Full Access for Marketing, KT, SA)
+        Route::get('/print-barcode-retur', [PrintBarcodeReturController::class, 'index'])->name('print_barcode_retur.index');
+        Route::get('/print-barcode-retur/sales-invoices', [PrintBarcodeReturController::class, 'getSalesInvoicesForPrintAjax'])->name('print_barcode_retur.sales_invoices');
+        Route::post('/print-barcode-retur/resolve', [PrintBarcodeReturController::class, 'resolveFromInvoice'])->name('print_barcode_retur.resolve');
+
+
+        // Pembelian (Specific Actions for Marketing)
         Route::get('/barang-masuk/create', [BarangMasukController::class, 'create'])->name('barang-masuk.create');
         Route::post('/barang-masuk', [BarangMasukController::class, 'store'])->name('barang-masuk.store');
-
-        // AJAX endpoints untuk scan Packing List
         Route::get('/barang-masuk/packing-list-items', [BarangMasukController::class, 'getPackingListItems'])->name('barang-masuk.packing-list-items');
         Route::post('/barang-masuk/scan', [BarangMasukController::class, 'scanBarcode'])->name('barang-masuk.scan');
         Route::get('/barang-masuk/scanned-items', [BarangMasukController::class, 'getScannedItems'])->name('barang-masuk.scanned-items');
         Route::post('/barang-masuk/flush', [BarangMasukController::class, 'flushScannedItems'])->name('barang-masuk.flush');
 
-        // Stock Opname - For Non-Owner
-        Route::get('/hasil-stock-opname/create', [HasilStockOpnameController::class, 'create'])->name('hasil_stock_opname.create');
-        Route::post('/hasil-stock-opname/barcode', [HasilStockOpnameController::class, 'lanjut'])->name('hasil_stock_opname.lanjut');
-        Route::post('/hasil-stock-opname/barcode/match', [HasilStockOpnameController::class, 'matchApprovalUsingAjax']);
-        Route::post('/hasil-stock-opname/barcode/individual', [HasilStockOpnameController::class, 'getIndividualBarcodeData']);
-        Route::post('/hasil-stock-opname/barcode/bulk', [HasilStockOpnameController::class, 'getBulkBarcodeData']);
-        Route::post('/hasil-stock-opname/store', [HasilStockOpnameController::class, 'store'])->name('hasil_stock_opname.store');
+        Route::get('/packing-list/create', [PackingListController::class, 'create'])->name('packing-list.create');
+        Route::post('/packing-list', [PackingListController::class, 'store'])->name('packing-list.store');
+        Route::get('/packing-list/{packing_list}/edit', [PackingListController::class, 'edit'])->name('packing-list.edit');
+        Route::put('/packing-list/{packing_list}', [PackingListController::class, 'update'])->name('packing-list.update');
 
-        // Penerimaan Barang - For Non-Owner
+        Route::get('/penerimaan-barang/create', [PenerimaanBarangController::class, 'create'])->name('penerimaan-barang.create');
         Route::post('/penerimaan-barang', [PenerimaanBarangController::class, 'store'])->name('penerimaan-barang.store');
         Route::post('/purchase-orders/detail', [PenerimaanBarangController::class, 'getDetailPo']);
         Route::post('/penerimaan-barang/generate-barcode-non-pl', [PenerimaanBarangController::class, 'generateBarcodeNonPL'])->name('penerimaan-barang.generate-barcode-non-pl');
         Route::get('/penerimaan-barang/qrcode-non-pl', [PenerimaanBarangController::class, 'qrcodeNonPl'])->name('penerimaan-barang.qrcode-non-pl');
         Route::post('/penerimaan-barang/non-pl/print-pdf', [PenerimaanBarangController::class, 'printNonPlLabelsPdf'])->name('penerimaan-barang.non-pl.print-pdf');
 
-        // Print Barcode
+    });
+
+    // Print Barcode Retur (Read Access for Owner)
+    Route::middleware(['role:marketing,kepala_toko,super_admin,owner'])->group(function () {
+        Route::get('/print-barcode-retur', [PrintBarcodeReturController::class, 'index'])->name('print_barcode_retur.index');
+        Route::get('/print-barcode-retur/sales-invoices', [PrintBarcodeReturController::class, 'getSalesInvoicesForPrintAjax'])->name('print_barcode_retur.sales_invoices');
+
+        // Reprint Barcode (Persediaan) - Info for Everyone (Marketing, Owner, KT, SA)
         Route::get('/print-barcode', [PrintBarcodeController::class, 'index'])->name('print_barcode.index');
         Route::get('/print-barcode/search-items', [PrintBarcodeController::class, 'searchItems'])->name('print_barcode.search_items');
         Route::get('/print-barcode/serials', [PrintBarcodeController::class, 'getSerials'])->name('print_barcode.serials');
+    });
+
+    // Restricted Actions for Kepala Toko, Marketing & Super Admin (Exclude Owner)
+    Route::middleware(['role:marketing,kepala_toko,super_admin'])->group(function () {
+        // Barcode Reprinting Actions
         Route::get('/print-barcode/reprint/{serialNo}', [PrintBarcodeController::class, 'reprint'])->name('print_barcode.reprint')->where('serialNo', '.+');
         Route::post('/print-barcode/bulk-reprint', [PrintBarcodeController::class, 'bulkReprint'])->name('print_barcode.bulk_reprint');
+    });
 
-        // Point Of Sales (POS) - For Non-Owner
-        Route::get('/cashier/create', [SalesController::class, 'create'])->name('cashier.create');
-        Route::post('/cashier/store', [SalesController::class, 'store'])->name('cashier.store');
-        Route::post('/cashier/barcode/information', [SalesController::class, 'getBarcodeAjax']);
-        Route::post('/cashier/customer/information', [SalesController::class, 'getCustomerInfo']);
+    // Restricted Actions for Kepala Toko & Super Admin
+    Route::middleware(['role:kepala_toko,super_admin'])->group(function () {
+        // Inventory Actions (Stock Opname & Retur Pembelian Actions)
+        Route::get('/hasil-stock-opname/create', [HasilStockOpnameController::class, 'create'])->name('hasil_stock_opname.create');
+        Route::post('/hasil-stock-opname/barcode', [HasilStockOpnameController::class, 'lanjut'])->name('hasil_stock_opname.lanjut');
+        Route::post('/hasil-stock-opname/store', [HasilStockOpnameController::class, 'store'])->name('hasil_stock_opname.store');
 
-        // Pengiriman Pesanan - For Non-Owner
-        Route::get('/pengiriman-pesanan/create', [PengirimanPesananController::class, 'create'])->name('pengiriman_pesanan.create');
-        Route::get('/pengiriman-pesanan/customer/{number}', [PengirimanPesananController::class, 'getCustomerByAjax'])->name('pengiriman_pesanan.getCustomer');
-        Route::post('/pengiriman-pesanan/scan-accurate', [PengirimanPesananController::class, 'scanBarcodeAccurate'])->name('pengiriman_pesanan.scan_accurate');
-        Route::post('/pengiriman-pesanan/store', [PengirimanPesananController::class, 'store'])->name('pengiriman_pesanan.store');
-
-        // Faktur Penjualan - Full CRUD
-        Route::get('/faktur-penjualan/create', [FakturPenjualanController::class, 'create'])->name('faktur_penjualan.create');
-        Route::get('/faktur-penjualan/customer/{number}', [FakturPenjualanController::class, 'getCustomerByAjax'])->name('faktur_penjualan.getCustomer');
-        Route::post('/faktur-penjualan/store', [FakturPenjualanController::class, 'store'])->name('faktur_penjualan.store');
-
-        // Retur Penjualan - For Non-Owner
+        // Retur Penjualan (Write restricted to SA & KT)
         Route::get('/retur-penjualan/create', [ReturPenjualanController::class, 'create'])->name('retur_penjualan.create');
         Route::get('/retur-penjualan/delivery-orders', [ReturPenjualanController::class, 'getDeliveryOrdersAjax'])->name('retur_penjualan.delivery_orders');
         Route::get('/retur-penjualan/sales-invoices', [ReturPenjualanController::class, 'getSalesInvoicesAjax'])->name('retur_penjualan.sales_invoices');
         Route::get('/retur-penjualan/referensi-detail', [ReturPenjualanController::class, 'getReferensiDetailAjax'])->name('retur_penjualan.referensi_detail');
         Route::post('/retur-penjualan/store', [ReturPenjualanController::class, 'store'])->name('retur_penjualan.store');
 
-        // Print Barcode Retur
-        Route::get('/print-barcode-retur', [PrintBarcodeReturController::class, 'index'])->name('print_barcode_retur.index');
-        Route::get('/print-barcode-retur/sales-invoices', [PrintBarcodeReturController::class, 'getSalesInvoicesForPrintAjax'])->name('print_barcode_retur.sales_invoices');
-        Route::post('/print-barcode-retur/resolve', [PrintBarcodeReturController::class, 'resolveFromInvoice'])->name('print_barcode_retur.resolve');
+        // Activity Log (Restricted to SA & KT)
+        Route::get('/activity-log', [ActivityLogController::class, 'index'])->name('activity_logs.index');
 
-        // Retur Pembelian - For Non-Owner
+        // Remaining Pembelian Actions
         Route::get('/retur-pembelian/create', [ReturPembelianController::class, 'create'])->name('retur_pembelian.create');
         Route::get('/retur-pembelian/receive-items', [ReturPembelianController::class, 'getReceiveItemsAjax'])->name('retur_pembelian.receive_items');
         Route::get('/retur-pembelian/invoices', [ReturPembelianController::class, 'getInvoicesAjax'])->name('retur_pembelian.invoices');
@@ -174,9 +193,5 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/retur-pembelian/store', [ReturPembelianController::class, 'store'])->name('retur_pembelian.store');
     });
 
-    Route::get('/profile', [UserController::class, 'editProfile'])->name('user.profile');
-    Route::post('/profile', [UserController::class, 'updateProfile'])->name('user.profile.update');
 
-    Route::resource('packing-list', PackingListController::class);
-    Route::get('/packing-list/detail/{id}', [PackingListController::class, 'show'])->name('packing_list_detail');
 });

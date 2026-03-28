@@ -31,8 +31,8 @@
         </div>
         <div class="flex items-center gap-3 md:gap-4 mt-2 md:mt-0">
             <div class="text-right text-sm hidden sm:block">
-                <p class="font-medium">{{ Auth::user()->name }}</p>
-                <p class="text-gray-500 text-xs">{{ Auth::user()->username }}</p>
+                <p class="font-medium">{{ Auth::user()->username }}</p>
+                <p class="text-gray-500 text-xs capitalize">{{ str_replace('_', ' ', Auth::user()->role) }}</p>
             </div>
             <img src="{{ asset('images/av1.png') }}" alt="avatar"
                 class="w-8 h-8 md:w-10 md:h-10 rounded-full object-cover">
