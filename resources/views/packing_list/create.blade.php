@@ -23,7 +23,7 @@
     <!-- Main Content -->
     <section class="content">
         <div class="container-fluid">
-            <form action="{{ route('packing-list.store') }}" method="POST" enctype="multipart/form-data">
+            <form id="form_packing_list_create" action="{{ route('packing-list.store') }}" method="POST" enctype="multipart/form-data">
                 @csrf
                 <div class="row">
                     <div class="col-md-12">
@@ -79,12 +79,30 @@
 
     updateTitle('Tambah Packing List');
 
+    /** NPL wajib 10 digit angka (validasi server). Ambil digit dari segmen pertama sebelum ';' (mis. dari scanner). */
+    function extractNplTenDigits(raw) {
+        var first = (String(raw).split(';')[0] || '').trim();
+        var digits = first.replace(/\D/g, '');
+        return digits.length >= 10 ? digits.substring(0, 10) : null;
+    }
+
     window.addEventListener('DOMContentLoaded', function() {
-        // Initialize tooltips
         $('[data-toggle="tooltip"]').tooltip();
 
-        // Focus on NPL input
-        document.getElementById('npl').focus();
+        var nplInput = document.getElementById('npl');
+        var form = document.getElementById('form_packing_list_create');
+        var nplSubmitting = false;
+
+        nplInput.addEventListener('input', function() {
+            if (nplSubmitting) return;
+            var ten = extractNplTenDigits(nplInput.value);
+            if (!ten) return;
+            nplSubmitting = true;
+            nplInput.value = ten;
+            form.submit();
+        });
+
+        nplInput.focus();
     });
 </script>
 @endsection

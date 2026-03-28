@@ -72,6 +72,8 @@
                         <thead>
                             <tr>
                                 <th>Keterangan</th>
+                                <th>Kode Warna</th>
+                                <th>Partai</th>
                                 <th>Nomor Seri</th>
                                 <th>Pcs</th>
                                 <th>Berat (KG)</th>
@@ -82,7 +84,9 @@
                             @foreach ($barcodes as $barcode)
                                 <tr>
                                     <td>{{ $barcode->salestext ?? '-' }}</td>
+                                    <td>{{ $barcode->kode_warna ?? '-' }}</td>
                                     <td>{{ $barcode->batch_no ?? ($barcode->nomor_seri ?? '-') }}</td>
+                                    <td>{{ $barcode->job_order ?? '-' }}</td>
                                     <td>{{ $barcode->pcs ?? '-' }}</td>
                                     <td>{{ isset($barcode->weight) ? number_format((float) $barcode->weight, 2) : (isset($barcode->berat_kg) ? number_format((float) $barcode->berat_kg, 2) : '-') }}</td>
                                     <td>{{ isset($barcode->length) ? number_format((float) $barcode->length, 2) : (isset($barcode->panjang_mlc) ? number_format((float) $barcode->panjang_mlc, 2) : '-') }}</td>

@@ -200,6 +200,7 @@ $(function() {
         updateProgress();
     }
 
+    /** Contoh scanner: YB00322662;9.500;33.333 → ambil segmen sebelum ';', lalu max 10 karakter pertama. */
     function extractBarcode(raw) {
         var part = raw.split(';')[0];
         part = part.trim();
@@ -207,6 +208,60 @@ $(function() {
             part = part.substring(0, 10);
         }
         return part;
+    }
+
+    var scanInFlight = false;
+
+    function runScanAjax(rawVal) {
+        if (scanInFlight) return;
+        rawVal = (rawVal || '').trim();
+        if (!rawVal) return;
+
+        var barcode10 = extractBarcode(rawVal);
+        console.log('[Scan] raw:', rawVal, '=> barcode10:', barcode10);
+
+        if (!currentNpl) {
+            toast('warning', 'Pilih packing list terlebih dahulu.');
+            return;
+        }
+
+        scanInFlight = true;
+        $.ajax({
+            url: '{{ route("barang-masuk.scan") }}',
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrfToken },
+            contentType: 'application/json',
+            data: JSON.stringify({ npl: currentNpl, barcode: barcode10 }),
+            dataType: 'json',
+            success: function(data) {
+                console.log('[Scan] response:', data);
+
+                if (!data.success) {
+                    toast(data.type === 'duplicate' ? 'info' : 'error', data.message || 'Barcode tidak valid.');
+                    return;
+                }
+
+                toast('success', data.message || 'Barcode cocok!');
+
+                if (data.barcode_detail) {
+                    scannedItems.push(data.barcode_detail);
+                }
+
+                renderScannedTable();
+                $scanInput.focus();
+            },
+            error: function(xhr) {
+                try {
+                    var err = JSON.parse(xhr.responseText);
+                    toast(err.type === 'duplicate' ? 'info' : 'error', err.message || 'Barcode tidak valid.');
+                } catch(ex) {
+                    toast('error', 'Gagal memvalidasi barcode.');
+                }
+            },
+            complete: function() {
+                scanInFlight = false;
+            }
+        });
     }
 
     function resetUI() {
@@ -283,7 +338,16 @@ $(function() {
         });
     });
 
-    // --- Scan barcode: ambil 10 digit pertama (delimiter ;) ---
+    // --- Scan barcode: segmen pertama sebelum ';', max 10 karakter. Auto-kirim saat panjang ekstraksi = 10. ---
+    $scanInput.on('input', function() {
+        if (scanInFlight) return;
+        var rawVal = ($scanInput.val() || '').trim();
+        if (extractBarcode(rawVal).length !== 10) return;
+
+        $scanInput.val('');
+        runScanAjax(rawVal);
+    });
+
     $scanInput.on('keydown', function(e) {
         if (e.key !== 'Enter') return;
         e.preventDefault();
@@ -292,47 +356,7 @@ $(function() {
         $scanInput.val('');
         if (!rawVal) return;
 
-        var barcode10 = extractBarcode(rawVal);
-        console.log('[Scan] raw:', rawVal, '=> barcode10:', barcode10);
-
-        if (!currentNpl) {
-            toast('warning', 'Pilih packing list terlebih dahulu.');
-            return;
-        }
-
-        $.ajax({
-            url: '{{ route("barang-masuk.scan") }}',
-            method: 'POST',
-            headers: { 'X-CSRF-TOKEN': csrfToken },
-            contentType: 'application/json',
-            data: JSON.stringify({ npl: currentNpl, barcode: barcode10 }),
-            dataType: 'json',
-            success: function(data) {
-                console.log('[Scan] response:', data);
-
-                if (!data.success) {
-                    toast(data.type === 'duplicate' ? 'info' : 'error', data.message || 'Barcode tidak valid.');
-                    return;
-                }
-
-                toast('success', data.message || 'Barcode cocok!');
-
-                if (data.barcode_detail) {
-                    scannedItems.push(data.barcode_detail);
-                }
-
-                renderScannedTable();
-                $scanInput.focus();
-            },
-            error: function(xhr) {
-                try {
-                    var err = JSON.parse(xhr.responseText);
-                    toast(err.type === 'duplicate' ? 'info' : 'error', err.message || 'Barcode tidak valid.');
-                } catch(ex) {
-                    toast('error', 'Gagal memvalidasi barcode.');
-                }
-            }
-        });
+        runScanAjax(rawVal);
     });
 
     // --- Reset scan ---

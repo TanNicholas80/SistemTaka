@@ -71,6 +71,114 @@ class PenerimaanBarangController extends Controller
         }
         return $length;
     }
+
+    /**
+     * Pasangan vendor/customer yang diizinkan untuk antar toko (Bandung ↔ Magelang).
+     * null = cabang lain, tidak difilter nama TOKO.
+     *
+     * @return array{po_vendor: string, do_customer: string}|null
+     */
+    private function interStorePartnerNames(Branch $branch): ?array
+    {
+        $n = mb_strtoupper(trim((string) $branch->name), 'UTF-8');
+        if ($n === 'BANDUNG') {
+            return [
+                'po_vendor' => 'TOKO MAGELANG',
+                'do_customer' => 'TOKO BANDUNG',
+            ];
+        }
+        if ($n === 'MAGELANG') {
+            return [
+                'po_vendor' => 'TOKO BANDUNG',
+                'do_customer' => 'TOKO MAGELANG',
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Cocokkan label vendor/customer Accurate dengan label bisnis (trim, case-insensitive; izinkan substring).
+     */
+    private function interStoreLabelMatches(?string $actual, string $expectedLabel): bool
+    {
+        $a = mb_strtoupper(trim((string) $actual), 'UTF-8');
+        $e = mb_strtoupper(trim($expectedLabel), 'UTF-8');
+        if ($a === '' || $e === '') {
+            return false;
+        }
+        if ($a === $e) {
+            return true;
+        }
+
+        return str_contains($a, $e) || str_contains($e, $a);
+    }
+
+    /**
+     * Validasi PO/DO antar toko sesuai cabang Bandung/Magelang (vendor PO + customer DO).
+     *
+     * @throws \Exception
+     */
+    private function assertInterStorePartnersForBranch(Branch $branch, ?string $poVendorName, ?string $doCustomerName): void
+    {
+        $partner = $this->interStorePartnerNames($branch);
+        if ($partner === null) {
+            return;
+        }
+        if (!$this->interStoreLabelMatches($poVendorName, $partner['po_vendor'])) {
+            throw new \Exception(
+                'Untuk antar toko cabang ini, No PO harus dari vendor "' . $partner['po_vendor'] . '".'
+            );
+        }
+        if (!$this->interStoreLabelMatches($doCustomerName, $partner['do_customer'])) {
+            throw new \Exception(
+                'Untuk antar toko cabang ini, No DO harus untuk customer "' . $partner['do_customer'] . '".'
+            );
+        }
+    }
+
+    /**
+     * Ambil nama vendor dari PO & customer dari DO lalu validasi aturan antar toko.
+     *
+     * @throws \Exception
+     */
+    private function validateInterStorePoDoForBranch(Branch $branch, string $noPo, string $noDo): void
+    {
+        $partner = $this->interStorePartnerNames($branch);
+        if ($partner === null) {
+            return;
+        }
+
+        $activeCred = UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'));
+        $apiToken = $activeCred['accurate_api_token'] ?? null;
+        $signatureSecret = $activeCred['accurate_signature_secret'] ?? null;
+        if (!$apiToken || !$signatureSecret) {
+            throw new \Exception('Kredensial Accurate cabang aktif tidak tersedia untuk validasi PO.');
+        }
+
+        $ts = Carbon::now()->toIso8601String();
+        $sig = hash_hmac('sha256', $ts, $signatureSecret);
+
+        $poResp = Http::timeout(30)->withoutVerifying()->withHeaders([
+            'Authorization' => 'Bearer ' . $apiToken,
+            'X-Api-Signature' => $sig,
+            'X-Api-Timestamp' => $ts,
+        ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
+            'number' => $noPo,
+        ]);
+
+        if (!$poResp->successful()) {
+            throw new \Exception('Gagal mengambil detail PO untuk validasi antar toko.');
+        }
+
+        $poVendorName = data_get($poResp->json(), 'd.vendor.name');
+
+        $doResult = $this->fetchDeliveryOrderDetailWithFallback($branch, $noDo);
+        $doCustomerName = data_get($doResult['data'] ?? [], 'd.customer.name');
+
+        $this->assertInterStorePartnersForBranch($branch, $poVendorName, $doCustomerName);
+    }
+
     /**
      * Membangun URL API dari url_accurate branch
      * 
@@ -212,6 +320,8 @@ class PenerimaanBarangController extends Controller
      */
     private function fetchInterStoreDeliveryOrdersForCreate(Branch $branch): array
     {
+        $partner = $this->interStorePartnerNames($branch);
+
         $credentials = $this->getInterStoreCredentials($branch);
         $attempts = [];
 
@@ -250,7 +360,7 @@ class PenerimaanBarangController extends Controller
                 ])->get($this->buildApiUrl($branch, 'delivery-order/list.do'), [
                             'sp.page' => 1,
                             'sp.pageSize' => 200,
-                            'fields' => 'number,transDate,status',
+                            'fields' => 'number,transDate,customer,status',
                         ]);
 
                 $rowCount = (int) data_get($doResponse->json(), 'sp.rowCount', 0);
@@ -276,10 +386,16 @@ class PenerimaanBarangController extends Controller
                 }
 
                 foreach ($rows as $row) {
+                    $customerName = data_get($row, 'customer.name');
+                    if ($partner !== null && !$this->interStoreLabelMatches($customerName, $partner['do_customer'])) {
+                        continue;
+                    }
+
                     $deliveryOrders[] = [
                         'number' => $row['number'] ?? '',
                         'transDate' => $row['transDate'] ?? '',
                         'status' => $row['status'] ?? '',
+                        'customer_name' => $customerName,
                     ];
                 }
 
@@ -552,7 +668,7 @@ class PenerimaanBarangController extends Controller
         $data = [
             'sp.page' => 1,
             'sp.pageSize' => 20,
-            'fields' => 'transDate,number,status'
+            'fields' => 'number,transDate,vendor,status',
         ];
 
         $firstPageResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
@@ -586,7 +702,7 @@ class PenerimaanBarangController extends Controller
                             'query' => [
                                 'sp.page' => $page,
                                 'sp.pageSize' => 20,
-                                'fields' => 'transDate,number,status'
+                                'fields' => 'number,transDate,vendor,status',
                             ]
                         ]);
                     }
@@ -625,13 +741,14 @@ class PenerimaanBarangController extends Controller
             $purchase_orders[] = [
                 'number_po' => $numberPo,
                 'date_po' => $po['transDate'] ?? '',
+                'vendor_name' => data_get($po, 'vendor.name'),
             ];
         }
 
         Log::info('Successfully fetched all purchase orders from Accurate', [
             'total_count' => count($allPurchaseOrders),
             'filtered_count' => count($purchase_orders),
-            'filter' => 'ONPROCESS & WAITING'
+            'filter' => 'ONPROCESS & WAITING',
         ]);
 
         return $purchase_orders;
@@ -656,6 +773,14 @@ class PenerimaanBarangController extends Controller
 
         // Get data directly from API (sudah menggunakan kredensial dari cabang di dalam fungsi)
         $purchase_order = $this->getPurchaseOrdersFromAccurate();
+        $partnerFilter = $this->interStorePartnerNames($branch);
+        $purchase_order_antar_toko = $purchase_order;
+        if ($partnerFilter !== null) {
+            $purchase_order_antar_toko = array_values(array_filter($purchase_order, function ($po) use ($partnerFilter) {
+                return $this->interStoreLabelMatches($po['vendor_name'] ?? null, $partnerFilter['po_vendor']);
+            }));
+        }
+
         $delivery_orders = $this->fetchInterStoreDeliveryOrdersForCreate($branch);
 
         // Generate NPB & No Terima (preview untuk form)
@@ -669,7 +794,15 @@ class PenerimaanBarangController extends Controller
             ->orderBy('tanggal', 'desc')
             ->get();
 
-        return view('penerimaan_barang.create', compact('purchase_order', 'delivery_orders', 'npb', 'noTerima', 'packingLists', 'kodeCustomer'));
+        return view('penerimaan_barang.create', compact(
+            'purchase_order',
+            'purchase_order_antar_toko',
+            'delivery_orders',
+            'npb',
+            'noTerima',
+            'packingLists',
+            'kodeCustomer'
+        ));
     }
 
     public function getDetailPo(Request $request)
@@ -722,6 +855,7 @@ class PenerimaanBarangController extends Controller
                 // agar konsisten dengan mode packing_list & non_packing_list.
                 $vendorNo = null;
                 $vendorName = null;
+                $poVendorResponse = null;
                 if (!empty($activeCred['accurate_api_token']) && !empty($activeCred['accurate_signature_secret'])) {
                     $tsPoVendor = Carbon::now()->toIso8601String();
                     $sigPoVendor = hash_hmac('sha256', $tsPoVendor, $activeCred['accurate_signature_secret']);
@@ -744,6 +878,12 @@ class PenerimaanBarangController extends Controller
                         ]);
                     }
                 }
+
+                $poVendorNameForRule = ($poVendorResponse && $poVendorResponse->successful())
+                    ? data_get($poVendorResponse->json(), 'd.vendor.name')
+                    : null;
+                $doCustomerNameForRule = data_get($doData, 'customer.name');
+                $this->assertInterStorePartnersForBranch($branch, $poVendorNameForRule, $doCustomerNameForRule);
 
                 // Fallback terakhir agar tidak null jika PO gagal diambil
                 $vendorNo = $vendorNo
@@ -986,53 +1126,58 @@ class PenerimaanBarangController extends Controller
                     $kodeBarang = $barcode->kode_barang;
                 }
 
-                // Matching nama_barang dari Accurate via beberapa strategi
-                $namaBarang = null;
-                $targetUom = '';
+                // Cocokkan ke baris PO Accurate (sama seperti mapItemDetailsFromPackingLists):
+                // ambil nama + UOM target agar kuantitas dikonversi ke unit PO.
+                $matchedAccItem = null;
 
                 if (!empty($accurateItems)) {
-                    if (!$namaBarang && $materialCode12) {
+                    if ($materialCode12) {
                         foreach ($accurateItems as $item) {
                             if ($item['no'] === $materialCode12) {
-                                $namaBarang = $item['name'];
+                                $matchedAccItem = $item;
                                 break;
                             }
                         }
                     }
-                    if (!$namaBarang && $materialCode12) {
+                    if (!$matchedAccItem && $materialCode12) {
                         foreach ($accurateItems as $item) {
                             $accNumeric = $item['no_numeric'];
                             if ($accNumeric !== '' && substr($accNumeric, -12) === $materialCode12) {
-                                $namaBarang = $item['name'];
+                                $matchedAccItem = $item;
                                 break;
                             }
                         }
                     }
-                    if (!$namaBarang && $materialCode12) {
+                    if (!$matchedAccItem && $materialCode12) {
                         foreach ($accurateItems as $item) {
                             if (str_contains($item['no'], $materialCode12) || str_contains($materialCode12, $item['no'])) {
-                                $namaBarang = $item['name'];
+                                $matchedAccItem = $item;
                                 break;
                             }
                         }
                     }
-                    if (!$namaBarang) {
+                    if (!$matchedAccItem) {
                         $barcodeNama = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', str_replace('KC', '', $barcode->nama ?? '')));
                         foreach ($accurateItems as $item) {
                             $accNama = strtolower(preg_replace('/[^a-zA-Z0-9]/', '', $item['name'] ?? ''));
                             if ($accNama !== '' && $accNama === $barcodeNama) {
-                                $namaBarang = $item['name'];
+                                $matchedAccItem = $item;
                                 break;
                             }
                         }
                     }
                 }
+
+                $namaBarang = $matchedAccItem['name'] ?? null;
+                $targetUom = $matchedAccItem
+                    ? $this->normalizeUom($matchedAccItem['uom'] ?? '')
+                    : '';
 
                 if (!$namaBarang) {
                     $namaBarang = $barcode->keterangan;
                 }
 
-                // Kuantitas harus mengikuti UOM Accurate (jika diketahui)
+                // Kuantitas: panjang barcode (base_uom / uom lokal) dikonversi ke unit baris PO Accurate bila M/YD.
                 $effectiveLength = $length;
                 if ($targetUom === 'YD' || $targetUom === 'M') {
                     $effectiveLength = $this->convertLengthByUom($length, $targetUom, $barcodeUom);
@@ -1696,6 +1841,15 @@ class PenerimaanBarangController extends Controller
         if ($validator->fails()) {
             Log::debug('Validasi Gagal:', $validator->errors()->toArray());
             return back()->withErrors($validator)->withInput()->with('error', 'Data yang dikirim tidak valid.');
+        }
+
+        if ($mode === 'antar_toko') {
+            try {
+                $v = $validator->validated();
+                $this->validateInterStorePoDoForBranch($branch, $v['no_po'], (string) ($v['no_do'] ?? ''));
+            } catch (\Exception $e) {
+                return back()->withInput()->with('error', $e->getMessage());
+            }
         }
 
         // Database transaction
