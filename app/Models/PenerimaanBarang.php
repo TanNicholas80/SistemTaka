@@ -17,6 +17,7 @@ class PenerimaanBarang extends Model
 
     protected $fillable = [
         'no_po',
+        'no_do',
         'vendor',
         'no_terima',
         'npb',
@@ -48,7 +49,7 @@ class PenerimaanBarang extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['no_po', 'vendor', 'no_terima', 'npb', 'tanggal', 'kode_customer']) // Log field yang ada di PenerimaanBarang
+            ->logOnly(['no_po', 'no_do', 'vendor', 'no_terima', 'npb', 'tanggal', 'kode_customer']) // Log field yang ada di PenerimaanBarang
             ->logOnlyDirty() // Hanya log perubahan yang benar-benar terjadi
             ->dontSubmitEmptyLogs() // Jangan submit log kosong
             ->useLogName('Pembaruan Data Penerimaan Barang') // Set log name sesuai permintaan
@@ -94,6 +95,7 @@ class PenerimaanBarang extends Model
             'event_type' => 'created',
             'created_data' => [
                 'no_po' => $this->no_po,
+                'no_do' => $this->no_do,
                 'vendor' => $this->vendor,
                 'no_terima' => $this->no_terima,
                 'kode_customer' => $this->kode_customer,
@@ -187,16 +189,16 @@ class PenerimaanBarang extends Model
             $user = Auth::user();
             if (
                 !$user ||
-                !$user->accurate_api_token ||
-                !$user->accurate_signature_secret
+                !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null) ||
+                !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null)
             ) {
                 Log::warning('Kredensial API Accurate user belum diatur saat generate npb, menggunakan default');
                 return "{$prefix}00001";
             }
 
             // Get API credentials from user
-            $apiToken = $user->accurate_api_token;
-            $signatureSecret = $user->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null);
 
             $maxIter = 0;
 

@@ -55,7 +55,7 @@ class DashboardController extends Controller
         }
 
         // Validasi credentials API Accurate dari Branch
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial API Accurate untuk cabang ini belum diatur.');
         }
 
@@ -69,8 +69,8 @@ class DashboardController extends Controller
         }
 
         // Get API credentials from branch (auto-decrypted by model accessors)
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 

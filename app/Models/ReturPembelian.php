@@ -111,7 +111,7 @@ class ReturPembelian extends Model
             }
 
             $user = Auth::user();
-            if (!$user || !$user->accurate_api_token || !$user->accurate_signature_secret) {
+            if (!$user || !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null)) {
                 Log::warning('Kredensial API Accurate untuk user belum diatur saat generate no_retur retur pembelian, menggunakan default');
                 return $prefix . '00001';
             }
@@ -134,8 +134,8 @@ class ReturPembelian extends Model
                 return $prefix . $formattedIter;
             }
 
-            $apiToken = $user->accurate_api_token;
-            $signatureSecret = $user->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null);
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
             $listApiUrl = self::getListApiUrl($branch);

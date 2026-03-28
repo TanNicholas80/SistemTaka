@@ -126,15 +126,16 @@ class FakturPenjualan extends Model
                 return "{$prefix}00001";
             }
 
-            // Validasi credentials API Accurate dari Branch
-            if (!$branch->accurate_api_token || !$branch->accurate_signature_secret) {
-                Log::warning('Kredensial API Accurate untuk cabang belum diatur saat generate no_faktur, menggunakan default');
+            // Validasi credentials API Accurate dari user aktif (diambil via UserAccurateAPI)
+            $user = Auth::user();
+            if (!$user || !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null)) {
+                Log::warning('Kredensial API Accurate user belum diatur untuk branch aktif saat generate no_faktur, menggunakan default');
                 return "{$prefix}00001";
             }
 
-            // Get API credentials from branch (auto-decrypted by model accessors)
-            $apiToken = $branch->accurate_api_token;
-            $signatureSecret = $branch->accurate_signature_secret;
+            // Ambil API credentials (auto-decrypted via accessor di User model)
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentials($user->id ?? null, session('active_branch'))['accurate_signature_secret'] ?? null);
 
             // Get the last entry from the local database filtered by kode_customer
             $query = self::where('no_faktur', 'like', $prefix . '%');

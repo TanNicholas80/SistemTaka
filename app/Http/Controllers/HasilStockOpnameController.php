@@ -57,7 +57,7 @@ class HasilStockOpnameController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -79,8 +79,8 @@ class HasilStockOpnameController extends Controller
         }
 
         // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
         $apiUrl = $this->buildApiUrl($branch, 'stock-opname-result/list.do');
@@ -246,7 +246,7 @@ class HasilStockOpnameController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -265,8 +265,8 @@ class HasilStockOpnameController extends Controller
         $hasilstockOpname = [];
 
         // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -419,7 +419,7 @@ class HasilStockOpnameController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -439,8 +439,8 @@ class HasilStockOpnameController extends Controller
         $search_info = null;
 
         // Ambil kredensial Accurate dari branch
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -735,13 +735,13 @@ class HasilStockOpnameController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
         // Ambil kredensial Accurate dari branch
-        $apiToken = Auth::user()->accurate_api_token;
-        $signatureSecret = Auth::user()->accurate_signature_secret;
+        $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+        $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
         $timestamp = Carbon::now()->toIso8601String();
         $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1148,7 +1148,7 @@ class HasilStockOpnameController extends Controller
             }
 
             // Validasi kredensial Accurate
-            if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+            if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.'
@@ -1156,8 +1156,8 @@ class HasilStockOpnameController extends Controller
             }
 
             // Ambil kredensial Accurate dari branch
-            $apiToken = Auth::user()->accurate_api_token;
-            $signatureSecret = Auth::user()->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 
@@ -1236,7 +1236,7 @@ class HasilStockOpnameController extends Controller
         }
 
         // Validasi kredensial Accurate
-        if (!Auth::check() || !Auth::user()->accurate_api_token || !Auth::user()->accurate_signature_secret) {
+        if (!Auth::check() || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null) || !(\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null)) {
             return back()->with('error', 'Kredensial Accurate untuk cabang ini belum dikonfigurasi.');
         }
 
@@ -1318,8 +1318,8 @@ class HasilStockOpnameController extends Controller
 
         try {
             // Ambil kredensial Accurate dari branch (sudah otomatis didekripsi oleh accessor di model Branch)
-            $apiToken = Auth::user()->accurate_api_token;
-            $signatureSecret = Auth::user()->accurate_signature_secret;
+            $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
+            $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
             $timestamp = Carbon::now()->toIso8601String();
             $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
 

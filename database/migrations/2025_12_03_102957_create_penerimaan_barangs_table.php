@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('kode_customer', 50)->index();
             $table->string('no_po');
+            $table->string('no_do')->nullable();
             $table->string('vendor');
             $table->string('no_terima')->unique();
             $table->string('npb')->unique();

@@ -34,7 +34,7 @@ class UserSeeder extends Seeder
 
         // Buat super_admin
         $admin = User::firstOrCreate(
-            ['username' => 'dt_vin'],
+            ['username' => 'DT_NIC'],
             [
                 'name' => 'Super Admin',
                 'role' => 'super_admin',
