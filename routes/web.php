@@ -7,7 +7,6 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\BarcodeController;
 use App\Http\Controllers\BarangMasukController;
 use App\Http\Controllers\BranchController;
-use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FakturController;
 use App\Http\Controllers\FakturPenjualanController;
 use App\Http\Controllers\HasilStockOpnameController;
@@ -35,7 +34,6 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/branch/choose', [BranchController::class, 'choose'])->name('branch.choose');
 
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-    Route::get('/dashboard', [DashboardController::class, 'dashboard'])->name('dashboard');
 
     // Shared Read-Only Access (All Roles: Super Admin, Kepala Toko, Marketing, Owner)
     Route::middleware(['role:super_admin,kepala_toko,marketing,owner'])->group(function () {

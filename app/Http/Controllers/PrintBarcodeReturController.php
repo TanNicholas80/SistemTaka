@@ -335,7 +335,7 @@ class PrintBarcodeReturController extends Controller
         try {
             [$branch, $apiToken, $signatureSecret] = $this->branchUserCredentials();
         } catch (\RuntimeException $e) {
-            return redirect()->route('dashboard')->with('error', $e->getMessage());
+            return redirect()->route('barang_master.index')->with('error', $e->getMessage());
         }
 
         // customerNo ini hanya dipakai untuk enable/disable UI di view,
