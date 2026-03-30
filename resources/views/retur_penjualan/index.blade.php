@@ -57,11 +57,36 @@
                                 <table id="retur_penjualan" class="table table-head-fixed text-nowrap">
                                     <thead>
                                         <tr>
-                                            <th>Nomor #</th>
-                                            <th>Tanggal</th>
-                                            <th>Pelanggan</th>
-                                            <th>Keterangan</th>
-                                            <th>Total</th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Nomor #</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Tanggal</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Pelanggan</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Keterangan</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Total</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>

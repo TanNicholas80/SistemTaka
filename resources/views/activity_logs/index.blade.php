@@ -34,13 +34,48 @@
                             <table id="activityTable" class="table table-head-fixed text-nowrap">
                                 <thead>
                                     <tr>
-                                        <th>UserName</th>
-                                        <th>Log Name</th>
-                                        <th>Description</th>
-                                        <th>Event</th>
-                                        <th>Before</th>
-                                        <th>After</th>
-                                        <th>Log At</th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">UserName</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Log Name</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Description</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Event</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Before</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">After</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Log At</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>

@@ -37,9 +37,14 @@
                         <div class="card-header">
                             <div class="d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">Data Perintah Stock Opname</h3>
-                                <button type="button" class="btn btn-primary btn-sm" onclick="refreshCache()">
-                                    <i class="fas fa-sync-alt"></i> Refresh Data
-                                </button>
+                                <div class="d-flex align-items-center">
+                                    <div class="dt-reset-controls mr-2" data-table="#perintah_stock_opname">
+                                        <!-- Reset Sortir button will be injected here by global JS -->
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="refreshCache()">
+                                        <i class="fas fa-sync-alt"></i> Refresh Data
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -47,12 +52,42 @@
                             <table id="perintah_stock_opname" class="table table-head-fixed text-nowrap">
                                 <thead>
                                     <tr>
-                                        <th>Nomor #</th>
-                                        <th>Tanggal Perintah</th>
-                                        <th>Tanggal Mulai</th>
-                                        <th>Gudang</th>
-                                        <th>Status</th>
-                                        <th>Penanggung Jawab</th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Nomor #</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Tanggal Perintah</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Tanggal Mulai</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Gudang</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Status</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Penanggung Jawab</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>

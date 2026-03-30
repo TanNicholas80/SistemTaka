@@ -34,17 +34,35 @@
 
                         <!-- Card Table -->
                         <div class="card">
-                            <div class="card-header">
+                            <div class="card-header d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">Data Packing List</h3>
+                                <div class="d-flex dt-reset-controls" data-table="#packing_list">
+                                    <!-- Reset Sortir button will be injected here by global JS -->
+                                </div>
                             </div>
 
                             <div class="card-body">
                                 <table id="packing_list" class="table table-head-fixed text-nowrap">
                                     <thead>
                                         <tr>
-                                            <th>Tanggal</th>
-                                            <th>No Packing List</th>
-                                            <th>Status</th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Tanggal</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">No Packing List</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Status</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>

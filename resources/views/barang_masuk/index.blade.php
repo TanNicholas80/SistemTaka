@@ -34,23 +34,71 @@
 
                         <!-- Card Table -->
                         <div class="card">
-                            <div class="card-header">
+                            <div class="card-header d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">Data Barang Masuk</h3>
+                                <div class="d-flex dt-reset-controls" data-table="#barang_masuk">
+                                    <!-- Reset Sortir button will be injected here by global JS -->
+                                </div>
                             </div>
 
                             <div class="card-body">
                                 <table id="barang_masuk" class="table table-head-fixed text-nowrap">
                                     <thead>
                                         <tr>
-                                            <th>Tanggal</th>
-                                            <th>No Barang</th>
-                                            <th>Keterangan</th>
-                                            <th>Warna</th>
-                                            <th>No Seri</th>
-                                            <th>PCS</th>
-                                            <th>Berat (KG)</th>
-                                            <th>Panjang (MLC)</th>
-                                            <th>Panjang (Yard)</th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Tanggal</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">No Barang</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Keterangan</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Warna</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">No Seri</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">PCS</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Berat (KG)</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Panjang (MLC)</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Panjang (Yard)</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
