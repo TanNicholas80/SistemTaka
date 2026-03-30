@@ -73,78 +73,85 @@ class PenerimaanBarangController extends Controller
     }
 
     /**
-     * Pasangan vendor/customer yang diizinkan untuk antar toko (Bandung ↔ Magelang).
-     * null = cabang lain, tidak difilter nama TOKO.
-     *
-     * @return array{po_vendor: string, do_customer: string}|null
+     * Cabang pasangan untuk antar toko (Bandung ↔ Magelang). null = bukan skema antar toko ini.
      */
-    private function interStorePartnerNames(Branch $branch): ?array
+    private function interStorePartnerBranch(Branch $branch): ?Branch
     {
         $n = mb_strtoupper(trim((string) $branch->name), 'UTF-8');
         if ($n === 'BANDUNG') {
-            return [
-                'po_vendor' => 'TOKO MAGELANG',
-                'do_customer' => 'TOKO BANDUNG',
-            ];
+            return Branch::query()->whereRaw('UPPER(TRIM(name)) = ?', ['MAGELANG'])->first();
         }
         if ($n === 'MAGELANG') {
-            return [
-                'po_vendor' => 'TOKO BANDUNG',
-                'do_customer' => 'TOKO MAGELANG',
-            ];
+            return Branch::query()->whereRaw('UPPER(TRIM(name)) = ?', ['BANDUNG'])->first();
         }
 
         return null;
     }
 
     /**
-     * Cocokkan label vendor/customer Accurate dengan label bisnis (trim, case-insensitive; izinkan substring).
+     * Kode Accurate untuk antar toko dari kolom customer_id di tabel branches (lokal):
+     * - PO: vendor.vendorNo harus sama dengan customer_id cabang pasangan (supplier).
+     * - DO: customer.customerNo harus sama dengan customer_id cabang aktif (penerima).
+     *
+     * @return array{po_vendor_no: string, do_customer_no: string}|null
      */
-    private function interStoreLabelMatches(?string $actual, string $expectedLabel): bool
+    private function interStorePartnerCodes(Branch $branch): ?array
     {
-        $a = mb_strtoupper(trim((string) $actual), 'UTF-8');
-        $e = mb_strtoupper(trim($expectedLabel), 'UTF-8');
-        if ($a === '' || $e === '') {
-            return false;
+        $partnerBranch = $this->interStorePartnerBranch($branch);
+        if (!$partnerBranch) {
+            return null;
         }
-        if ($a === $e) {
-            return true;
+        $poVendorNo = trim((string) $partnerBranch->customer_id);
+        $doCustomerNo = trim((string) $branch->customer_id);
+        if ($poVendorNo === '' || $doCustomerNo === '') {
+            return null;
         }
 
-        return str_contains($a, $e) || str_contains($e, $a);
+        return [
+            'po_vendor_no' => $poVendorNo,
+            'do_customer_no' => $doCustomerNo,
+        ];
     }
 
     /**
-     * Validasi PO/DO antar toko sesuai cabang Bandung/Magelang (vendor PO + customer DO).
+     * Cocokkan kode vendor/customer Accurate (vendorNo / customerNo) secara ketat setelah trim.
+     */
+    private function interStoreCodesMatch(?string $actual, string $expected): bool
+    {
+        return trim((string) ($actual ?? '')) === trim($expected);
+    }
+
+    /**
+     * Validasi PO/DO antar toko (vendor PO = vendorNo, customer DO = customerNo).
      *
      * @throws \Exception
      */
-    private function assertInterStorePartnersForBranch(Branch $branch, ?string $poVendorName, ?string $doCustomerName): void
+    private function assertInterStorePartnersForBranch(Branch $branch, ?string $poVendorNo, ?string $doCustomerNo): void
     {
-        $partner = $this->interStorePartnerNames($branch);
+        $partner = $this->interStorePartnerCodes($branch);
         if ($partner === null) {
             return;
         }
-        if (!$this->interStoreLabelMatches($poVendorName, $partner['po_vendor'])) {
+        if (!$this->interStoreCodesMatch($poVendorNo, $partner['po_vendor_no'])) {
             throw new \Exception(
-                'Untuk antar toko cabang ini, No PO harus dari vendor "' . $partner['po_vendor'] . '".'
+                'Untuk antar toko cabang ini, No PO harus dari vendor dengan vendorNo "' . $partner['po_vendor_no'] . '" (sesuai customer_id cabang pasangan di database).'
             );
         }
-        if (!$this->interStoreLabelMatches($doCustomerName, $partner['do_customer'])) {
+        if (!$this->interStoreCodesMatch($doCustomerNo, $partner['do_customer_no'])) {
             throw new \Exception(
-                'Untuk antar toko cabang ini, No DO harus untuk customer "' . $partner['do_customer'] . '".'
+                'Untuk antar toko cabang ini, No DO harus untuk customer dengan customerNo "' . $partner['do_customer_no'] . '" (sesuai customer_id cabang aktif di database).'
             );
         }
     }
 
     /**
-     * Ambil nama vendor dari PO & customer dari DO lalu validasi aturan antar toko.
+     * Ambil vendorNo dari PO & customerNo dari DO lalu validasi aturan antar toko.
      *
      * @throws \Exception
      */
     private function validateInterStorePoDoForBranch(Branch $branch, string $noPo, string $noDo): void
     {
-        $partner = $this->interStorePartnerNames($branch);
+        $partner = $this->interStorePartnerCodes($branch);
         if ($partner === null) {
             return;
         }
@@ -171,12 +178,13 @@ class PenerimaanBarangController extends Controller
             throw new \Exception('Gagal mengambil detail PO untuk validasi antar toko.');
         }
 
-        $poVendorName = data_get($poResp->json(), 'd.vendor.name');
+        $poVendorNo = data_get($poResp->json(), 'd.vendor.vendorNo');
 
         $doResult = $this->fetchDeliveryOrderDetailWithFallback($branch, $noDo);
-        $doCustomerName = data_get($doResult['data'] ?? [], 'd.customer.name');
+        $doCustomerNo = data_get($doResult['data'] ?? [], 'd.customer.customerNo')
+            ?? data_get($doResult['data'] ?? [], 'd.customer.no');
 
-        $this->assertInterStorePartnersForBranch($branch, $poVendorName, $doCustomerName);
+        $this->assertInterStorePartnersForBranch($branch, $poVendorNo, $doCustomerNo);
     }
 
     /**
@@ -320,7 +328,7 @@ class PenerimaanBarangController extends Controller
      */
     private function fetchInterStoreDeliveryOrdersForCreate(Branch $branch): array
     {
-        $partner = $this->interStorePartnerNames($branch);
+        $partner = $this->interStorePartnerCodes($branch);
 
         $credentials = $this->getInterStoreCredentials($branch);
         $attempts = [];
@@ -387,7 +395,8 @@ class PenerimaanBarangController extends Controller
 
                 foreach ($rows as $row) {
                     $customerName = data_get($row, 'customer.name');
-                    if ($partner !== null && !$this->interStoreLabelMatches($customerName, $partner['do_customer'])) {
+                    $customerNo = data_get($row, 'customer.customerNo') ?? data_get($row, 'customer.no');
+                    if ($partner !== null && !$this->interStoreCodesMatch($customerNo, $partner['do_customer_no'])) {
                         continue;
                     }
 
@@ -742,6 +751,7 @@ class PenerimaanBarangController extends Controller
                 'number_po' => $numberPo,
                 'date_po' => $po['transDate'] ?? '',
                 'vendor_name' => data_get($po, 'vendor.name'),
+                'vendor_no' => data_get($po, 'vendor.vendorNo') ?? data_get($po, 'vendor.no'),
             ];
         }
 
@@ -773,11 +783,11 @@ class PenerimaanBarangController extends Controller
 
         // Get data directly from API (sudah menggunakan kredensial dari cabang di dalam fungsi)
         $purchase_order = $this->getPurchaseOrdersFromAccurate();
-        $partnerFilter = $this->interStorePartnerNames($branch);
+        $partnerFilter = $this->interStorePartnerCodes($branch);
         $purchase_order_antar_toko = $purchase_order;
         if ($partnerFilter !== null) {
             $purchase_order_antar_toko = array_values(array_filter($purchase_order, function ($po) use ($partnerFilter) {
-                return $this->interStoreLabelMatches($po['vendor_name'] ?? null, $partnerFilter['po_vendor']);
+                return $this->interStoreCodesMatch($po['vendor_no'] ?? null, $partnerFilter['po_vendor_no']);
             }));
         }
 
@@ -879,11 +889,12 @@ class PenerimaanBarangController extends Controller
                     }
                 }
 
-                $poVendorNameForRule = ($poVendorResponse && $poVendorResponse->successful())
-                    ? data_get($poVendorResponse->json(), 'd.vendor.name')
+                $poVendorNoForRule = ($poVendorResponse && $poVendorResponse->successful())
+                    ? data_get($poVendorResponse->json(), 'd.vendor.vendorNo')
                     : null;
-                $doCustomerNameForRule = data_get($doData, 'customer.name');
-                $this->assertInterStorePartnersForBranch($branch, $poVendorNameForRule, $doCustomerNameForRule);
+                $doCustomerNoForRule = data_get($doData, 'customer.customerNo')
+                    ?? data_get($doData, 'customer.no');
+                $this->assertInterStorePartnersForBranch($branch, $poVendorNoForRule, $doCustomerNoForRule);
 
                 // Fallback terakhir agar tidak null jika PO gagal diambil
                 $vendorNo = $vendorNo

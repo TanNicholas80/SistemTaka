@@ -24,12 +24,15 @@
             <div class="card">
                 <div class="card-header justify-content-between align-items-center">
                     <div>
-                        @if ($data && $data->npl != null && $barcodes && $barcodes->first())
+                        @if ($data && $data->npl != null && isset($barcodeRows) && $barcodeRows->isNotEmpty())
+                                        @php
+                                            $firstRow = $barcodeRows->first()['barcode'] ?? null;
+                                        @endphp
                                         <div class="text-center">
                                             <h4><strong><u>PACKING LIST</u></strong></h4>
                                             <p class="mb-1">
                                                 <strong>No. : {{ $data->npl }} / Tgl. :
-                                                    {{ $barcodes->isNotEmpty() ? \Carbon\Carbon::parse($barcodes->first()->tanggal)->format('d-m-Y') : \Carbon\Carbon::parse($data->tanggal)->format('d-m-Y') }}</strong>
+                                                    {{ $firstRow && $firstRow->tanggal ? \Carbon\Carbon::parse($firstRow->tanggal)->format('d-m-Y') : \Carbon\Carbon::parse($data->tanggal)->format('d-m-Y') }}</strong>
                                                 @php
                                                     $statusClass = match ($data->status ?? 'pending') {
                                                         'approved' => 'badge-success',
@@ -45,13 +48,13 @@
                                         <table class="table table-bordered text-nowrap" style="table-layout: fixed; width: 100%;">
                                             <tr>
                                                 <td style="width: 40%; text-align: left;">
-                                                    <strong>Pemasok : {{ $barcodes->first()->pemasok }}</strong>
+                                                    <strong>Pemasok : {{ $firstRow->pemasok ?? '-' }}</strong>
                                                 </td>
                                                 <td style="width: 33.33%; text-align: center;">
-                                                    <strong>Pembeli : {{ $barcodes->first()->customer }}</strong>
+                                                    <strong>Pembeli : {{ $firstRow->customer ?? '-' }}</strong>
                                                 </td>
                                                 <td style="width: 33.33%; text-align: right;">
-                                                    <strong>Mobil / No. Polisi : {{ $barcodes->first()->no_vehicle }}</strong>
+                                                    <strong>Mobil / No. Polisi : {{ $firstRow->no_vehicle ?? '-' }}</strong>
                                                 </td>
                                             </tr>
                                         </table>
@@ -68,28 +71,62 @@
 
                 <!-- /.card-header -->
                 <div class="card-body">
-                    <table id="packing_list_detail" class="table table-bordered table-head-fixed text-nowrap">
+                    {{-- table-head-fixed bentrok dengan DataTables scrollX (header vs body tidak sejajar) --}}
+                    <style>
+                        #packing_list_detail_wrapper {
+                            width: 100%;
+                        }
+
+                        #packing_list_detail_wrapper .dataTables_scrollHeadInner,
+                        #packing_list_detail_wrapper .dataTables_scrollHeadInner>.dataTable,
+                        #packing_list_detail_wrapper .dataTables_scrollBody table.dataTable {
+                            width: auto !important;
+                            min-width: 100% !important;
+                        }
+
+                        #packing_list_detail_wrapper .dataTables_scrollHead {
+                            position: relative;
+                            z-index: 2;
+                        }
+
+                        #packing_list_detail_wrapper .dataTables_scrollBody {
+                            position: relative;
+                            z-index: 1;
+                        }
+
+                        #packing_list_detail_wrapper th,
+                        #packing_list_detail_wrapper td {
+                            vertical-align: middle;
+                        }
+                    </style>
+                    <table id="packing_list_detail" class="table table-bordered table-striped text-nowrap">
                         <thead>
                             <tr>
                                 <th>Keterangan</th>
                                 <th>Kode Warna</th>
                                 <th>Partai</th>
                                 <th>Nomor Seri</th>
-                                <th>Pcs</th>
-                                <th>Berat (KG)</th>
-                                <th>Panjang (MLC)</th>
+                                <th class="text-right">Pcs</th>
+                                <th class="text-right">Berat (KG)</th>
+                                <th class="text-right">Panjang (MLC)</th>
+                                <th class="text-right">Panjang (Yard)</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($barcodes as $barcode)
+                            @foreach ($barcodeRows as $row)
+                                @php
+                                    $barcode = $row['barcode'];
+                                    $d = $row['display'] ?? [];
+                                @endphp
                                 <tr>
                                     <td>{{ $barcode->salestext ?? '-' }}</td>
                                     <td>{{ $barcode->kode_warna ?? '-' }}</td>
                                     <td>{{ $barcode->batch_no ?? ($barcode->nomor_seri ?? '-') }}</td>
                                     <td>{{ $barcode->job_order ?? '-' }}</td>
-                                    <td>{{ $barcode->pcs ?? '-' }}</td>
-                                    <td>{{ isset($barcode->weight) ? number_format((float) $barcode->weight, 2) : (isset($barcode->berat_kg) ? number_format((float) $barcode->berat_kg, 2) : '-') }}</td>
-                                    <td>{{ isset($barcode->length) ? number_format((float) $barcode->length, 2) : (isset($barcode->panjang_mlc) ? number_format((float) $barcode->panjang_mlc, 2) : '-') }}</td>
+                                    <td class="text-right">{{ $barcode->pcs ?? '-' }}</td>
+                                    <td class="text-right">{{ $d['berat'] ?? '-' }}</td>
+                                    <td class="text-right">{{ $d['panjang_mlc'] ?? '-' }}</td>
+                                    <td class="text-right">{{ $d['panjang_yard'] ?? '-' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
