@@ -66,6 +66,7 @@
                                         <tr>
                                             <th><input type="checkbox" id="check_all"></th>
                                             <th>No Barcode</th>
+                                            <th>No Seri</th>
                                             <th>Nama Barang</th>
                                             <th>Merek Barang</th>
                                             <th>Motif</th>
@@ -78,7 +79,7 @@
                                     </thead>
                                     <tbody id="barcode_tbody">
                                         <tr>
-                                            <td colspan="10" class="text-center text-muted py-4">Pilih Kode Barang terlebih
+                                            <td colspan="11" class="text-center text-muted py-4">Pilih Kode Barang terlebih
                                                 dahulu.</td>
                                         </tr>
                                     </tbody>
@@ -141,7 +142,7 @@
         // ── Load serials ──────────────────────────────────────────────────────────
         function loadSerials(itemNo) {
             const tbody = document.getElementById('barcode_tbody');
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-3"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
 
             // Reset semua checkbox & bulk button saat item diganti
             document.getElementById('check_all').checked = false;
@@ -154,22 +155,24 @@
                 .then(r => r.json())
                 .then(data => {
                     if (data && data.error) {
-                        tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger py-4">${escapeHtml(data.error)}</td></tr>`;
+                        tbody.innerHTML = `<tr><td colspan="11" class="text-center text-danger py-4">${escapeHtml(data.error)}</td></tr>`;
                         return;
                     }
                     const rows = Array.isArray(data) ? data : [];
                     if (rows.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Tidak ada data barcode untuk item ini.</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Tidak ada data barcode untuk item ini.</td></tr>';
                         return;
                     }
                     tbody.innerHTML = '';
                     rows.forEach(row => {
                         const serial = escapeHtml(row.serialNo ?? '');
+                        const noSeriLocal = escapeHtml(row.noSeriLocal ?? '');
                         const reprUrl = '{{ url("print-barcode/reprint") }}/' + encodeURIComponent(row.serialNo ?? '') + '?itemNo=' + encodeURIComponent(itemNo);
                         const tr = document.createElement('tr');
                         tr.innerHTML = `
                                             <td><input type="checkbox" class="row_check" data-serial="${serial}" data-item="${escapeHtml(itemNo)}"></td>
                                             <td>${serial}</td>
+                                            <td>${noSeriLocal}</td>
                                             <td>${escapeHtml(row.itemName ?? '')}</td>
                                             <td>${escapeHtml(row.brand ?? '')}</td>
                                             <td>${escapeHtml(row.motif ?? '')}</td>
@@ -197,7 +200,7 @@
                         pageLength: 25,
                         dom: 'rt<"d-flex justify-content-between align-items-center mt-2"ip>',
                         language: { zeroRecords: 'Tidak ada data.' },
-                        columnDefs: [{ targets: [0, 9], searchable: false, orderable: false }],
+                        columnDefs: [{ targets: [0, 10], searchable: false, orderable: false }],
                     });
 
                     // Connect custom filter input to DataTable search
@@ -209,7 +212,7 @@
                     bindCheckboxes();
                 })
                 .catch(err => {
-                    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Gagal mengambil data dari server.</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger py-4">Gagal mengambil data dari server.</td></tr>';
                     console.error(err);
                 });
         }
