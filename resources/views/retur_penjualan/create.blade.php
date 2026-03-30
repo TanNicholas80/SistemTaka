@@ -255,6 +255,9 @@
                                     <th class="border border-gray-400 px-2 py-1">
                                         Total Harga
                                     </th>
+                                    <th class="border border-gray-400 px-2 py-1 w-10">
+                                        Aksi
+                                    </th>
                                     <th id="th-status-retur" class="border border-gray-400 px-2 py-1" style="display: none;">
                                         Status Retur
                                     </th>
@@ -293,7 +296,7 @@
                                 @else
                                 <tr>
                                     <td class="border border-gray-400 px-2 py-3 text-left align-top">≡</td>
-                                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="8">
+                                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="9">
                                         Klik "Lanjut" setelah memilih Pelanggan dan Referensi (Faktur/Pengiriman) untuk memuat barang.
                                     </td>
                                 </tr>
@@ -407,12 +410,20 @@
                                     class="border border-gray-300 rounded px-2 py-1 flex-grow focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm">
                             </div>
                         </div>
+                        <div class="grid grid-cols-[120px_1fr] gap-2 items-center text-sm">
+                            <label class="text-gray-600 font-bold">Scan Barcode</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="modal_barcode_scan_input" placeholder="Scan barcode/no seri..."
+                                    class="border border-gray-300 rounded px-2 py-1 flex-grow focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm">
+                            </div>
+                        </div>
                         <div class="max-h-60 overflow-y-auto border border-gray-200 mt-2 rounded">
                             <table class="w-full text-xs">
                                 <thead class="text-white sticky top-0" style="background-color: #166534;">
                                     <tr>
                                         <th class="p-2 border border-gray-300 text-left">Nomor #</th>
                                         <th class="p-2 border border-gray-300 text-center w-28">Kuantitas</th>
+                                        <th class="p-2 border border-gray-300 text-center w-10">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody id="modal_serial_tbody"></tbody>
@@ -677,7 +688,7 @@
         if (thStatusRetur) thStatusRetur.style.display = isPartially ? '' : 'none';
 
         if (!items || items.length === 0) {
-            const colspan = 8;
+            const colspan = 9;
             const emptyRow = document.createElement('tr');
             emptyRow.innerHTML = '<td class="border border-gray-400 px-2 py-3 text-left align-top">≡</td><td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="' + colspan + '">Belum ada data barang</td>';
             tableBody.appendChild(emptyRow);
@@ -708,15 +719,34 @@
                 '<td class="border border-gray-400 px-2 py-3 align-top">' + (item.itemUnit && item.itemUnit.name ? item.itemUnit.name : 'N/A') + '</td>' +
                 '<td class="border border-gray-400 px-2 py-3 align-top">' + unitPrice + '</td>' +
                 '<td class="border border-gray-400 px-2 py-3 align-top">' + discount + '</td>' +
-                '<td class="border border-gray-400 px-2 py-3 align-top">' + totalPrice + '</td>' + statusCell;
+                '<td class="border border-gray-400 px-2 py-3 align-top">' + totalPrice + '</td>' +
+                '<td class="border border-gray-400 px-2 py-3 align-top text-center">' +
+                '<button type="button" class="btn-hapus-detail text-red-600 font-bold" data-row-index="' + index + '" title="Hapus item">X</button>' +
+                '</td>' + statusCell;
 
             row.style.cursor = 'pointer';
             row.title = 'Double klik untuk membuka rincian barang';
             row.addEventListener('dblclick', function() {
                 openItemDetailModal(index);
             });
+
+            const delBtn = row.querySelector('.btn-hapus-detail');
+            if (delBtn) {
+                delBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const i = parseInt(this.getAttribute('data-row-index'), 10);
+                    if (!isNaN(i)) deleteDetailItem(i);
+                });
+            }
             tableBody.appendChild(row);
         });
+    }
+
+    function deleteDetailItem(rowIndex) {
+        if (!detailItems || rowIndex < 0 || rowIndex >= detailItems.length) return;
+        detailItems.splice(rowIndex, 1);
+        fillTableWithDetailItems(detailItems);
+        updateDiskonTotalKeseluruhan();
     }
 
     function safeNumber(val, fallback) {
@@ -798,52 +828,175 @@
         const tbody = document.getElementById('modal_serial_tbody');
         const summaryEl = document.getElementById('modal_serial_summary');
         const filterEl = document.getElementById('modal_serial_filter_input');
+        const scanInputEl = document.getElementById('modal_barcode_scan_input');
         const filter = (filterEl && filterEl.value) ? filterEl.value.trim().toLowerCase() : '';
         if (!tbody) return;
-        const serialsAll = (item && Array.isArray(item.detailSerialNumber)) ? item.detailSerialNumber : [];
-        let rows = serialsAll.map((sn, idx) => ({ sn, idx }));
+
+        // detailSerialNumber hanya berisi serial yang sudah discan user
+        const scannedSerials = (item && Array.isArray(item.detailSerialNumber)) ? item.detailSerialNumber : [];
+        let rows = scannedSerials.map(function(sn, idx) { return { sn: sn, idx: idx }; });
         if (filter) {
             rows = rows.filter(function(r) {
-                const serialNo = (r.sn && r.sn.serialNumber && r.sn.serialNumber.number) ? String(r.sn.serialNumber.number) : (r.sn && r.sn.serialNumberNo ? String(r.sn.serialNumberNo) : '');
+                const serialNo = r.sn.serialNumberNo || '';
                 return serialNo.toLowerCase().includes(filter);
             });
         }
         tbody.innerHTML = '';
-        let sumQty = 0;
-        if (!serialsAll.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = '<td colspan="2" class="text-center p-4 text-gray-400">Belum ada data</td>';
-            tbody.appendChild(tr);
+        if (!scannedSerials.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center p-4 text-gray-400">Scan barcode untuk menambahkan No Seri/Produksi</td></tr>';
             if (summaryEl) summaryEl.textContent = '0 No Seri/Produksi, Jumlah 0';
-            return;
+        } else if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center p-4 text-gray-400">Tidak ada nomor serial yang cocok filter</td></tr>';
+        } else {
+            rows.forEach(function(r) {
+                var sn = r.sn, idx = r.idx;
+                var serialNo = sn.serialNumberNo || '';
+                var qty = safeNumber(sn.quantity, 0);
+                var maxQty = safeNumber(sn._availableQty, qty);
+                var tr = document.createElement('tr');
+                tr.className = 'hover:bg-gray-100 transition-colors';
+                tr.innerHTML =
+                    '<td class="p-2 border border-gray-200">' + serialNo + '</td>' +
+                    '<td class="p-1 border border-gray-200 text-center">' +
+                    '<input type="number" min="0" max="' + maxQty + '" step="0.01" class="w-20 text-center border border-gray-200 rounded px-1 py-0.5 modal-serial-qty focus:outline-none focus:ring-1 focus:ring-blue-500" data-serial-index="' + idx + '" value="' + qty + '">' +
+                    '</td>' +
+                    '<td class="p-1 border border-gray-200 text-center w-10">' +
+                    '<button type="button" class="btn-hapus-serial text-red-600 font-bold" data-serial-index="' + idx + '" title="Hapus serial">X</button>' +
+                    '</td>';
+                tbody.appendChild(tr);
+            });
         }
-        if (!rows.length) {
-            const tr = document.createElement('tr');
-            tr.innerHTML = '<td colspan="2" class="text-center p-4 text-gray-400">Tidak ada nomor serial yang cocok</td>';
-            tbody.appendChild(tr);
-            serialsAll.forEach(function(sn) { sumQty += safeNumber(sn && sn.quantity, 0); });
-            if (summaryEl) summaryEl.textContent = serialsAll.length + ' No Seri/Produksi, Jumlah ' + sumQty.toFixed(2);
-            return;
-        }
-        rows.forEach(function(r) {
-            const sn = r.sn;
-            const idx = r.idx;
-            const serialNo = (sn && sn.serialNumber && sn.serialNumber.number) ? sn.serialNumber.number : (sn && sn.serialNumberNo ? sn.serialNumberNo : '');
-            const qty = safeNumber(sn && sn.quantity, 0);
-            sumQty += qty;
-            const tr = document.createElement('tr');
-            tr.className = 'hover:bg-gray-100 transition-colors';
-            tr.innerHTML =
-                '<td class="p-2 border border-gray-200">' + (serialNo || '') + '</td>' +
-                '<td class="p-1 border border-gray-200 text-center">' +
-                '<input type="number" min="0" step="0.01" class="w-20 text-center border border-gray-200 rounded px-1 py-0.5 modal-serial-qty focus:outline-none focus:ring-1 focus:ring-blue-500" data-serial-index="' + idx + '" value="' + qty + '">' +
-                '</td>';
-            tbody.appendChild(tr);
+
+        tbody.querySelectorAll('.modal-serial-qty').forEach(function(inputEl) {
+            inputEl.addEventListener('change', function() {
+                var idx = parseInt(this.getAttribute('data-serial-index'), 10);
+                if (isNaN(idx) || !item || !item.detailSerialNumber[idx]) return;
+                var sn = item.detailSerialNumber[idx];
+                var newQty = safeNumber(this.value, 0);
+                var maxQty = safeNumber(sn._availableQty, newQty);
+                if (newQty > maxQty) newQty = maxQty;
+                if (newQty < 0) newQty = 0;
+                sn.quantity = newQty;
+                syncSerialSummary();
+                renderSerialTable();
+            });
         });
-        const totalLines = serialsAll.length;
-        let totalAllQty = 0;
-        serialsAll.forEach(function(sn) { totalAllQty += safeNumber(sn && sn.quantity, 0); });
-        if (summaryEl) summaryEl.textContent = totalLines + ' No Seri/Produksi, Jumlah ' + totalAllQty.toFixed(2);
+
+        tbody.querySelectorAll('.btn-hapus-serial').forEach(function(btnEl) {
+            btnEl.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var idx = parseInt(this.getAttribute('data-serial-index'), 10);
+                if (isNaN(idx) || !item || !item.detailSerialNumber) return;
+                item.detailSerialNumber.splice(idx, 1);
+                syncSerialSummary();
+                renderSerialTable();
+            });
+        });
+
+        if (scannedSerials.length > 0) syncSerialSummary();
+
+        bindBarcodeScan(item, scanInputEl);
+    }
+
+    function bindBarcodeScan(item, scanInputEl) {
+        if (!scanInputEl || !item) return;
+        if (scanInputEl.dataset._returPenjualanScanBound) return;
+        scanInputEl.dataset._returPenjualanScanBound = '1';
+        var scanAutoInProgress = false;
+        function extractBarcode10(raw) {
+            var part = String(raw || '').split(';')[0].trim();
+            if (part.length > 10) part = part.substring(0, 10);
+            return part;
+        }
+        // Auto-submit saat scanner mengirim format: "10digits;berat;panjang"
+        scanInputEl.addEventListener('input', function() {
+            if (scanAutoInProgress) return;
+            var rawVal = (scanInputEl.value || '').trim();
+            var barcode10 = extractBarcode10(rawVal);
+            if (barcode10.length !== 10) return;
+            scanAutoInProgress = true;
+            scanInputEl.value = barcode10;
+            scanInputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+            setTimeout(function() { scanAutoInProgress = false; }, 0);
+        });
+        scanInputEl.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            var barcode = extractBarcode10(scanInputEl.value);
+            if (barcode.length !== 10) return;
+            if (!barcode) return;
+
+            var modal = document.getElementById('modalItemDetail');
+            var rowIndex = modal ? parseInt(modal.getAttribute('data-editing-row'), 10) : -1;
+            var currentItem = (!isNaN(rowIndex) && rowIndex >= 0) ? detailItems[rowIndex] : null;
+            if (!currentItem) return;
+
+            var origSerials = Array.isArray(currentItem._originalSerials) ? currentItem._originalSerials : [];
+            var origMatch = null;
+            for (var i = 0; i < origSerials.length; i++) {
+                if (String(origSerials[i].serialNumberNo).trim() === barcode) { origMatch = origSerials[i]; break; }
+            }
+
+            if (!origMatch) {
+                Swal.fire({ icon: 'error', title: 'Barcode tidak ditemukan', text: 'Barcode "' + barcode + '" tidak ada di faktur ini.', timer: 2500, showConfirmButton: false, toast: true, position: 'top-end' });
+                scanInputEl.value = '';
+                return;
+            }
+
+            if (!Array.isArray(currentItem.detailSerialNumber)) currentItem.detailSerialNumber = [];
+            var alreadyAdded = currentItem.detailSerialNumber.some(function(sn) {
+                return String(sn.serialNumberNo).trim() === barcode;
+            });
+            if (alreadyAdded) {
+                Swal.fire({ icon: 'warning', title: 'Barcode sudah discan', text: 'No seri/produksi "' + barcode + '" sudah ada di daftar.', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
+                scanInputEl.value = '';
+                return;
+            }
+
+            currentItem.detailSerialNumber.push({
+                serialNumberNo: origMatch.serialNumberNo,
+                quantity: origMatch.quantity,
+                _availableQty: origMatch.quantity,
+                serialNumber: origMatch.serialNumber || null
+            });
+
+            Swal.fire({ icon: 'success', title: 'Barcode ditemukan', text: origMatch.serialNumberNo + ' (qty: ' + origMatch.quantity + ')', timer: 1500, showConfirmButton: false, toast: true, position: 'top-end' });
+
+            syncSerialSummary();
+            renderSerialTable();
+            scanInputEl.value = '';
+        });
+    }
+
+    function syncSerialSummary() {
+        var modal = document.getElementById('modalItemDetail');
+        var rowIndex = modal ? parseInt(modal.getAttribute('data-editing-row'), 10) : -1;
+        var item = (!isNaN(rowIndex) && rowIndex >= 0) ? detailItems[rowIndex] : null;
+        var summaryEl = document.getElementById('modal_serial_summary');
+        var serials = (item && Array.isArray(item.detailSerialNumber)) ? item.detailSerialNumber : [];
+        var count = serials.length;
+        var qSum = serials.reduce(function(sum, sn) { return sum + safeNumber(sn.quantity, 0); }, 0);
+        if (summaryEl) summaryEl.textContent = count + ' No Seri/Produksi, Jumlah ' + formatCurrency(qSum);
+
+        var modalQtyEl = document.getElementById('modal_item_qty');
+        if (modalQtyEl) modalQtyEl.value = qSum;
+        if (item) item.quantity = qSum;
+
+        var modalHargaEl = document.getElementById('modal_item_harga');
+        var modalDiskonEl = document.getElementById('modal_item_diskon');
+        var modalTotalEl = document.getElementById('modal_item_total');
+        if (modalHargaEl && modalDiskonEl && modalTotalEl) {
+            var harga = safeNumber(modalHargaEl.value, 0);
+            var diskonInput = safeNumber(modalDiskonEl.value, 0);
+            var gross = qSum * harga;
+            var total = gross;
+            if (diskonInput > 0) {
+                if (diskonInput <= 100) total = gross - (gross * (diskonInput / 100));
+                else total = gross - diskonInput;
+            }
+            if (total < 0) total = 0;
+            modalTotalEl.value = formatCurrency(total);
+        }
     }
 
     function switchReturItemModalTab(tab) {
@@ -865,8 +1018,8 @@
         if (seri) seri.classList.toggle('hidden', tab !== 'seri');
         if (tab === 'seri') {
             renderSerialTable();
-            const fi = document.getElementById('modal_serial_filter_input');
-            if (fi) setTimeout(function() { fi.focus(); }, 100);
+            const scanInput = document.getElementById('modal_barcode_scan_input');
+            if (scanInput) setTimeout(function() { scanInput.focus(); }, 100);
         }
     }
 
@@ -875,6 +1028,10 @@
         const item = detailItems[rowIndex];
         const modal = document.getElementById('modalItemDetail');
         if (!modal) return;
+
+        // Reset scan bound flag agar listener bisa bind ulang ke item baru
+        const scanInput = document.getElementById('modal_barcode_scan_input');
+        if (scanInput) delete scanInput.dataset._returPenjualanScanBound;
 
         modal.setAttribute('data-editing-row', String(rowIndex));
 
@@ -893,7 +1050,13 @@
 
         if (elKode) elKode.textContent = kode || '—';
         if (elNama) elNama.textContent = nama || '—';
-        if (elQty) elQty.value = safeNumber(item.quantity, 0);
+        if (elQty) {
+            elQty.value = safeNumber(item.quantity, 0);
+            var hasSerial = Array.isArray(item._originalSerials) && item._originalSerials.length > 0;
+            elQty.readOnly = hasSerial;
+            if (hasSerial) elQty.classList.add('bg-gray-200', 'text-gray-500');
+            else elQty.classList.remove('bg-gray-200', 'text-gray-500');
+        }
         if (elHarga) elHarga.value = safeNumber(item.unitPrice, 0);
         if (elDiskon) elDiskon.value = safeNumber(getItemDiskonInput(item), 0);
         if (elGudang) elGudang.value = gudang;
@@ -926,43 +1089,31 @@
 
         const item = detailItems[rowIndex];
 
-        const elQty = document.getElementById('modal_item_qty');
         const elHarga = document.getElementById('modal_item_harga');
         const elDiskon = document.getElementById('modal_item_diskon');
-        const qty = elQty ? safeNumber(elQty.value, safeNumber(item.quantity, 0)) : safeNumber(item.quantity, 0);
         const harga = elHarga ? safeNumber(elHarga.value, safeNumber(item.unitPrice, 0)) : safeNumber(item.unitPrice, 0);
         const diskon = elDiskon ? safeNumber(elDiskon.value, safeNumber(getItemDiskonInput(item), 0)) : safeNumber(getItemDiskonInput(item), 0);
 
-        item.quantity = qty;
         item.unitPrice = harga;
-        // Simpan input diskon ke itemCashDiscount (nilai angka user)
-        // Untuk request ke Accurate, mapping akan dilakukan berdasarkan aturan:
-        // - 0-100 => percent (itemDiscPercent)
-        // - >100 => nominal (itemCashDiscount)
         item.itemCashDiscount = diskon;
         item.itemDiscPercent = null;
+
+        // Qty item diambil dari jumlah serial yang sudah discan
+        if (Array.isArray(item.detailSerialNumber) && item.detailSerialNumber.length > 0) {
+            item.quantity = item.detailSerialNumber.reduce(function(sum, sn) {
+                return sum + safeNumber(sn && sn.quantity, 0);
+            }, 0);
+        } else if (Array.isArray(item._originalSerials) && item._originalSerials.length > 0) {
+            item.quantity = safeNumber(document.getElementById('modal_item_qty').value, 0);
+        } else {
+            item.quantity = safeNumber(document.getElementById('modal_item_qty').value, item.quantity);
+        }
+
         item.totalPrice = computeTotal(item);
 
-        // Save return status if partially
         if (getReturnStatusType() === 'partially_returned') {
             const selected = modal.querySelector('input[name="modal_return_detail_status"]:checked');
             item.return_detail_status = selected ? selected.value : (item.return_detail_status || 'NOT_RETURNED');
-        }
-
-        // Save serial qty edits
-        if (Array.isArray(item.detailSerialNumber)) {
-            const inputs = modal.querySelectorAll('.modal-serial-qty');
-            inputs.forEach(inp => {
-                const idx = parseInt(inp.getAttribute('data-serial-index'), 10);
-                if (isNaN(idx) || !item.detailSerialNumber[idx]) return;
-                item.detailSerialNumber[idx].quantity = safeNumber(inp.value, safeNumber(item.detailSerialNumber[idx].quantity, 0));
-            });
-
-            // Jika item berbasis serial, jumlah kuantitas item harus mengikuti total qty serial
-            const sumQty = item.detailSerialNumber.reduce(function(sum, sn) {
-                return sum + safeNumber(sn && sn.quantity, 0);
-            }, 0);
-            item.quantity = sumQty;
         }
 
         fillTableWithDetailItems(detailItems);
@@ -1005,6 +1156,24 @@
                         }
 
                         detailItems = data.detailItems;
+                        // Simpan serial asli dari faktur, lalu kosongkan qty & serial untuk scan manual
+                        detailItems.forEach(function(it) {
+                            if (Array.isArray(it.detailSerialNumber) && it.detailSerialNumber.length > 0) {
+                                it._originalSerials = it.detailSerialNumber.map(function(sn) {
+                                    const snNo = (sn.serialNumber && sn.serialNumber.number) ? sn.serialNumber.number : (sn.serialNumberNo || '');
+                                    return {
+                                        serialNumberNo: String(snNo).trim(),
+                                        quantity: safeNumber(sn.quantity, 0),
+                                        serialNumber: sn.serialNumber || null
+                                    };
+                                });
+                            } else {
+                                it._originalSerials = [];
+                            }
+                            it.detailSerialNumber = [];
+                            it._originalQty = safeNumber(it.quantity, 0);
+                            it.quantity = 0;
+                        });
                         if (getReturnStatusType() === 'partially_returned') {
                             detailItems.forEach(function(it) { it.return_detail_status = it.return_detail_status || 'NOT_RETURNED'; });
                         }
@@ -1124,6 +1293,11 @@
             if (!detailItems || detailItems.length === 0) {
                 if (typeof Swal !== 'undefined') Swal.fire({ icon: 'warning', title: 'Validasi', text: 'Klik Lanjut untuk memuat barang terlebih dahulu.' });
                 else alert('Klik Lanjut untuk memuat barang terlebih dahulu.');
+                return;
+            }
+            var hasItemWithQty = detailItems.some(function(it) { return safeNumber(it.quantity, 0) > 0; });
+            if (!hasItemWithQty) {
+                Swal.fire({ icon: 'warning', title: 'Validasi', text: 'Setidaknya harus ada satu item yang memiliki kuantitas lebih dari 0. Scan barcode terlebih dahulu.' });
                 return;
             }
             if (getReturnStatusType() === 'partially_returned') {

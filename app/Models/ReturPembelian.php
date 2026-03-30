@@ -94,8 +94,7 @@ class ReturPembelian extends Model
     {
         $now = Carbon::now();
         $year = $now->format('Y');
-        $month = $now->format('m');
-        $prefix = "PRT.{$year}.{$month}.";
+        $prefix = "PRT.{$year}.";
 
         try {
             $activeBranchId = session('active_branch');
