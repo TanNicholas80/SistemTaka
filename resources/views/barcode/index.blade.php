@@ -26,7 +26,7 @@
                     <div class="col-12">
 
                         <!-- Card Table -->
-                        <div class="card barcode-dt-card">
+                        <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">Data Barcode</h3>
                                 @if ($lastUpdated)
@@ -55,10 +55,6 @@
                                     .barcode-th-filter .barcode-th-title {
                                         flex: 0 0 auto;
                                         white-space: nowrap;
-                                        flex: 1;
-                                        min-width: 0;
-                                        overflow: hidden;
-                                        text-overflow: ellipsis;
                                     }
 
                                     .barcode-col-filter-btn {
@@ -155,34 +151,6 @@
                                     #barcode-main {
                                         width: 100% !important;
                                         margin: 0 !important;
-                                    /*
-                                     * scrollX DataTables: tanpa table-head-fixed (sticky th) dan tanpa
-                                     * overflow:visible pada scrollHead — keduanya mengacaukan sync scroll horizontal.
-                                     * Override width 100% global layout agar lebar header = lebar konten (bisa > container).
-                                     */
-                                    #barcode_wrapper .dataTables_scrollHeadInner,
-                                    #barcode_wrapper .dataTables_scrollHeadInner > .dataTable,
-                                    #barcode_wrapper .dataTables_scrollBody table.dataTable {
-                                        width: auto !important;
-                                        min-width: 100% !important;
-                                    }
-
-                                    #barcode_wrapper .dataTables_scroll {
-                                        width: 100%;
-                                    }
-
-                                    /*
-                                     * scrollBody digambar setelah scrollHead → menutupi dropdown kecuali
-                                     * header punya stacking lebih tinggi dari body.
-                                     */
-                                    #barcode_wrapper .dataTables_scrollHead {
-                                        position: relative;
-                                        z-index: 20;
-                                    }
-
-                                    #barcode_wrapper .dataTables_scrollBody {
-                                        position: relative;
-                                        z-index: 10;
                                     }
 
                                     #barcode_wrapper .barcode-th-filter .dropdown {
@@ -257,13 +225,6 @@
                                                             class="down">↓</span></span>
                                                 </div>
                                             </th>
-                                    }
-                                </style>
-                                {{-- Tanpa table-head-fixed: sticky AdminLTE bentrok dengan scrollX (header tidak ikut scroll X) --}}
-                                <table id="barcode" class="table text-nowrap">
-                                    <thead>
-                                        <tr>
-                                            <th>Barcode</th>
                                             <th>
                                                 <div class="barcode-th-filter">
                                                     <span class="barcode-th-title">No. Packing List</span>
@@ -276,12 +237,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="2">
-                                                            data-column="1" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="1">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -311,12 +266,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="3">
-                                                            data-column="2" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="2">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -346,12 +295,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="4">
-                                                            data-column="3" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="3">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -381,12 +324,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="5">
-                                                            data-column="4" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="4">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -416,12 +353,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="6">
-                                                            data-column="5" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="5">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -451,12 +382,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="7">
-                                                            data-column="6" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="6">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -486,12 +411,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="8">
-                                                            data-column="7" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="7">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -530,11 +449,6 @@
                                                             class="down">↓</span></span>
                                                 </div>
                                             </th>
-                                                </div>
-                                            </th>
-                                            <th>Pcs</th>
-                                            <th>Berat (KG)</th>
-                                            <th>Length</th>
                                             <th>
                                                 <div class="barcode-th-filter">
                                                     <span class="barcode-th-title">UOM</span>
@@ -547,12 +461,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="12">
-                                                            data-column="11" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="11">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -582,12 +490,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="13">
-                                                            data-column="12" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="12">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -617,12 +519,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="14">
-                                                            data-column="13" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="13">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -647,9 +543,6 @@
                                                             class="down">↓</span></span>
                                                 </div>
                                             </th>
-                                                </div>
-                                            </th>
-                                            <th>Panjang (MLC)</th>
                                             <th>
                                                 <div class="barcode-th-filter">
                                                     <span class="barcode-th-title">Warna</span>
@@ -662,12 +555,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="16">
-                                                            data-column="15" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="15">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -699,10 +586,6 @@
                                                             class="down">↓</span></span>
                                                 </div>
                                             </th>
-                                                </div>
-                                            </th>
-                                            <th>Harga PPN</th>
-                                            <th>Harga Jual</th>
                                             <th>
                                                 <div class="barcode-th-filter">
                                                     <span class="barcode-th-title">Pemasok</span>
@@ -715,12 +598,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="19">
-                                                            data-column="18" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="18">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -750,12 +627,6 @@
                                                         </button>
                                                         <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
                                                             data-column="20">
-                                                            data-column="19" data-toggle="dropdown" data-boundary="window" data-flip="false"
-                                                            title="Filter">
-                                                            <i class="fas fa-filter"></i>
-                                                        </button>
-                                                        <div class="dropdown-menu dropdown-menu-right barcode-filter-dropdown p-2"
-                                                            data-column="19">
                                                             <input type="text"
                                                                 class="form-control form-control-sm mb-2 barcode-filter-search"
                                                                 placeholder="Cari..." autocomplete="off">
@@ -801,12 +672,6 @@
                                                             class="down">↓</span></span>
                                                 </div>
                                             </th>
-                                                </div>
-                                            </th>
-                                            <th>Kontrak</th>
-                                            <th>Tanggal</th>
-                                            <th>Jatuh Tempo</th>
-                                            <th>Mobil / No. Polisi</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -929,24 +794,6 @@
                     uniques.add(txt);
                 });
                 return Array.from(uniques).sort(function (a, b) {
-        $(function() {
-            var $table = $('#barcode');
-            if (!$table.length || !$.fn.DataTable.isDataTable($table)) {
-                return;
-            }
-
-            var table = $table.DataTable();
-            var columnFilters = {};
-
-            function getUniqueValues(colIdx) {
-                var uniques = new Set();
-                table.rows({
-                    search: 'none'
-                }).every(function() {
-                    var txt = $(this.node()).children('td').eq(colIdx).text().replace(/\s+/g, ' ').trim();
-                    uniques.add(txt);
-                });
-                return Array.from(uniques).sort(function(a, b) {
                     return a.localeCompare(b, 'id', {
                         numeric: true,
                         sensitivity: 'base'
@@ -956,8 +803,6 @@
 
             $.fn.dataTable.ext.search.push(function (settings, data, dataIndex) {
                 if (settings.nTable.id !== 'barcode-main') {
-            $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
-                if (settings.nTable.id !== 'barcode') {
                     return true;
                 }
                 var api = new $.fn.dataTable.Api(settings);
@@ -991,28 +836,6 @@
 
             function updateFilterButtons() {
                 $('#barcode_wrapper .barcode-col-filter-btn').each(function () {
-                for (var colKey in columnFilters) {
-                    if (!columnFilters.hasOwnProperty(colKey)) {
-                        continue;
-                    }
-                    var allowed = columnFilters[colKey];
-                    if (!allowed) {
-                        continue;
-                    }
-                    if (allowed.length === 0) {
-                        return false;
-                    }
-                    var colIdx = parseInt(colKey, 10);
-                    var txt = $tds.eq(colIdx).text().replace(/\s+/g, ' ').trim();
-                    if (allowed.indexOf(txt) === -1) {
-                        return false;
-                    }
-                }
-                return true;
-            });
-
-            function updateFilterButtons() {
-                $('#barcode_wrapper .barcode-col-filter-btn').each(function() {
                     var col = String($(this).data('column'));
                     $(this).toggleClass('has-active-filter', columnFilters.hasOwnProperty(col));
                 });
@@ -1023,7 +846,6 @@
                 var $cbs = $dd.find('.barcode-filter-cb:visible');
                 var selected = [];
                 $cbs.filter(':checked').each(function () {
-                $cbs.filter(':checked').each(function() {
                     var v = $(this).data('filterValue');
                     selected.push(v === undefined ? '' : String(v));
                 });
@@ -1073,16 +895,6 @@
                     var $row = $('<label class="custom-control custom-checkbox barcode-filter-row mb-1 d-block">')
                         .append($cb, $('<span class="custom-control-label">').text(label));
 
-                var uniques = getUniqueValues(col);
-                var active = columnFilters[String(col)];
-                uniques.forEach(function(val) {
-                    var label = val === '' ? '(kosong)' : val;
-                    var checked = !active || active.indexOf(val) !== -1;
-                    var $cb = $('<input type="checkbox" class="custom-control-input barcode-filter-cb">')
-                        .data('filterValue', val)
-                        .prop('checked', checked);
-                    var $row = $('<label class="custom-control custom-checkbox barcode-filter-row mb-1 d-block">')
-                        .append($cb, $('<span class="custom-control-label">').text(label));
                     $box.append($row);
                 });
                 filterCheckboxRows($dd);
@@ -1091,7 +903,6 @@
             function filterCheckboxRows($dd) {
                 var q = ($dd.find('.barcode-filter-search').val() || '').toLowerCase();
                 $dd.find('.barcode-filter-row').each(function () {
-                $dd.find('.barcode-filter-row').each(function() {
                     var t = $(this).find('.custom-control-label').text().toLowerCase();
                     $(this).toggle(t.indexOf(q) !== -1);
                 });
@@ -1323,20 +1134,6 @@
 
 
             $(document).on('click', '#barcode-main_wrapper .barcode-filter-select-all', function (e) {
-            /* Bind di #barcode_wrapper (bukan document): stopPropagation mencegah bubble ke
-               document sehingga handler Bootstrap tidak double-toggle; sekaligus th tidak
-               dapat klik sort dari tombol filter. */
-            $('#barcode_wrapper').on('click', '.barcode-col-filter-btn', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                $(this).dropdown('toggle');
-            });
-
-            $(document).on('shown.bs.dropdown', '#barcode_wrapper .barcode-th-filter .dropdown', function() {
-                fillDropdown($(this).find('.barcode-filter-dropdown'));
-            });
-
-            $(document).on('click', '#barcode_wrapper .barcode-filter-select-all', function(e) {
                 e.preventDefault();
                 var $dd = $(this).closest('.barcode-filter-dropdown');
                 $dd.find('.barcode-filter-cb:visible').prop('checked', true);
@@ -1344,7 +1141,6 @@
             });
 
             $(document).on('click', '#barcode-main_wrapper .barcode-filter-clear-col', function (e) {
-            $(document).on('click', '#barcode_wrapper .barcode-filter-clear-col', function(e) {
                 e.preventDefault();
                 var $dd = $(this).closest('.barcode-filter-dropdown');
                 var col = String($dd.data('column'));
@@ -1356,7 +1152,6 @@
             });
 
             $(document).on('change', '#barcode-main_wrapper .barcode-filter-cb', function () {
-            $(document).on('change', '#barcode_wrapper .barcode-filter-cb', function() {
                 var $dd = $(this).closest('.barcode-filter-dropdown');
                 applyFiltersFromDropdown($dd);
             });
@@ -1397,23 +1192,6 @@
             updateFilterButtons();
             syncSortIcons();
             updateSortIcons();
-            table.columns.adjust();
-        });
-    </script>
-@endpush
-            $(document).on('keyup', '#barcode_wrapper .barcode-filter-search', function() {
-                filterCheckboxRows($(this).closest('.barcode-filter-dropdown'));
-            });
-
-            $(document).on('click', '#barcode_wrapper .barcode-filter-dropdown', function(e) {
-                e.stopPropagation();
-            });
-
-            table.on('draw', function() {
-                updateFilterButtons();
-            });
-
-            updateFilterButtons();
             table.columns.adjust();
         });
     </script>
