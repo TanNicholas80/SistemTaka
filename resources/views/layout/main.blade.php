@@ -233,19 +233,22 @@
 
         .brand-link .brand-image {
             margin-right: .8rem !important;
-            max-height: 33px !important;
+            max-height: 20px !important;
             width: auto !important;
             float: none !important;
         }
 
         .brand-text {
             padding-left: .2rem !important;
+            font-size: 0.85rem !important;
+            line-height: 1.2 !important;
         }
 
         /* Branding Adjustments in Collapse Mode */
         .sidebar-collapse .main-sidebar:not(:hover) .brand-link .brand-image {
+            justify-content: center !important;
             padding-left: .1rem !important;
-            margin-right: 0 !important;
+            margin-right: 1rem !important;
         }
 
         .sidebar-collapse .main-sidebar:not(:hover) .brand-text {
@@ -325,6 +328,44 @@
             padding-left: 0 !important;
             margin-left: 0 !important;
         }
+
+        /* Standardize horizontal lines in sidebar & Navbar Alignment */
+        .main-header.navbar {
+            height: 50px !important;
+            padding: 0.1rem !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        .brand-link {
+            height: 50px !important;
+            border-bottom: 1px solid #dee2e6 !important;
+            padding: 0 .8rem !important;
+            margin: 0 !important;
+            width: 100% !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        .user-panel {
+            border-bottom: 1px solid #dee2e6 !important;
+            padding-top: 1.5rem !important;
+            padding-bottom: 1.5rem !important;
+            margin-bottom: 0 !important;
+            margin-left: -0.5rem !important;
+            margin-right: -0.5rem !important;
+            padding-left: 0.5rem !important;
+            display: flex !important;
+            align-items: center !important;
+        }
+
+        .user-panel .info {
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
+        }
     </style>
 </head>
 
@@ -357,7 +398,7 @@
                     <a class="nav-link" data-widget="pushmenu" href="#" role="button"><i class="fas fa-bars"></i></a>
                 </li>
                 <li class="nav-item d-none d-sm-inline-block">
-                    <a href="{{ route('dashboard') }}" class="nav-link">Home</a>
+                    <a href="{{ route('barang_master.index') }}" class="nav-link">Home</a>
                 </li>
 
             </ul>
@@ -397,7 +438,7 @@
             <!-- Sidebar -->
             <div class="sidebar">
                 <!-- Sidebar user panel (optional) -->
-                <div class="user-panel mt-3 pb-3 mb-3 d-flex align-items-center">
+                <div class="user-panel d-flex align-items-center">
                     <div class="image">
                         <img src="{{ asset('images/av1.png') }}" class="img-circle elevation-2" alt="User Image">
                     </div>
@@ -421,7 +462,7 @@
 
                         <!-- Dashboard Menu -->
                         <!-- <li class="nav-item">
-                            <a href="{{ route('dashboard') }}"
+                            <a href="{{ route('barang_master.index') }}"
                                 class="nav-link {{ Request::routeIs('dashboard') ? 'active' : '' }}">
                                 <i class="nav-icon fas fa-tachometer-alt"></i>
                                 <p>Dashboard</p>
