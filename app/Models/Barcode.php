@@ -279,6 +279,7 @@ class Barcode extends Model
                 'id_pb',
                 'item_flag',
                 'special_treatment',
+                'material_type'
             ])
             ->logOnlyDirty() // Hanya log perubahan yang benar-benar terjadi
             ->dontSubmitEmptyLogs() // Jangan submit log kosong
@@ -325,6 +326,7 @@ class Barcode extends Model
                     'date' => $this->date,
                     'jatuh_tempo' => $this->jatuh_tempo,
                     'vehicle_number' => $this->vehicle_number,
+                    'material_type' => $this->material_type,
                     'updated_at' => $this->updated_at->format('Y-m-d H:i:s')
                 ],
                 'updated_fields' => array_keys($changes),

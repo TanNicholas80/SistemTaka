@@ -810,7 +810,7 @@ class ReturPembelianController extends Controller
             'return_type' => 'required|in:invoice,invoice_dp,no_invoice,receive,po',
             'detailItems' => 'required|array|min:1',
             'detailItems.*.kode' => 'required|string',
-            'detailItems.*.kuantitas' => 'required|string',
+            'detailItems.*.kuantitas' => 'required|numeric|min:0',
             'detailItems.*.harga' => 'required|numeric|min:0',
             'detailItems.*.diskon' => 'nullable|numeric|min:0',
         ];
@@ -841,6 +841,7 @@ class ReturPembelianController extends Controller
             'detailItems.min' => 'Minimal harus ada 1 item yang diinputkan.',
             'detailItems.*.kode.required' => 'Kode item wajib diisi.',
             'detailItems.*.kuantitas.required' => 'Kuantitas item wajib diisi.',
+            'detailItems.*.kuantitas.min' => 'Kuantitas item tidak boleh kurang dari 0.',
             'detailItems.*.harga.required' => 'Harga item wajib diisi.',
             'detailItems.*.harga.min' => 'Harga item tidak boleh kurang dari 0.',
             'detailItems.*.diskon.numeric' => 'Diskon item harus berupa angka.',
@@ -858,6 +859,44 @@ class ReturPembelianController extends Controller
         try {
             $validatedData = $validator->validated();
             $returnType = $validatedData['return_type'];
+
+            // Validasi: setidaknya harus ada 1 item dengan kuantitas > 0
+            $hasAnyItemWithQty = false;
+            if (isset($validatedData['detailItems']) && is_array($validatedData['detailItems'])) {
+                foreach ($validatedData['detailItems'] as $di) {
+                    if (!is_array($di)) continue;
+                    if ((float)($di['kuantitas'] ?? 0) > 0) {
+                        $hasAnyItemWithQty = true;
+                        break;
+                    }
+                }
+            }
+            if (!$hasAnyItemWithQty) {
+                return back()->withInput()->with('error', 'Setidaknya harus ada satu item yang memiliki kuantitas lebih dari 0.');
+            }
+
+            // Validasi serial: jika item mengirim serial, minimal 1 serial harus qty > 0
+            if (isset($validatedData['detailItems']) && is_array($validatedData['detailItems'])) {
+                foreach ($validatedData['detailItems'] as $i => $di) {
+                    if (!is_array($di)) continue;
+                    if (!array_key_exists('detailSerialNumber', $di)) continue;
+                    if (!is_array($di['detailSerialNumber'] ?? null)) continue;
+
+                    $detailSerials = $di['detailSerialNumber'] ?? [];
+                    $hasAnyQty = false;
+                    foreach ($detailSerials as $sn) {
+                        if (!is_array($sn)) continue;
+                        $qty = (float)($sn['quantity'] ?? 0);
+                        if ($qty > 0) {
+                            $hasAnyQty = true;
+                            break;
+                        }
+                    }
+                    if (!$hasAnyQty && (float)($di['kuantitas'] ?? 0) > 0) {
+                        return back()->withInput()->with('error', 'Barcode / No Seri/Produksi untuk item "' . ($di['kode'] ?? '') . '" tidak boleh kosong.');
+                    }
+                }
+            }
 
             $apiToken = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null);
             $signatureSecret = (\App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null);
@@ -962,10 +1001,17 @@ class ReturPembelianController extends Controller
                 if (!empty($item['detailSerialNumber']) && is_array($item['detailSerialNumber'])) {
                     $accurateItem['detailSerialNumber'] = [];
                     foreach ($item['detailSerialNumber'] as $sn) {
-                        if (!empty($sn['serialNumberNo'])) {
+                        $serialNumberNo = trim((string)($sn['serialNumberNo'] ?? ''));
+                        // Scanner kadang mengirim format: "10digits;berat;panjang" -> ambil bagian pertama saja
+                        if (strpos($serialNumberNo, ';') !== false) {
+                            $serialNumberNo = trim(explode(';', $serialNumberNo)[0]);
+                        }
+                        if (strlen($serialNumberNo) > 10) $serialNumberNo = substr($serialNumberNo, 0, 10);
+                        $qty = (float)($sn['quantity'] ?? 0);
+                        if ($serialNumberNo !== '' && $qty > 0) {
                             $accurateItem['detailSerialNumber'][] = [
-                                'serialNumberNo' => $sn['serialNumberNo'],
-                                'quantity' => (float) ($sn['quantity'] ?? 0),
+                                'serialNumberNo' => $serialNumberNo,
+                                'quantity' => $qty,
                             ];
                         }
                     }
@@ -1064,6 +1110,10 @@ class ReturPembelianController extends Controller
                 if (!empty($item['detailSerialNumber']) && is_array($item['detailSerialNumber'])) {
                     foreach ($item['detailSerialNumber'] as $sn) {
                         $barcodeStr = trim((string) ($sn['serialNumberNo'] ?? ''));
+                        if (strpos($barcodeStr, ';') !== false) {
+                            $barcodeStr = trim(explode(';', $barcodeStr)[0]);
+                        }
+                        if (strlen($barcodeStr) > 10) $barcodeStr = substr($barcodeStr, 0, 10);
                         if ($barcodeStr === '') continue;
 
                         // Update Barcode table

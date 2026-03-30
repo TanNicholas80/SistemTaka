@@ -44,12 +44,12 @@ class BarcodeNonPL extends Model
      * Catatan:
      * - Ini hanya helper untuk format barcode.
      * - Untuk mekanisme yang robust (anti-duplicate) gunakan reservasi via counter + transaction di Controller.
-     * Format running number: prefix 2 digit + sequence 6 digit (total 8 digit)
+     * Format running number: prefix 2 digit + sequence 6 digit (total 10 digit)
      * contoh: 11000001, 11000002, dst.
      */
     public static function formatBarcode(string $kodeCustomer, int $seq): string
     {
         $prefix = self::prefixForCustomer($kodeCustomer);
-        return $prefix . str_pad((string) $seq, 6, '0', STR_PAD_LEFT);
+        return $prefix . str_pad((string) $seq, 8, '0', STR_PAD_LEFT);
     }
 }

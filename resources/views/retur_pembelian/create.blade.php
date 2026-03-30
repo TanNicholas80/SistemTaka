@@ -131,12 +131,13 @@
                                     <th class="border border-gray-400 px-2 py-1">@Harga</th>
                                     <th class="border border-gray-400 px-2 py-1">Diskon</th>
                                     <th class="border border-gray-400 px-2 py-1">Total Harga</th>
+                                    <th class="border border-gray-400 px-2 py-1 w-10">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody id="table-barang-body" class="bg-white">
                                 <tr>
                                     <td class="border border-gray-400 px-2 py-3 text-left align-top">≡</td>
-                                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="7">
+                                    <td class="border border-gray-400 px-2 py-3 text-center align-top" colspan="8">
                                         Klik "Lanjut" setelah memilih Vendor dan Referensi untuk memuat barang.
                                     </td>
                                 </tr>
@@ -217,12 +218,18 @@
                             <input type="text" id="modal_serial_filter_input" placeholder="Filter nomor serial..."
                                 class="border border-gray-300 rounded px-2 py-1 text-sm">
                         </div>
+                        <div class="grid grid-cols-[120px_1fr] gap-2 items-center text-sm">
+                            <label class="text-gray-600 font-bold">Scan Barcode</label>
+                            <input type="text" id="modal_barcode_scan_input" placeholder="Scan barcode/no seri..."
+                                class="border border-gray-300 rounded px-2 py-1 text-sm">
+                        </div>
                         <div class="max-h-60 overflow-y-auto border border-gray-200 rounded">
                             <table class="w-full text-xs">
                                 <thead class="text-white sticky top-0" style="background-color:#166534">
                                     <tr>
                                         <th class="p-2 border border-gray-300 text-left">Nomor #</th>
                                         <th class="p-2 border border-gray-300 text-center w-28">Kuantitas</th>
+                                        <th class="p-2 border border-gray-300 text-center w-10">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody id="modal_serial_tbody"></tbody>
@@ -359,6 +366,23 @@
                 const res = await r.json();
                 if (res.success) {
                     detailItems = res.detailItems || [];
+                    // Simpan serial asli dari faktur, lalu kosongkan qty & serial untuk scan manual
+                    detailItems.forEach(function(it) {
+                        if (Array.isArray(it.detailSerialNumber) && it.detailSerialNumber.length > 0) {
+                            it._originalSerials = it.detailSerialNumber.map(function(sn) {
+                                return {
+                                    serialNumberNo: String(sn.serialNumberNo || '').trim(),
+                                    quantity: safeNumber(sn.quantity, 0),
+                                    serialNumber: sn.serialNumber || null
+                                };
+                            });
+                        } else {
+                            it._originalSerials = [];
+                        }
+                        it.detailSerialNumber = [];
+                        it._originalQty = safeNumber(it.quantity, 0);
+                        it.quantity = 0;
+                    });
                     renderItemsTable();
                     updateSummary();
                     if (res.vendor) {
@@ -382,7 +406,7 @@
         if (!tbody) return;
         tbody.innerHTML = '';
         if (!detailItems.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="border border-gray-400 p-3 text-center text-gray-500">Klik "Lanjut" setelah memilih Faktur</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="border border-gray-400 p-3 text-center text-gray-500">Klik "Lanjut" setelah memilih Faktur</td></tr>';
             return;
         }
         detailItems.forEach((it, idx) => {
@@ -395,8 +419,23 @@
                 <td class="border border-gray-400 px-2 py-3">${it.itemUnit?.name || '—'}</td>
                 <td class="border border-gray-400 px-2 py-3">${formatCurrency(it.unitPrice || 0)}</td>
                 <td class="border border-gray-400 px-2 py-3">${formatCurrency(getItemDiskon(it))}</td>
-                <td class="border border-gray-400 px-2 py-3">${formatCurrency(computeTotal(it))}</td>`;
+                <td class="border border-gray-400 px-2 py-3">${formatCurrency(computeTotal(it))}</td>
+                <td class="border border-gray-400 px-2 py-3 text-center">
+                    <button type="button" class="btn-hapus-detail text-red-600 font-bold" data-row-index="${idx}" title="Hapus item">X</button>
+                </td>`;
             tbody.appendChild(row);
+
+            const delBtn = row.querySelector('.btn-hapus-detail');
+            if (delBtn) {
+                delBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const i = parseInt(this.getAttribute('data-row-index'), 10);
+                    if (isNaN(i)) return;
+                    detailItems.splice(i, 1);
+                    renderItemsTable();
+                    updateSummary();
+                });
+            }
         });
     }
 
@@ -420,14 +459,25 @@
     // ── Modal Item ────────────────────────────────────────────────────────
     function openItemDetailModal(idx) {
         editingIndex = idx; const it = detailItems[idx]; if (!it) return;
+        // Reset scan bound flag
+        const scanInput = document.getElementById('modal_barcode_scan_input');
+        if (scanInput) delete scanInput.dataset._returPembelianScanBound;
+
         document.getElementById('modalItemDetail').setAttribute('data-editing-row', idx);
         document.getElementById('modal_item_kode').textContent = it.item?.no || '—';
         document.getElementById('modal_item_nama').textContent = it.item?.name || '—';
-        document.getElementById('modal_item_qty').value = it.quantity || 0;
+        var qtyEl = document.getElementById('modal_item_qty');
+        qtyEl.value = it.quantity || 0;
+        var hasSerial = Array.isArray(it._originalSerials) && it._originalSerials.length > 0;
+        qtyEl.readOnly = hasSerial;
+        if (hasSerial) qtyEl.classList.add('bg-gray-200', 'text-gray-500');
+        else qtyEl.classList.remove('bg-gray-200', 'text-gray-500');
         document.getElementById('modal_item_harga').value = it.unitPrice || 0;
         document.getElementById('modal_item_diskon').value = getItemDiskon(it);
         document.getElementById('modal_item_gudang').value = it.warehouse?.name || it.warehouseName || '';
         document.getElementById('modal_item_total').value = formatCurrency(computeTotal(it));
+        const filt = document.getElementById('modal_serial_filter_input');
+        if (filt) filt.value = '';
         switchTab('rincian'); renderSerialTable();
         const m = document.getElementById('modalItemDetail');
         if (typeof $ !== 'undefined') $(m).modal('show');
@@ -436,72 +486,197 @@
     function switchTab(tab) {
         document.querySelectorAll('.retur-modal-tab').forEach(t => t.classList.toggle('active', t.getAttribute('data-tab') === tab));
         document.querySelectorAll('.retur-tab-content').forEach(c => c.classList.toggle('hidden', c.id !== 'tab-content-' + tab));
+        if (tab === 'seri') {
+            renderSerialTable();
+            const scanInput = document.getElementById('modal_barcode_scan_input');
+            if (scanInput) setTimeout(function() { scanInput.focus(); }, 100);
+        }
     }
     document.querySelectorAll('.retur-modal-tab').forEach(t => t.onclick = () => switchTab(t.getAttribute('data-tab')));
 
     function renderSerialTable() {
         const it = detailItems[editingIndex]; if (!it) return;
         const tbody = document.getElementById('modal_serial_tbody');
-        const serials = Array.isArray(it.detailSerialNumber) ? it.detailSerialNumber : [];
+        const scannedSerials = Array.isArray(it.detailSerialNumber) ? it.detailSerialNumber : [];
         const filterStr = document.getElementById('modal_serial_filter_input')?.value.toLowerCase() || '';
-        const filtered = filterStr ? serials.filter(s => (s.serialNumberNo || '').toLowerCase().includes(filterStr)) : serials;
-        
+        let rows = scannedSerials.map(function(sn, idx) { return { sn: sn, idx: idx }; });
+        if (filterStr) {
+            rows = rows.filter(function(r) { return (r.sn.serialNumberNo || '').toLowerCase().includes(filterStr); });
+        }
+
         tbody.innerHTML = '';
-        if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="2" class="p-3 text-center text-gray-500 text-xs">Tidak ada No Seri</td></tr>';
+        if (!scannedSerials.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-gray-400 text-xs">Scan barcode untuk menambahkan No Seri/Produksi</td></tr>';
+        } else if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-gray-400 text-xs">Tidak ada nomor serial yang cocok filter</td></tr>';
         } else {
-            filtered.forEach((s, fIdx) => {
-                // Find original index in it.detailSerialNumber
-                const origIdx = serials.indexOf(s);
-                const tr = document.createElement('tr'); 
+            rows.forEach(function(r) {
+                var sn = r.sn, idx = r.idx;
+                var maxQty = safeNumber(sn._availableQty, safeNumber(sn.quantity, 0));
+                var tr = document.createElement('tr');
                 tr.className = 'border-b hover:bg-gray-50';
-                tr.innerHTML = `
-                    <td class="p-2 border border-gray-200">${s.serialNumberNo || '—'}</td>
-                    <td class="p-1 border border-gray-200 text-center">
-                        <input type="number" step="any" value="${s.quantity || 0}" 
-                            class="modal-sn-qty-input w-full border border-gray-300 rounded px-2 py-0.5 text-center text-xs"
-                            data-orig-idx="${origIdx}">
-                    </td>
-                `;
+                tr.innerHTML =
+                    '<td class="p-2 border border-gray-200">' + (sn.serialNumberNo || '—') + '</td>' +
+                    '<td class="p-1 border border-gray-200 text-center">' +
+                    '<input type="number" step="any" min="0" max="' + maxQty + '" value="' + (sn.quantity || 0) + '" class="modal-sn-qty-input w-full border border-gray-300 rounded px-2 py-0.5 text-center text-xs" data-serial-index="' + idx + '">' +
+                    '</td>' +
+                    '<td class="p-1 border border-gray-200 text-center w-10">' +
+                    '<button type="button" class="btn-hapus-serial text-red-600 font-bold" data-serial-index="' + idx + '" title="Hapus serial">X</button>' +
+                    '</td>';
                 tbody.appendChild(tr);
             });
         }
-        
-        // Add event listeners to SN qty inputs
-        tbody.querySelectorAll('.modal-sn-qty-input').forEach(input => {
-            input.onchange = (e) => {
-                const idx = parseInt(e.target.getAttribute('data-orig-idx'));
-                const newQty = safeNumber(e.target.value);
-                if (it.detailSerialNumber[idx]) {
-                    it.detailSerialNumber[idx].quantity = newQty;
-                    updateSerialSummary();
-                }
+
+        tbody.querySelectorAll('.modal-sn-qty-input').forEach(function(input) {
+            input.onchange = function() {
+                var idx = parseInt(this.getAttribute('data-serial-index'));
+                if (isNaN(idx) || !it.detailSerialNumber[idx]) return;
+                var sn = it.detailSerialNumber[idx];
+                var newQty = safeNumber(this.value, 0);
+                var maxQty = safeNumber(sn._availableQty, newQty);
+                if (newQty > maxQty) newQty = maxQty;
+                if (newQty < 0) newQty = 0;
+                sn.quantity = newQty;
+                updateSerialSummary();
+                renderSerialTable();
             };
         });
-        updateSerialSummary();
+
+        tbody.querySelectorAll('.btn-hapus-serial').forEach(function(btn) {
+            btn.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                var idx = parseInt(this.getAttribute('data-serial-index'));
+                if (isNaN(idx) || !it.detailSerialNumber) return;
+                it.detailSerialNumber.splice(idx, 1);
+                updateSerialSummary();
+                renderSerialTable();
+            };
+        });
+
+        bindBarcodeScanPembelian(it);
+        if (scannedSerials.length > 0) updateSerialSummary();
+        else {
+            var sm = document.getElementById('modal_serial_summary');
+            if (sm) sm.textContent = '0 No Seri/Produksi, Jumlah 0';
+        }
+    }
+
+    function bindBarcodeScanPembelian(item) {
+        var scanInputEl = document.getElementById('modal_barcode_scan_input');
+        if (!scanInputEl || !item) return;
+        if (scanInputEl.dataset._returPembelianScanBound) return;
+        scanInputEl.dataset._returPembelianScanBound = '1';
+        var scanAutoInProgress = false;
+        function extractBarcode10(raw) {
+            var part = String(raw || '').split(';')[0].trim();
+            if (part.length > 10) part = part.substring(0, 10);
+            return part;
+        }
+        // Auto-submit saat scanner mengirim format: "10digits;berat;panjang"
+        scanInputEl.addEventListener('input', function() {
+            if (scanAutoInProgress) return;
+            var rawVal = (scanInputEl.value || '').trim();
+            var barcode10 = extractBarcode10(rawVal);
+            if (barcode10.length !== 10) return;
+            scanAutoInProgress = true;
+            scanInputEl.value = barcode10;
+            scanInputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+            setTimeout(function() { scanAutoInProgress = false; }, 0);
+        });
+        scanInputEl.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            var barcode = extractBarcode10(scanInputEl.value);
+            if (barcode.length !== 10) return;
+            if (!barcode) return;
+
+            var currentItem = detailItems[editingIndex];
+            if (!currentItem) return;
+
+            var origSerials = Array.isArray(currentItem._originalSerials) ? currentItem._originalSerials : [];
+            var origMatch = null;
+            for (var i = 0; i < origSerials.length; i++) {
+                if (String(origSerials[i].serialNumberNo).trim() === barcode) { origMatch = origSerials[i]; break; }
+            }
+
+            if (!origMatch) {
+                Swal.fire({ icon: 'error', title: 'Barcode tidak ditemukan', text: 'Barcode "' + barcode + '" tidak ada di faktur ini.', timer: 2500, showConfirmButton: false, toast: true, position: 'top-end' });
+                scanInputEl.value = '';
+                return;
+            }
+
+            if (!Array.isArray(currentItem.detailSerialNumber)) currentItem.detailSerialNumber = [];
+            var alreadyAdded = currentItem.detailSerialNumber.some(function(sn) {
+                return String(sn.serialNumberNo).trim() === barcode;
+            });
+            if (alreadyAdded) {
+                Swal.fire({ icon: 'warning', title: 'Barcode sudah discan', text: 'No seri/produksi "' + barcode + '" sudah ada di daftar.', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
+                scanInputEl.value = '';
+                return;
+            }
+
+            currentItem.detailSerialNumber.push({
+                serialNumberNo: origMatch.serialNumberNo,
+                quantity: origMatch.quantity,
+                _availableQty: origMatch.quantity,
+                serialNumber: origMatch.serialNumber || null
+            });
+
+            Swal.fire({ icon: 'success', title: 'Barcode ditemukan', text: origMatch.serialNumberNo + ' (qty: ' + origMatch.quantity + ')', timer: 1500, showConfirmButton: false, toast: true, position: 'top-end' });
+
+            updateSerialSummary();
+            renderSerialTable();
+            scanInputEl.value = '';
+        });
     }
 
     function updateSerialSummary() {
         const it = detailItems[editingIndex]; if (!it) return;
         const serials = Array.isArray(it.detailSerialNumber) ? it.detailSerialNumber : [];
-        const qSum = serials.reduce((s, x) => s + safeNumber(x.quantity), 0);
+        const count = serials.length;
+        const qSum = serials.reduce(function(s, x) { return s + safeNumber(x.quantity, 0); }, 0);
         const sm = document.getElementById('modal_serial_summary');
-        if (sm) sm.textContent = `${serials.length} No Seri/Produksi, Jumlah ${formatCurrency(qSum)}`;
-        
-        // Sync item quantity with SN sum if manageSN is true
-        if (it.item?.manageSN) {
-            document.getElementById('modal_item_qty').value = qSum;
+        if (sm) sm.textContent = count + ' No Seri/Produksi, Jumlah ' + formatCurrency(qSum);
+
+        const modalQtyEl = document.getElementById('modal_item_qty');
+        if (modalQtyEl) modalQtyEl.value = qSum;
+        it.quantity = qSum;
+
+        const modalHargaEl = document.getElementById('modal_item_harga');
+        const modalDiskonEl = document.getElementById('modal_item_diskon');
+        const modalTotalEl = document.getElementById('modal_item_total');
+        const harga = safeNumber(modalHargaEl?.value, it.unitPrice || 0);
+        const diskonInput = safeNumber(modalDiskonEl?.value, 0);
+        let gross = qSum * harga;
+        let total = gross;
+        if (diskonInput > 0) {
+            total = diskonInput <= 100 ? gross - (gross * (diskonInput / 100)) : gross - diskonInput;
         }
+        if (total < 0) total = 0;
+        if (modalTotalEl) modalTotalEl.value = formatCurrency(total);
+
+        // Ikat diskon ke struktur item agar saat Save total konsisten
+        it.unitPrice = harga;
+        if (diskonInput <= 100) { it.itemDiscPercent = diskonInput; it.itemCashDiscount = null; }
+        else { it.itemCashDiscount = diskonInput; it.itemDiscPercent = null; }
     }
     const sFilt = document.getElementById('modal_serial_filter_input');
     if (sFilt) sFilt.oninput = renderSerialTable;
 
     document.getElementById('modalItemDetailSave').onclick = () => {
         const it = detailItems[editingIndex]; if (!it) return;
-        it.quantity = safeNumber(document.getElementById('modal_item_qty').value);
         it.unitPrice = safeNumber(document.getElementById('modal_item_harga').value);
         const d = safeNumber(document.getElementById('modal_item_diskon').value);
         if (d <= 100) { it.itemDiscPercent = d; it.itemCashDiscount = null; } else { it.itemCashDiscount = d; it.itemDiscPercent = null; }
+        // Qty diambil dari serial yang sudah discan
+        if (Array.isArray(it.detailSerialNumber) && it.detailSerialNumber.length > 0) {
+            it.quantity = it.detailSerialNumber.reduce(function(sum, sn) { return sum + safeNumber(sn.quantity, 0); }, 0);
+        } else if (Array.isArray(it._originalSerials) && it._originalSerials.length > 0) {
+            it.quantity = safeNumber(document.getElementById('modal_item_qty').value, 0);
+        } else {
+            it.quantity = safeNumber(document.getElementById('modal_item_qty').value, it.quantity);
+        }
         renderItemsTable(); updateSummary();
         if (typeof $ !== 'undefined') $('#modalItemDetail').modal('hide');
     };
@@ -512,6 +687,8 @@
         if (!vendorNoHidden.value) return Swal.fire('Peringatan', 'Vendor wajib ada', 'warning');
         if (!returnReferensiId.value) return Swal.fire('Peringatan', 'Faktur wajib ada', 'warning');
         if (!detailItems.length) return Swal.fire('Peringatan', 'Muat barang dulu', 'warning');
+        var hasItemWithQty = detailItems.some(function(it) { return safeNumber(it.quantity, 0) > 0; });
+        if (!hasItemWithQty) return Swal.fire('Peringatan', 'Setidaknya harus ada satu item yang memiliki kuantitas lebih dari 0. Scan barcode terlebih dahulu.', 'warning');
         
         f.querySelectorAll('input[name^="detailItems"]').forEach(i => i.remove());
         detailItems.forEach((it, idx) => {
@@ -523,7 +700,8 @@
                 i.name = `detailItems[${idx}][${k}]`; i.value = v; f.appendChild(i);
             });
             if (Array.isArray(it.detailSerialNumber)) {
-                it.detailSerialNumber.forEach((sn, sidx) => {
+                var filteredSn = it.detailSerialNumber.filter(function(sn) { return sn.serialNumberNo && safeNumber(sn.quantity, 0) > 0; });
+                filteredSn.forEach((sn, sidx) => {
                     const sn_no = document.createElement('input'); sn_no.type = 'hidden';
                     sn_no.name = `detailItems[${idx}][detailSerialNumber][${sidx}][serialNumberNo]`;
                     sn_no.value = sn.serialNumberNo || ''; f.appendChild(sn_no);
