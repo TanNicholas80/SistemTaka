@@ -70,7 +70,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/barcode', [BarcodeController::class, 'index'])->name('barcode.index');
         Route::get('/barang-masuk', [BarangMasukController::class, 'index'])->name('barang-masuk.index');
         Route::get('/packing-list', [PackingListController::class, 'index'])->name('packing-list.index');
-        Route::get('/packing-list/detail/{id}', [PackingListController::class, 'show'])->name('packing_list_detail');
+        Route::get('/packing-list/{id}', [PackingListController::class, 'show'])->name('packing-list.show');
 
         // Profile Detail
         Route::get('/profile', [UserController::class, 'editProfile'])->name('user.profile');
