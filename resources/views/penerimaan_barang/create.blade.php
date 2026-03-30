@@ -378,7 +378,14 @@
 
 <script>
     const nomor_po = JSON.parse(`{!! addslashes(json_encode($purchase_order)) !!}`);
+    /** PO terfilter untuk mode antar toko (vendor TOKO sesuai cabang Bandung/Magelang). */
+    const nomor_po_antar_toko = JSON.parse(`{!! addslashes(json_encode($purchase_order_antar_toko ?? $purchase_order)) !!}`);
     const nomor_do = JSON.parse(`{!! addslashes(json_encode($delivery_orders ?? [])) !!}`);
+
+    function getNomorPoListForCurrentMode() {
+        const mode = document.querySelector('input[name="mode"]:checked')?.value || 'packing_list';
+        return mode === 'antar_toko' ? nomor_po_antar_toko : nomor_po;
+    }
     const printNonPlPdfEndpoint = "{{ route('penerimaan-barang.non-pl.print-pdf') }}";
 
     console.log('Nomor PO data:', nomor_po);
@@ -1350,7 +1357,8 @@
             return;
         }
 
-        const resultPO = nomor_po.filter(po =>
+        const listPO = getNomorPoListForCurrentMode();
+        const resultPO = listPO.filter(po =>
             po.number_po.toLowerCase().includes(query) ||
             po.date_po.toLowerCase().includes(query)
         );
@@ -1805,11 +1813,12 @@
     function showAllPO() {
         const dropdownPO = document.getElementById('dropdown-no-po');
 
-        console.log('Menampilkan semua PO, total:', nomor_po.length);
+        const listPO = getNomorPoListForCurrentMode();
+        console.log('Menampilkan semua PO, total:', listPO.length);
 
         dropdownPO.innerHTML = '';
 
-        if (nomor_po.length === 0) {
+        if (listPO.length === 0) {
             const noDataItem = document.createElement('div');
             noDataItem.className = 'px-3 py-2 text-center text-gray-500 border-b';
             noDataItem.innerHTML = '<i class="fas fa-info-circle mr-2"></i>Tidak ada data PO';
@@ -1818,12 +1827,12 @@
             // Tambahkan header info
             const headerItem = document.createElement('div');
             headerItem.className = 'px-3 py-2 bg-gray-50 border-b font-semibold text-sm text-gray-700';
-            headerItem.innerHTML = `<i class="fas fa-list mr-2"></i>Semua Nomor PO (${nomor_po.length})`;
+            headerItem.innerHTML = `<i class="fas fa-list mr-2"></i>Semua Nomor PO (${listPO.length})`;
             dropdownPO.appendChild(headerItem);
 
             // Tampilkan semua PO (batas maksimal untuk performa)
             const maxShow = 50; // Batasi tampilan untuk performa
-            const poToShow = nomor_po.slice(0, maxShow);
+            const poToShow = listPO.slice(0, maxShow);
 
             poToShow.forEach(po => {
                 const item = document.createElement('div');
@@ -1855,10 +1864,10 @@
             });
 
             // Jika ada lebih banyak data, tampilkan info
-            if (nomor_po.length > maxShow) {
+            if (listPO.length > maxShow) {
                 const moreInfoItem = document.createElement('div');
                 moreInfoItem.className = 'px-3 py-2 bg-blue-50 border-b text-sm text-blue-600 text-center';
-                moreInfoItem.innerHTML = `<i class="fas fa-info-circle mr-2"></i>Menampilkan ${maxShow} dari ${nomor_po.length} PO. Ketik untuk pencarian spesifik.`;
+                moreInfoItem.innerHTML = `<i class="fas fa-info-circle mr-2"></i>Menampilkan ${maxShow} dari ${listPO.length} PO. Ketik untuk pencarian spesifik.`;
                 dropdownPO.appendChild(moreInfoItem);
             }
         }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Barcode;
 use App\Models\Branch;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
@@ -139,6 +140,28 @@ class PrintBarcodeController extends Controller
                     'unit' => $unit,
                 ];
             }
+
+            $serials = array_values(array_filter(array_column($rows, 'serialNo')));
+            $jobOrderByBarcode = [];
+            if ($serials !== []) {
+                foreach (
+                    Barcode::forBranch($branch)
+                        ->whereIn('barcode', $serials)
+                        ->get(['barcode', 'job_order']) as $local
+                ) {
+                    $key = (string) $local->barcode;
+                    if ($key === '')
+                        continue;
+                    $jo = $local->job_order;
+                    $jobOrderByBarcode[$key] = $jo !== null && $jo !== '' ? (string) $jo : '';
+                }
+            }
+
+            foreach ($rows as &$row) {
+                $key = (string) ($row['serialNo'] ?? '');
+                $row['noSeriLocal'] = $jobOrderByBarcode[$key] ?? '';
+            }
+            unset($row);
 
             return response()->json($rows);
         } catch (\Throwable $e) {

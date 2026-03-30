@@ -26,23 +26,118 @@ class PackingListController extends Controller
         $branchId = session('active_branch');
         $packingList = PackingList::forBranch($branchId)->findOrFail($id);
 
-        // Jika packing list masih pending, tampilkan data dari raw_barcodes (hasil tarik dari SAP).
-        // Jika sudah approved, tampilkan data dari barcodes (data final/ter-approve).
-        if (($packingList->status ?? PackingList::STATUS_PENDING) === PackingList::STATUS_APPROVED) {
+        /**
+         * Prioritas sumber baris:
+         * - approved / closed / used: ambil dari barcodes (final), filter kode_customer = milik PL
+         *   (konsisten; menghindari kasus scope forBranch / super_admin membuat query kosong).
+         * - Jika kosong: fallback ke raw_barcodes (SAP) agar detail tetap ada baris bila barcode final belum ada / belum sinkron.
+         * - pending: langsung dapat data dari fallback raw_barcodes.
+         */
+        $status = (string) ($packingList->status ?? PackingList::STATUS_PENDING);
+        $useFinalBarcodes = in_array($status, [
+            PackingList::STATUS_APPROVED,
+            PackingList::STATUS_CLOSED,
+            'used',
+        ], true);
+
+        $barcodes = collect();
+        if ($useFinalBarcodes) {
             $barcodes = $packingList->barcodes()
-                ->forBranch($branchId)
-                ->get();
-        } else {
-            // RawBarcode tidak punya scopeForBranch, jadi filter pakai kode_customer dari packing list.
-            $barcodes = $packingList->rawBarcodes()
                 ->where('kode_customer', $packingList->kode_customer)
                 ->get();
         }
 
+        if ($barcodes->isEmpty()) {
+            $barcodes = $packingList->rawBarcodes()->get();
+        }
+
+        $barcodeRows = $barcodes->map(function ($barcode) {
+            return [
+                'barcode' => $barcode,
+                'display' => $this->formatPackingListDetailDisplay($barcode),
+            ];
+        });
+
         return view('packing_list.detail', [
             'data' => $packingList,
-            'barcodes' => $barcodes
+            'barcodes' => $barcodes,
+            'barcodeRows' => $barcodeRows,
         ]);
+    }
+
+    /**
+     * Tampilan kolom Berat / Panjang MLC / Panjang Yard per material_type & base_uom.
+     *
+     * - ZDWN, ZPWN: dari length — yd → MLC = length×0.9, Yard = length; m → MLC = length, Yard = length/0.9; Berat dari weight
+     * - ZDKN: Berat KG dari weight
+     * - ZDNM: Panjang Yard = length; Berat dari weight
+     * - lainnya: perilaku lama (berat + panjang sebagai MLC)
+     */
+    private function formatPackingListDetailDisplay(object $barcode): array
+    {
+        $mt = strtoupper(trim((string) ($barcode->material_type ?? '')));
+        $length = isset($barcode->length) && $barcode->length !== '' ? (float) $barcode->length : null;
+        $weight = isset($barcode->weight) && $barcode->weight !== '' ? (float) $barcode->weight : null;
+        $baseUom = strtolower(trim((string) ($barcode->base_uom ?? '')));
+
+        $fmt = static function (?float $v): ?string {
+            if ($v === null) {
+                return null;
+            }
+
+            return number_format($v, 2, '.', '');
+        };
+
+        $berat = null;
+        $panjangMlc = null;
+        $panjangYard = null;
+
+        if (in_array($mt, ['ZDWN', 'ZPWN'], true)) {
+            if ($length !== null) {
+                $isYd = $baseUom === 'yd'
+                    || $baseUom === 'yard'
+                    || ($baseUom !== '' && strpos($baseUom, 'yd') !== false);
+                $isM = $baseUom === 'm' || $baseUom === 'meter';
+
+                if ($isYd) {
+                    $panjangMlc = $fmt($length * 0.9);
+                    $panjangYard = $fmt($length);
+                } elseif ($isM) {
+                    $panjangMlc = $fmt($length);
+                    $panjangYard = $fmt($length / 0.9);
+                } else {
+                    $panjangMlc = $fmt($length);
+                    $panjangYard = $fmt($length / 0.9);
+                }
+            }
+            if ($weight !== null) {
+                $berat = $fmt($weight);
+            }
+        } elseif ($mt === 'ZDKN') {
+            if ($weight !== null) {
+                $berat = $fmt($weight);
+            }
+        } elseif ($mt === 'ZDNM') {
+            if ($length !== null) {
+                $panjangYard = $fmt($length);
+            }
+            if ($weight !== null) {
+                $berat = $fmt($weight);
+            }
+        } else {
+            if ($weight !== null) {
+                $berat = $fmt($weight);
+            }
+            if ($length !== null) {
+                $panjangMlc = $fmt($length);
+            }
+        }
+
+        return [
+            'berat' => $berat,
+            'panjang_mlc' => $panjangMlc,
+            'panjang_yard' => $panjangYard,
+        ];
     }
 
     public function create()

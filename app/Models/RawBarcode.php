@@ -49,6 +49,7 @@ class RawBarcode extends Model
         'sample',
         'kodisi_kain',
         'special_treatment',
+        'material_type'
     ];
 
     protected $casts = [
