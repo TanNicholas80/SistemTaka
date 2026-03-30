@@ -25,6 +25,6 @@ class RoleMiddleware
             return $next($request);
         }
 
-        return redirect()->route('dashboard')->with('error', 'Anda tidak memiliki akses');
+        return redirect()->route('barang_master.index')->with('error', 'Anda tidak memiliki akses');
     }
 }

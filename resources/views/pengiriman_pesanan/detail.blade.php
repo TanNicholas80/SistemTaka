@@ -78,7 +78,7 @@
                 </div>
                 <div class="col-sm-6">
                     <ol class="breadcrumb float-sm-right">
-                        <li class="breadcrumb-item"><a href="{{ route('dashboard') }}">Home</a></li>
+                        <li class="breadcrumb-item"><a href="{{ route('barang_master.index') }}">Home</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('pengiriman_pesanan.index') }}">Pengiriman Pesanan</a></li>
                         <li class="breadcrumb-item active">Detail</li>
                     </ol>

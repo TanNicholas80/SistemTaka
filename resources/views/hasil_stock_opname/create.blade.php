@@ -27,7 +27,7 @@
                 </div>
                 <div class="col-sm-6">
                     <ol class="breadcrumb float-sm-right">
-                        <li class="breadcrumb-item"><a href="{{ route('dashboard') }}">Home</a></li>
+                        <li class="breadcrumb-item"><a href="{{ route('barang_master.index') }}">Home</a></li>
                         <li class="breadcrumb-item"><a href="{{ route('hasil_stock_opname.index') }}">Hasil Stock
                                 Opname</a></li>
                         <li class="breadcrumb-item active">Stock Opname</li>
