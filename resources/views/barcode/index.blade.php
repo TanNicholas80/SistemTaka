@@ -777,6 +777,8 @@
                     "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>"
             });
 
+            $table.find('thead th').off('click.DT');
+
             $('.barcode-reset-controls-container').html(
                 '<button type="button" class="btn btn-sm btn-outline-danger barcode-reset-filter-btn mr-2" title="Reset Filter"><i class="fas fa-filter"></i> Reset Filter</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-danger barcode-reset-sort-btn" title="Reset Sortir"><i class="fas fa-undo"></i> Reset Sortir</button>'
