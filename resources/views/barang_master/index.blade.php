@@ -37,9 +37,14 @@
                         <div class="card-header">
                             <div class="d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">Data Barang</h3>
-                                <button type="button" class="btn btn-primary btn-sm" onclick="refreshCache()">
-                                    <i class="fas fa-sync-alt"></i> Refresh Data
-                                </button>
+                                <div class="d-flex align-items-center">
+                                    <div class="dt-reset-controls mr-2" data-table="#barang_master">
+                                        <!-- Reset Sortir button will be injected here by global JS -->
+                                    </div>
+                                    <button type="button" class="btn btn-primary btn-sm" onclick="refreshCache()">
+                                        <i class="fas fa-sync-alt"></i> Refresh Data
+                                    </button>
+                                </div>
                             </div>
                         </div>
 
@@ -47,11 +52,36 @@
                             <table id="barang_master" class="table table-bordered table-striped text-nowrap w-100">
                                 <thead>
                                     <tr>
-                                        <th>Nama Barang</th>
-                                        <th>Kode Barang</th>
-                                        <th>Jenis Barang</th>
-                                        <th>Satuan Barang</th>
-                                        <th>Stok Dapat Dijual</th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Nama Barang</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Kode Barang</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Jenis Barang</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Satuan Barang</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Stok Dapat Dijual</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>

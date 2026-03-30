@@ -47,11 +47,36 @@
                             <table id="pesanan_pembelian" class="table table-head-fixed text-nowrap">
                                 <thead>
                                     <tr>
-                                        <th>Nomor #</th>
-                                        <th>Tanggal</th>
-                                        <th>Pemasok</th>
-                                        <th>Status</th>
-                                        <th>Total</th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Nomor #</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Tanggal</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Pemasok</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Status</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
+                                        <th>
+                                            <div class="dt-th-flex">
+                                                <span class="dt-th-title">Total</span>
+                                                <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                            </div>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>

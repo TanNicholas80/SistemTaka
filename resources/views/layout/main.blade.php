@@ -188,6 +188,104 @@
         .dataTables_scrollHeadInner,
         .dataTables_scrollHeadInner>.table {
             width: 100% !important;
+            margin: 0 !important;
+        }
+
+        /* Global High-Fidelity Table Standard (Based on Barcode Page) */
+        .dt-th-flex {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            min-width: 0;
+            width: 100%;
+        }
+
+        .dt-th-flex .dt-th-title {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+
+        .dt-sort-icon {
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 1px;
+            line-height: 1;
+            color: #ccc;
+            cursor: pointer;
+            user-select: none;
+            margin-left: 4px;
+        }
+
+        .dt-sort-icon span {
+            opacity: 0.2;
+            color: #000;
+            transition: opacity 0.1s;
+        }
+
+        .dt-sort-icon.asc .up,
+        .dt-sort-icon.desc .down {
+            opacity: 1 !important;
+            font-weight: bold;
+        }
+
+        .dt-sort-pointer {
+            cursor: pointer !important;
+        }
+
+        /* Hide default DataTables arrows */
+        table.dataTable thead th::before,
+        table.dataTable thead th::after {
+            display: none !important;
+            content: "" !important;
+        }
+
+        /* Custom Scrollbar for synced headers */
+        .dataTables_scrollBody::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .dataTables_scrollBody::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        /* Improved 2x2 layout for DataTables controls */
+        .dataTables_wrapper .row:first-child {
+            margin-bottom: 0.5rem !important;
+            padding-top: 0.5rem;
+        }
+
+        .dt-controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 1.25rem !important; /* Spacing before table */
+        }
+
+        .dt-buttons-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .dt-reset-sort-container {
+            margin-left: auto;
+            padding-right: 5px;
+        }
+
+        /* Fix alignment of Search box and Length menu */
+        .dataTables_length { margin-bottom: 0 !important; }
+        .dataTables_filter { margin-bottom: 0 !important; }
+        .dataTables_filter label { margin-bottom: 0 !important; }
+
+        .dataTables_scrollBody::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 4px;
+        }
+
+        .dataTables_scrollBody::-webkit-scrollbar-thumb:hover {
+            background: #aaa;
         }
 
         /* Profile Image Fix */
@@ -758,6 +856,8 @@
             setInterval(updateDateTime, 1000);
         });
 
+        var globalSortStacks = {}; // Store sort state for each table
+
         $(document).ready(function () {
             let tables = [
                 '#user',
@@ -780,11 +880,35 @@
                 '#retur_pembelian',
                 '#retur_penjualan'
             ];
-            let initialized = 0;
+            let activeDataTables = {};
+
+            function syncGlobalSortIcons(tableId) {
+                var tableApi = activeDataTables[tableId];
+                if (!tableApi) return;
+
+                var order = tableApi.order();
+                var $thList = $(tableId).find('thead th');
+
+                // Reset all icons for this table
+                $thList.find('.dt-sort-icon').removeClass('asc desc');
+
+                order.forEach(function (o) {
+                    var colIdx = o[0];
+                    var dir = o[1];
+                    var $th = $(tableApi.column(colIdx).header());
+                    var $icon = $th.find('.dt-sort-icon');
+                    if ($icon.length) {
+                        $icon.addClass(dir);
+                    }
+                });
+            }
 
             function initializeDataTable(tableId) {
                 if ($(tableId).length) {
-                    $(tableId).DataTable({
+                    // Initialize sorting state for this table
+                    globalSortStacks[tableId] = [];
+
+                    var tableApi = $(tableId).DataTable({
                         "paging": true,
                         "responsive": false,
                         "lengthChange": true,
@@ -793,22 +917,93 @@
                         "searching": true,
                         "ordering": true,
                         "info": true,
-                        "buttons": ["copy", "colvis"]
-                    }).on('init', function () {
-                        initialized++;
-                        if (initialized === tables.filter(id => $(id).length).length) {
-                            hideLoading();
+                        "buttons": ["copy", "colvis"],
+                        "drawCallback": function () {
+                            syncGlobalSortIcons(tableId);
                         }
                     });
-                    $(tableId + '_wrapper .col-md-6:eq(0)').length && $(tableId).DataTable().buttons().container()
-                        .appendTo($(tableId + '_wrapper .col-md-6:eq(0)'));
+
+                    activeDataTables[tableId] = tableApi;
+
+                    // Standard Buttons placement with Professional 2x2 Alignment
+                    var $wrapper = $(tableId + '_wrapper');
+                    
+                    // Create a secondary row for Buttons and Reset
+                    var $secondaryRow = $('<div class="row dt-controls-row"></div>');
+                    var $leftCol = $('<div class="col-sm-12 col-md-6 d-flex align-items-center"></div>');
+                    var $rightCol = $('<div class="col-sm-12 col-md-6 d-flex justify-content-end align-items-center"></div>');
+                    
+                    $secondaryRow.append($leftCol).append($rightCol);
+                    
+                    // Insert after the first row (Length + Filter row)
+                    $wrapper.find('.row:first').after($secondaryRow);
+                    
+                    // Append actual buttons to the left col
+                    tableApi.buttons().container().appendTo($leftCol);
+                    
+                    // Append Reset Sort Button to the right col
+                    $rightCol.html(
+                        '<button type="button" class="btn btn-sm btn-outline-danger dt-reset-sort-btn" data-table="' + tableId + '" title="Reset Sortir">' +
+                        '<i class="fas fa-undo"></i> Reset Sortir</button>'
+                    );
+
+                    // Hide old header reset containers
+                    $('.dt-reset-controls[data-table="' + tableId + '"]').hide();
+
+                    // Hide the header-based reset containers as we move to the standardized position
+                    $('.dt-reset-controls[data-table="' + tableId + '"]').hide();
+
+                    // Cumulative Multi-Sort Click Handler
+                    $(tableId).find('thead th').addClass('dt-sort-pointer').on('click.customSort', function (e) {
+                        // Skip if clicking specific interaction buttons (like filters)
+                        if ($(e.target).closest('button, a, .dropdown-menu').length) return;
+
+                        e.preventDefault();
+                        var colIdx = tableApi.column($(this)).index();
+                        var stack = globalSortStacks[tableId];
+                        var foundIdx = -1;
+
+                        for (var i = 0; i < stack.length; i++) {
+                            if (stack[i][0] === colIdx) {
+                                foundIdx = i;
+                                break;
+                            }
+                        }
+
+                        if (foundIdx !== -1) {
+                            stack[foundIdx][1] = (stack[foundIdx][1] === 'asc' ? 'desc' : 'asc');
+                        } else {
+                            stack.push([colIdx, 'asc']);
+                        }
+
+                        tableApi.order(stack).draw();
+                    });
+
+                    tableApi.on('init', function () {
+                        // Ensure layout adjustment on full load
+                        setTimeout(function () { tableApi.columns.adjust(); }, 200);
+                    });
                 }
             }
+
             tables.forEach(initializeDataTable);
-            // Jika tidak ada tabel, tetap hide loading agar tidak macet
-            if (tables.filter(id => $(id).length).length === 0) {
-                hideLoading();
-            }
+
+            // Global Reset Handler
+            $(document).on('click', '.dt-reset-sort-btn', function () {
+                var tableId = $(this).data('table');
+                var tableApi = activeDataTables[tableId];
+                if (tableApi) {
+                    globalSortStacks[tableId] = [];
+                    tableApi.order([[0, 'asc']]).draw();
+                }
+            });
+
+            // Adjust on resize and sidebar toggle
+            $(window).on('resize', function () {
+                Object.values(activeDataTables).forEach(function (api) {
+                    api.columns.adjust();
+                });
+            });
         });
 
 

@@ -47,9 +47,14 @@
                             <div class="card-header">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <h3 class="card-title">Data Penerimaan Barang</h3>
-                                    <button type="button" class="btn btn-primary btn-sm" onclick="refreshCache()">
-                                        <i class="fas fa-sync-alt"></i> Refresh Data
-                                    </button>
+                                    <div class="d-flex align-items-center">
+                                        <div class="dt-reset-controls mr-2" data-table="#penerimaan_barang">
+                                            <!-- Reset Sortir button will be injected here by global JS -->
+                                        </div>
+                                        <button type="button" class="btn btn-primary btn-sm" onclick="refreshCache()">
+                                            <i class="fas fa-sync-alt"></i> Refresh Data
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -57,12 +62,42 @@
                                 <table id="penerimaan_barang" class="table table-head-fixed text-nowrap">
                                     <thead>
                                         <tr>
-                                            <th>Nomor #</th>
-                                            <th>Packing List</th>
-                                            <th>Tanggal</th>
-                                            <th>Pemasok</th>
-                                            <th>Keterangan</th>
-                                            <th>Status</th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Nomor #</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Packing List</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Tanggal</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Pemasok</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Keterangan</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
+                                            <th>
+                                                <div class="dt-th-flex">
+                                                    <span class="dt-th-title">Status</span>
+                                                    <span class="dt-sort-icon"><span class="up">↑</span><span class="down">↓</span></span>
+                                                </div>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
