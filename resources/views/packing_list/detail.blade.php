@@ -71,34 +71,6 @@
 
                 <!-- /.card-header -->
                 <div class="card-body">
-                    {{-- table-head-fixed bentrok dengan DataTables scrollX (header vs body tidak sejajar) --}}
-                    <style>
-                        #packing_list_detail_wrapper {
-                            width: 100%;
-                        }
-
-                        #packing_list_detail_wrapper .dataTables_scrollHeadInner,
-                        #packing_list_detail_wrapper .dataTables_scrollHeadInner>.dataTable,
-                        #packing_list_detail_wrapper .dataTables_scrollBody table.dataTable {
-                            width: auto !important;
-                            min-width: 100% !important;
-                        }
-
-                        #packing_list_detail_wrapper .dataTables_scrollHead {
-                            position: relative;
-                            z-index: 2;
-                        }
-
-                        #packing_list_detail_wrapper .dataTables_scrollBody {
-                            position: relative;
-                            z-index: 1;
-                        }
-
-                        #packing_list_detail_wrapper th,
-                        #packing_list_detail_wrapper td {
-                            vertical-align: middle;
-                        }
-                    </style>
                     <table id="packing_list_detail" class="table table-bordered table-striped text-nowrap">
                         <thead>
                             <tr>
