@@ -249,6 +249,15 @@
             background: #f1f1f1;
         }
 
+        /* Container for proper horizontal scrolling (Unified Header & Body) */
+        .dt-table-container {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            position: relative;
+            margin-bottom: 1rem;
+        }
+
         /* Improved 2x2 layout for DataTables controls */
         .dataTables_wrapper .row:first-child {
             margin-bottom: 0.5rem !important;
@@ -889,7 +898,7 @@
                 var order = tableApi.order();
                 var $thList = $(tableId).find('thead th');
 
-                // Reset all icons for this table
+                // Clear all icons first to be absolutely safe
                 $thList.find('.dt-sort-icon').removeClass('asc desc');
 
                 order.forEach(function (o) {
@@ -898,7 +907,8 @@
                     var $th = $(tableApi.column(colIdx).header());
                     var $icon = $th.find('.dt-sort-icon');
                     if ($icon.length) {
-                        $icon.addClass(dir);
+                        // Ensure it has only ONE class
+                        $icon.removeClass('asc desc').addClass(dir);
                     }
                 });
             }
@@ -913,11 +923,15 @@
                         "responsive": false,
                         "lengthChange": true,
                         "autoWidth": false,
-                        "scrollX": true,
+                        "scrollX": false, // Use custom container for better alignment
                         "searching": true,
                         "ordering": true,
                         "info": true,
                         "buttons": ["copy", "colvis"],
+                        "dom": "<'row mb-2'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                            "<'row mb-2'<'col-sm-12 col-md-6 d-flex align-items-center'B><'col-sm-12 col-md-6 d-flex justify-content-end align-items-center dt-custom-controls'>>" +
+                            "<'row'<'col-sm-12 dt-table-container't>>" +
+                            "<'row mt-2'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
                         "drawCallback": function () {
                             syncGlobalSortIcons(tableId);
                         }
@@ -925,27 +939,20 @@
 
                     activeDataTables[tableId] = tableApi;
 
+                    // Unbind default DataTables sort click listeners to prevent conflicts
+                    $(tableId + ' thead th').off('click.DT');
+
                     // Standard Buttons placement with Professional 2x2 Alignment
                     var $wrapper = $(tableId + '_wrapper');
-                    
-                    // Create a secondary row for Buttons and Reset
-                    var $secondaryRow = $('<div class="row dt-controls-row"></div>');
-                    var $leftCol = $('<div class="col-sm-12 col-md-6 d-flex align-items-center"></div>');
-                    var $rightCol = $('<div class="col-sm-12 col-md-6 d-flex justify-content-end align-items-center"></div>');
-                    
-                    $secondaryRow.append($leftCol).append($rightCol);
-                    
-                    // Insert after the first row (Length + Filter row)
-                    $wrapper.find('.row:first').after($secondaryRow);
-                    
-                    // Append actual buttons to the left col
-                    tableApi.buttons().container().appendTo($leftCol);
-                    
-                    // Append Reset Sort Button to the right col
-                    $rightCol.html(
-                        '<button type="button" class="btn btn-sm btn-outline-danger dt-reset-sort-btn" data-table="' + tableId + '" title="Reset Sortir">' +
-                        '<i class="fas fa-undo"></i> Reset Sortir</button>'
-                    );
+                    var $customControls = $wrapper.find('.dt-custom-controls');
+
+                    // Append Reset Sortir Button only if sorting icons are present
+                    if ($(tableId).find('.dt-sort-icon').length > 0) {
+                        $customControls.html(
+                            '<button type="button" class="btn btn-sm btn-outline-danger dt-reset-sort-btn" data-table="' + tableId + '" title="Reset Sortir">' +
+                            '<i class="fas fa-undo"></i> Reset Sortir</button>'
+                        );
+                    }
 
                     // Hide old header reset containers
                     $('.dt-reset-controls[data-table="' + tableId + '"]').hide();
@@ -953,12 +960,16 @@
                     // Hide the header-based reset containers as we move to the standardized position
                     $('.dt-reset-controls[data-table="' + tableId + '"]').hide();
 
-                    // Cumulative Multi-Sort Click Handler
+                    // Single-Column Sort Click Handler
                     $(tableId).find('thead th').addClass('dt-sort-pointer').on('click.customSort', function (e) {
                         // Skip if clicking specific interaction buttons (like filters)
                         if ($(e.target).closest('button, a, .dropdown-menu').length) return;
 
                         e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+
+                        // Implementation of Cumulative Multi-Sort (Matching user requirement)
                         var colIdx = tableApi.column($(this)).index();
                         var stack = globalSortStacks[tableId];
                         var foundIdx = -1;
@@ -971,11 +982,14 @@
                         }
 
                         if (foundIdx !== -1) {
+                            // Toggle current column direction (ASC <-> DESC)
                             stack[foundIdx][1] = (stack[foundIdx][1] === 'asc' ? 'desc' : 'asc');
                         } else {
+                            // Add new column to the multi-sort stack (as secondary, tertiary, etc.)
                             stack.push([colIdx, 'asc']);
                         }
 
+                        // Sync with DataTables
                         tableApi.order(stack).draw();
                     });
 

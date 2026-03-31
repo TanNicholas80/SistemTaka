@@ -213,6 +213,10 @@
                                         opacity: 1 !important;
                                         font-weight: bold;
                                     }
+
+                                    .barcode-filter-row {
+                                        display: block;
+                                    }
                                 </style>
                                 <table id="barcode-main" class="table text-nowrap">
                                     <thead>
@@ -247,7 +251,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -276,7 +280,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -305,7 +309,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -334,7 +338,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -363,7 +367,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -392,7 +396,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -421,7 +425,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -471,7 +475,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -500,7 +504,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -529,7 +533,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -565,7 +569,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -608,7 +612,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -637,7 +641,7 @@
                                                                 semua</button>
                                                             <button type="button"
                                                                 class="btn btn-sm btn-outline-secondary btn-block barcode-filter-clear-col">Hapus
-                                                                filter kolom</button>
+                                                                semua</button>
                                                         </div>
                                                     </div>
                                                     <span class="barcode-sort-icon"><span class="up">↑</span><span
@@ -777,8 +781,6 @@
                     "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>"
             });
 
-            $table.find('thead th').off('click.DT');
-
             $('.barcode-reset-controls-container').html(
                 '<button type="button" class="btn btn-sm btn-outline-danger barcode-reset-filter-btn mr-2" title="Reset Filter"><i class="fas fa-filter"></i> Reset Filter</button>' +
                 '<button type="button" class="btn btn-sm btn-outline-danger barcode-reset-sort-btn" title="Reset Sortir"><i class="fas fa-undo"></i> Reset Sortir</button>'
@@ -892,7 +894,7 @@
                         .data('filterValue', val)
                         .prop('checked', checked);
 
-                    var $row = $('<label class="custom-control custom-checkbox barcode-filter-row mb-1 d-block">')
+                    var $row = $('<label class="custom-control custom-checkbox barcode-filter-row mb-1">')
                         .append($cb, $('<span class="custom-control-label">').text(label));
 
                     $box.append($row);
@@ -1094,10 +1096,16 @@
                 e.preventDefault();
                 var $dd = $(this).closest('.barcode-filter-dropdown');
                 var col = String($dd.data('column'));
-                delete columnFilters[col];
-                table.draw();
+                // Uncheck all
+                $dd.find('.barcode-filter-cb').prop('checked', false);
+                // Apply filter (this will hide everything for that column)
+                applyFiltersFromDropdown($dd);
+                // Highlight filter button as active because it's now filtering out everything
                 updateFilterButtons();
-                $dd.find('.barcode-filter-cb').prop('checked', true);
+                // Optionally close dropdown or keep it open? User said "Hapus pilihan", usually they stay in dropdown to pick one.
+                // But current logic for RESET closes it. Let's keep it open or close as per previous behavior?
+                // Old behavior closed it. But if they just "Cleared all", maybe they want to pick one?
+                // Actually, let's just close it as requested "Hapus semua" usually implies reset-like action.
                 $(this).closest('body').find('.dropdown[data-column="' + col + '"]').dropdown('hide');
             });
 
@@ -1144,10 +1152,11 @@
                 e.preventDefault();
                 var $dd = $(this).closest('.barcode-filter-dropdown');
                 var col = String($dd.data('column'));
-                delete columnFilters[col];
-                table.draw();
+                // Uncheck all
+                $dd.find('.barcode-filter-cb').prop('checked', false);
+                // Apply filter
+                applyFiltersFromDropdown($dd);
                 updateFilterButtons();
-                $dd.find('.barcode-filter-cb').prop('checked', true);
                 $(this).closest('.dropdown').find('[data-toggle="dropdown"]').dropdown('hide');
             });
 

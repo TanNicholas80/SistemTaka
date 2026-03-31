@@ -36,13 +36,10 @@
                         <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">Data Barang Masuk</h3>
-                                <div class="d-flex dt-reset-controls" data-table="#barang_masuk">
-                                    <!-- Reset Sortir button will be injected here by global JS -->
-                                </div>
                             </div>
 
                             <div class="card-body">
-                                <table id="barang_masuk" class="table table-head-fixed text-nowrap">
+                                <table id="barang_masuk" class="table text-nowrap">
                                     <thead>
                                         <tr>
                                             <th>
