@@ -229,8 +229,13 @@
             font-weight: bold;
         }
 
+        .dt-sort-icon,
         .dt-sort-pointer {
             cursor: pointer !important;
+        }
+
+        table.dataTable thead th {
+            cursor: default !important;
         }
 
         /* Hide default DataTables arrows */
@@ -269,7 +274,8 @@
             justify-content: space-between;
             align-items: center;
             width: 100%;
-            margin-bottom: 1.25rem !important; /* Spacing before table */
+            margin-bottom: 1.25rem !important;
+            /* Spacing before table */
         }
 
         .dt-buttons-group {
@@ -284,9 +290,17 @@
         }
 
         /* Fix alignment of Search box and Length menu */
-        .dataTables_length { margin-bottom: 0 !important; }
-        .dataTables_filter { margin-bottom: 0 !important; }
-        .dataTables_filter label { margin-bottom: 0 !important; }
+        .dataTables_length {
+            margin-bottom: 0 !important;
+        }
+
+        .dataTables_filter {
+            margin-bottom: 0 !important;
+        }
+
+        .dataTables_filter label {
+            margin-bottom: 0 !important;
+        }
 
         .dataTables_scrollBody::-webkit-scrollbar-thumb {
             background: #ccc;
@@ -895,20 +909,24 @@
                 var tableApi = activeDataTables[tableId];
                 if (!tableApi) return;
 
-                var order = tableApi.order();
+                // Use the custom sort stack to determine highlights.
+                // If empty (e.g. after Reset), all icons will remain neutral/grey.
+                var stack = globalSortStacks[tableId] || [];
                 var $thList = $(tableId).find('thead th');
 
-                // Clear all icons first to be absolutely safe
+                // Clear all existing sort highlights
                 $thList.find('.dt-sort-icon').removeClass('asc desc');
 
-                order.forEach(function (o) {
+                if (stack.length === 0) return;
+
+                stack.forEach(function (o) {
                     var colIdx = o[0];
                     var dir = o[1];
                     var $th = $(tableApi.column(colIdx).header());
                     var $icon = $th.find('.dt-sort-icon');
+
                     if ($icon.length) {
-                        // Ensure it has only ONE class
-                        $icon.removeClass('asc desc').addClass(dir);
+                        $icon.addClass(dir);
                     }
                 });
             }
@@ -923,7 +941,7 @@
                         "responsive": false,
                         "lengthChange": true,
                         "autoWidth": false,
-                        "scrollX": false, // Use custom container for better alignment
+                        "scrollX": false,
                         "searching": true,
                         "ordering": true,
                         "info": true,
@@ -941,6 +959,7 @@
 
                     // Unbind default DataTables sort click listeners to prevent conflicts
                     $(tableId + ' thead th').off('click.DT');
+                    $(tableId + ' thead').off('click.DT');
 
                     // Standard Buttons placement with Professional 2x2 Alignment
                     var $wrapper = $(tableId + '_wrapper');
@@ -960,18 +979,15 @@
                     // Hide the header-based reset containers as we move to the standardized position
                     $('.dt-reset-controls[data-table="' + tableId + '"]').hide();
 
-                    // Single-Column Sort Click Handler
-                    $(tableId).find('thead th').addClass('dt-sort-pointer').on('click.customSort', function (e) {
-                        // Skip if clicking specific interaction buttons (like filters)
-                        if ($(e.target).closest('button, a, .dropdown-menu').length) return;
-
+                    // Column Sort Click Handler - Restricted to Arrow Icons (High Precision UX)
+                    $(tableId).find('thead th .dt-sort-icon').addClass('dt-sort-pointer');
+                    $(tableId).find('thead th').on('click.customSort', '.dt-sort-icon', function (e) {
                         e.preventDefault();
                         e.stopPropagation();
-                        e.stopImmediatePropagation();
 
-                        // Implementation of Cumulative Multi-Sort (Matching user requirement)
-                        var colIdx = tableApi.column($(this)).index();
-                        var stack = globalSortStacks[tableId];
+                        var $th = $(this).closest('th');
+                        var colIdx = tableApi.column($th).index();
+                        var stack = globalSortStacks[tableId] || [];
                         var foundIdx = -1;
 
                         for (var i = 0; i < stack.length; i++) {
@@ -982,16 +998,17 @@
                         }
 
                         if (foundIdx !== -1) {
-                            // Toggle current column direction (ASC <-> DESC)
                             stack[foundIdx][1] = (stack[foundIdx][1] === 'asc' ? 'desc' : 'asc');
                         } else {
-                            // Add new column to the multi-sort stack (as secondary, tertiary, etc.)
                             stack.push([colIdx, 'asc']);
                         }
 
-                        // Sync with DataTables
-                        tableApi.order(stack).draw();
+                        tableApi.order(stack).draw(false);
+                        syncGlobalSortIcons(tableId);
                     });
+
+                    // Force cursor adjustment for headers
+                    $(tableId).find('thead th').css('cursor', 'default');
 
                     tableApi.on('init', function () {
                         // Ensure layout adjustment on full load
@@ -1008,7 +1025,12 @@
                 var tableApi = activeDataTables[tableId];
                 if (tableApi) {
                     globalSortStacks[tableId] = [];
-                    tableApi.order([[0, 'asc']]).draw();
+                    tableApi.order([[0, 'asc']]).draw(false);
+
+                    // Small timeout ensures the API state is locked and settled before syncing icons
+                    setTimeout(function () {
+                        syncGlobalSortIcons(tableId);
+                    }, 50);
                 }
             });
 

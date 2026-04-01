@@ -80,8 +80,13 @@
                                         cursor: default !important;
                                     }
 
+                                    .barcode-sort-icon,
                                     .barcode-sort-pointer {
                                         cursor: pointer !important;
+                                    }
+
+                                    #barcode-main thead th {
+                                        cursor: default !important;
                                     }
 
                                     #barcode-main thead th.sorting::before,
@@ -780,6 +785,10 @@
                     "<'row'<'col-sm-12 barcode-table-container't>>" +
                     "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>"
             });
+            
+            // Unbind default sorting click listeners to prevent resetting paging on sort
+            $table.find('thead th').off('click.DT');
+            $table.find('thead').off('click.DT');
 
             $('.barcode-reset-controls-container').html(
                 '<button type="button" class="btn btn-sm btn-outline-danger barcode-reset-filter-btn mr-2" title="Reset Filter"><i class="fas fa-filter"></i> Reset Filter</button>' +
@@ -1006,19 +1015,14 @@
                 });
             }
 
-            $table.find('thead th').addClass('barcode-sort-pointer');
-
-            $table.find('thead th').on('click', function (e) {
-                // Ignore if clicking filter icon
-                if ($(e.target).closest('.barcode-col-filter-btn').length || $(e.target).closest('.dropdown-menu').length) {
-                    return;
-                }
-
+            // Enable click ONLY on the sort icon, not the entire header text
+            $table.find('thead th .barcode-sort-icon').addClass('barcode-sort-pointer');
+            $table.find('thead th').on('click', '.barcode-sort-icon', function (e) {
                 e.preventDefault();
                 e.stopPropagation();
-                e.stopImmediatePropagation();
 
-                var colIdx = table.column($(this)).index();
+                var $th = $(this).closest('th');
+                var colIdx = table.column($th).index();
                 var foundIdx = -1;
                 for (var i = 0; i < sortStack.length; i++) {
                     if (sortStack[i][0] === colIdx) {
@@ -1029,26 +1033,27 @@
 
                 if (foundIdx !== -1) {
                     if (sortStack[foundIdx][1] === 'asc') {
-                        // ASC -> DESC
                         sortStack[foundIdx][1] = 'desc';
                     } else {
-                        // DESC -> ASC (Toggle only, no reset)
                         sortStack[foundIdx][1] = 'asc';
                     }
                 } else {
-                    // NONE -> ASC (Add to stack)
                     sortStack.push([colIdx, 'asc']);
                 }
 
-                table.order(sortStack).draw();
+                table.order(sortStack).draw(false);
                 updateSortIcons();
             });
 
-            $(document).on('click', '.barcode-reset-sort-btn', function () {
+                $(document).on('click', '.barcode-reset-sort-btn', function () {
                 sortStack = [];
                 // Reset data to original DB order (Column 0: RID)
-                table.order([[0, 'asc']]).draw();
-                updateSortIcons();
+                table.order([[0, 'asc']]).draw(false);
+                
+                // Delay sync to ensure order state is settled
+                setTimeout(function() {
+                    updateSortIcons();
+                }, 50);
             });
 
             $(document).on('click', '.barcode-reset-filter-btn', function () {
@@ -1175,15 +1180,20 @@
 
             // Update ikon panah custom sesuai state sort
             function updateSortIcons() {
-                var order = table.order();
-                // Reset semua
-                $('.barcode-sort-icon').removeClass('asc desc');
+                var $thList = $('#barcode-main').find('thead th');
 
-                order.forEach(function (o) {
+                // Clear all existing sort highlights
+                $thList.find('.barcode-sort-icon').removeClass('asc desc');
+
+                // If the sort stack is empty (e.g., after Reset), all icons will remain neutral/grey.
+                if (sortStack.length === 0) return;
+
+                sortStack.forEach(function (o) {
                     var colIdx = o[0];
                     var dir = o[1]; // 'asc' atau 'desc'
                     var $th = $(table.column(colIdx).header());
                     var $icon = $th.find('.barcode-sort-icon');
+
                     if ($icon.length) {
                         $icon.addClass(dir);
                     }
