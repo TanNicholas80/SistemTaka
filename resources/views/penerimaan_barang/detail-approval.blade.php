@@ -89,7 +89,7 @@
                                         <td>{{ $as->nama ?? '-' }}</td>
                                         <td>{{ $as->npl ?? '-' }}</td>
                                         <td>{{ $as->no_invoice ?? '-' }}</td>
-                                        <td>{{ $as->panjang ?? '-' }}</td>
+                                        <td>{{ number_format(bcdiv($as->panjang ?? 0, 1, 2), 2) }}</td>
                                         <td>{{ 'Rp. ' . number_format($as->harga_unit , 0, ',', '.') }}</td>
                                         <td>
                                             @php
