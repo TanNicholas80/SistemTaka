@@ -26,7 +26,7 @@
                     <div class="col-12">
 
                         <!-- Card Table -->
-                        <div class="card barcode-dt-card">
+                        <div class="card">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h3 class="card-title">Data Barcode</h3>
                                 @if ($lastUpdated)

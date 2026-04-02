@@ -378,13 +378,21 @@
 
 <script>
     const nomor_po = JSON.parse(`{!! addslashes(json_encode($purchase_order)) !!}`);
+    /** PO untuk Non PL: divisi SARUNG/JARIK atau vendor kategori GRUP/LOKAL (di filter di server). */
+    const nomor_po_non_pl = JSON.parse(`{!! addslashes(json_encode($purchase_order_non_pl ?? [])) !!}`);
     /** PO terfilter untuk mode antar toko (vendor TOKO sesuai cabang Bandung/Magelang). */
     const nomor_po_antar_toko = JSON.parse(`{!! addslashes(json_encode($purchase_order_antar_toko ?? $purchase_order)) !!}`);
     const nomor_do = JSON.parse(`{!! addslashes(json_encode($delivery_orders ?? [])) !!}`);
 
     function getNomorPoListForCurrentMode() {
         const mode = document.querySelector('input[name="mode"]:checked')?.value || 'packing_list';
-        return mode === 'antar_toko' ? nomor_po_antar_toko : nomor_po;
+        if (mode === 'antar_toko') {
+            return nomor_po_antar_toko;
+        }
+        if (mode === 'non_packing_list') {
+            return nomor_po_non_pl;
+        }
+        return nomor_po;
     }
     const printNonPlPdfEndpoint = "{{ route('penerimaan-barang.non-pl.print-pdf') }}";
 
@@ -1531,6 +1539,7 @@
         const packingListSection = document.getElementById('packing-list-section');
         const doSection = document.getElementById('do-section');
         const noDOInput = document.getElementById('no_do');
+        const noPOInput = document.getElementById('no_po');
         const saveBtn = document.getElementById('save-btn');
 
         if (mode === 'packing_list') {
@@ -1549,6 +1558,28 @@
             doSection.style.display = 'none';
             if (noDOInput) noDOInput.value = '';
             saveBtn?.classList.add('hidden');
+        }
+
+        const antarTokoPoHint = document.getElementById('antar-toko-po-hint');
+        if (antarTokoPoHint) {
+            antarTokoPoHint.classList.toggle('hidden', mode !== 'antar_toko');
+        }
+
+        // Non PL punya daftar PO lebih sempit: hapus nomor yang tidak termasuk filter
+        if (noPOInput && mode === 'non_packing_list') {
+            const v = (noPOInput.value || '').trim();
+            if (v && !nomor_po_non_pl.some(p => p.number_po === v)) {
+                noPOInput.value = '';
+                formData.no_po = '';
+            }
+        }
+        // Antar toko: daftar tanpa PO sarung/jarik
+        if (noPOInput && mode === 'antar_toko') {
+            const vAt = (noPOInput.value || '').trim();
+            if (vAt && !nomor_po_antar_toko.some(p => p.number_po === vAt)) {
+                noPOInput.value = '';
+                formData.no_po = '';
+            }
         }
     }
 

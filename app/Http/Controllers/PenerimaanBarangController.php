@@ -25,6 +25,12 @@ class PenerimaanBarangController extends Controller
 {
     private const NONPL_RESERVATION_TTL_SECONDS = 1800; // 30 menit
 
+    /** Divisi (charField1) yang langsung masuk alur Non Packing List. */
+    private const NON_PL_CHARFIELD_SARUNG_JARIK = ['SARUNG', 'JARIK'];
+
+    /** Kategori vendor Accurate yang mengizinkan non-PL untuk baris di luar sarung/jarik. */
+    private const NON_PL_VENDOR_CATEGORIES_GRUP_LOKAL = ['GRUP', 'LOKAL'];
+
     private function nonPlReservationCacheKey(string $token): string
     {
         return 'nonpl_reservation:' . $token;
@@ -764,6 +770,183 @@ class PenerimaanBarangController extends Controller
         return $purchase_orders;
     }
 
+    /**
+     * True jika vendor (Accurate) berkategori GRUP atau LOKAL.
+     */
+    private function vendorHasGrupOrLokalCategory(
+        Branch $branch,
+        string $vendorNo,
+        string $apiToken,
+        string $signature,
+        string $timestamp
+    ): bool {
+        $vendorNo = trim($vendorNo);
+        if ($vendorNo === '') {
+            return false;
+        }
+
+        $vendorDetailResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
+            'Authorization' => 'Bearer ' . $apiToken,
+            'X-Api-Signature' => $signature,
+            'X-Api-Timestamp' => $timestamp,
+        ])->get($this->buildApiUrl($branch, 'vendor/detail.do'), [
+            'vendorNo' => $vendorNo,
+        ]);
+
+        if (!$vendorDetailResponse->successful()) {
+            return false;
+        }
+
+        $categoryName = strtoupper(trim($vendorDetailResponse->json()['d']['category']['name'] ?? ''));
+
+        return in_array($categoryName, self::NON_PL_VENDOR_CATEGORIES_GRUP_LOKAL, true);
+    }
+
+    /**
+     * True jika PO punya minimal satu baris item dengan charField1 SARUNG atau JARIK.
+     */
+    private function purchaseOrderDetailHasAnySarungJarikLine(array $resDataD): bool
+    {
+        foreach ($resDataD['detailItem'] ?? [] as $detail) {
+            $cf1 = strtoupper(trim($detail['item']['charField1'] ?? ''));
+            if (in_array($cf1, self::NON_PL_CHARFIELD_SARUNG_JARIK, true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * PO boleh muncul di dropdown Non Packing List jika:
+     * - ada minimal satu baris item charField1 SARUNG/JARIK, atau
+     * - tidak ada sarung/jarik tetapi vendor berkategori GRUP/LOKAL.
+     */
+    private function purchaseOrderEligibleForNonPackingListFromDetail(
+        array $resDataD,
+        Branch $branch,
+        string $apiToken,
+        string $signature,
+        string $timestamp
+    ): bool {
+        if ($this->purchaseOrderDetailHasAnySarungJarikLine($resDataD)) {
+            return true;
+        }
+
+        $vendorNo = trim((string) (data_get($resDataD, 'vendor.vendorNo') ?? ''));
+
+        return $this->vendorHasGrupOrLokalCategory($branch, $vendorNo, $apiToken, $signature, $timestamp);
+    }
+
+    /**
+     * Untuk mode antar toko: sembunyikan PO yang mengandung divisi sarung/jarik (cek detail item Accurate).
+     */
+    private function filterPurchaseOrdersExcludeSarungJarikForAntarToko(Branch $branch, array $purchase_orders): array
+    {
+        if ($purchase_orders === []) {
+            return [];
+        }
+
+        $apiToken = \App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null;
+        $signatureSecret = \App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null;
+        if (!$apiToken || !$signatureSecret) {
+            return [];
+        }
+
+        $timestamp = Carbon::now()->toIso8601String();
+        $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+        $filtered = [];
+        foreach ($purchase_orders as $po) {
+            $numberPo = $po['number_po'] ?? '';
+            if ($numberPo === '') {
+                continue;
+            }
+
+            $poResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
+                'number' => $numberPo,
+            ]);
+
+            if (!$poResponse->successful()) {
+                Log::warning('Antar toko filter: gagal ambil detail PO', ['number' => $numberPo, 'status' => $poResponse->status()]);
+                continue;
+            }
+
+            $resDataD = $poResponse->json()['d'] ?? [];
+            if ($this->purchaseOrderDetailHasAnySarungJarikLine($resDataD)) {
+                continue;
+            }
+
+            $filtered[] = $po;
+            usleep(100000);
+        }
+
+        Log::info('PO antar toko: disaring tanpa divisi sarung/jarik', [
+            'input_count' => count($purchase_orders),
+            'output_count' => count($filtered),
+        ]);
+
+        return $filtered;
+    }
+
+    /**
+     * Filter daftar PO (status ONPROCESS/WAITING) agar dropdown Non PL sesuai aturan sarung/jarik + vendor grup/lokal.
+     */
+    private function filterPurchaseOrdersForNonPackingList(Branch $branch, array $purchase_orders): array
+    {
+        if ($purchase_orders === []) {
+            return [];
+        }
+
+        $apiToken = \App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_api_token'] ?? null;
+        $signatureSecret = \App\Models\UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'))['accurate_signature_secret'] ?? null;
+        if (!$apiToken || !$signatureSecret) {
+            return [];
+        }
+
+        $timestamp = Carbon::now()->toIso8601String();
+        $signature = hash_hmac('sha256', $timestamp, $signatureSecret);
+
+        $filtered = [];
+        foreach ($purchase_orders as $po) {
+            $numberPo = $po['number_po'] ?? '';
+            if ($numberPo === '') {
+                continue;
+            }
+
+            $poResponse = Http::timeout(30)->withoutVerifying()->withHeaders([
+                'Authorization' => 'Bearer ' . $apiToken,
+                'X-Api-Signature' => $signature,
+                'X-Api-Timestamp' => $timestamp,
+            ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
+                'number' => $numberPo,
+            ]);
+
+            if (!$poResponse->successful()) {
+                Log::warning('Non PL filter: gagal ambil detail PO', ['number' => $numberPo, 'status' => $poResponse->status()]);
+                continue;
+            }
+
+            $resDataD = $poResponse->json()['d'] ?? [];
+            if ($this->purchaseOrderEligibleForNonPackingListFromDetail($resDataD, $branch, $apiToken, $signature, $timestamp)) {
+                $filtered[] = $po;
+            }
+
+            usleep(100000);
+        }
+
+        Log::info('PO difilter untuk Non Packing List', [
+            'input_count' => count($purchase_orders),
+            'output_count' => count($filtered),
+        ]);
+
+        return $filtered;
+    }
+
     public function create(Request $request)
     {
         // Pastikan cabang aktif valid sebelum memanggil API
@@ -783,6 +966,7 @@ class PenerimaanBarangController extends Controller
 
         // Get data directly from API (sudah menggunakan kredensial dari cabang di dalam fungsi)
         $purchase_order = $this->getPurchaseOrdersFromAccurate();
+        $purchase_order_non_pl = $this->filterPurchaseOrdersForNonPackingList($branch, $purchase_order);
         $partnerFilter = $this->interStorePartnerCodes($branch);
         $purchase_order_antar_toko = $purchase_order;
         if ($partnerFilter !== null) {
@@ -790,6 +974,7 @@ class PenerimaanBarangController extends Controller
                 return $this->interStoreCodesMatch($po['vendor_no'] ?? null, $partnerFilter['po_vendor_no']);
             }));
         }
+        $purchase_order_antar_toko = $this->filterPurchaseOrdersExcludeSarungJarikForAntarToko($branch, $purchase_order_antar_toko);
 
         $delivery_orders = $this->fetchInterStoreDeliveryOrdersForCreate($branch);
 
@@ -806,6 +991,7 @@ class PenerimaanBarangController extends Controller
 
         return view('penerimaan_barang.create', compact(
             'purchase_order',
+            'purchase_order_non_pl',
             'purchase_order_antar_toko',
             'delivery_orders',
             'npb',
@@ -879,8 +1065,12 @@ class PenerimaanBarangController extends Controller
                             ]);
 
                     if ($poVendorResponse->successful()) {
-                        $vendorNo = data_get($poVendorResponse->json(), 'd.vendor.vendorNo');
-                        $vendorName = data_get($poVendorResponse->json(), 'd.vendor.name');
+                        $poDetailD = $poVendorResponse->json()['d'] ?? [];
+                        if ($this->purchaseOrderDetailHasAnySarungJarikLine($poDetailD)) {
+                            throw new \Exception('PO dengan divisi sarung/jarik tidak dapat dipakai untuk mode antar toko.');
+                        }
+                        $vendorNo = data_get($poDetailD, 'vendor.vendorNo');
+                        $vendorName = data_get($poDetailD, 'vendor.name');
                     } else {
                         Log::warning('Mode antar_toko: gagal mengambil vendor dari PO detail', [
                             'no_po' => $validated['no_po'],
@@ -1006,47 +1196,36 @@ class PenerimaanBarangController extends Controller
                 'items' => collect($accurateItems)->map(fn($i) => $i['no'] . ' => ' . $i['name'])->toArray(),
             ]);
 
-            // Mode Non Packing List: filter berdasarkan charField1 item atau vendor category
+            // Mode Non Packing List: sarung/jarik langsung; selain itu hanya jika vendor GRUP/LOKAL
             if ($mode === 'non_packing_list') {
                 $rawDetails = $resData['d']['detailItem'] ?? [];
-                $allowedCharField1 = ['JARIK', 'SARUNG', 'PRINTING', 'KNITTING', 'DENIM', 'DYEING'];
 
-                // Cek apakah ada item dengan charField1 SARUNG/JARIK
-                $hasMatchingCharField = false;
+                $needsVendorCategory = false;
                 foreach ($rawDetails as $detail) {
-                    $cf1 = strtoupper(trim($detail['item']['charField1'] ?? ''));
-                    if (in_array($cf1, $allowedCharField1)) {
-                        $hasMatchingCharField = true;
+                    $cf1Row = strtoupper(trim($detail['item']['charField1'] ?? ''));
+                    if (!in_array($cf1Row, self::NON_PL_CHARFIELD_SARUNG_JARIK, true)) {
+                        $needsVendorCategory = true;
                         break;
                     }
                 }
 
-                // Jika tidak ada item yang match charField1, cek vendor category
                 $vendorCategoryAllowed = false;
-                if (!$hasMatchingCharField && $vendorData && $vendorData['vendorNo']) {
-                    $vendorDetailResponse = Http::timeout(30)->withHeaders([
-                        'Authorization' => 'Bearer ' . $apiToken,
-                        'X-Api-Signature' => $signature,
-                        'X-Api-Timestamp' => $timestamp,
-                    ])->get($this->buildApiUrl($branch, 'vendor/detail.do'), [
-                                'vendorNo' => $vendorData['vendorNo'],
-                            ]);
+                if ($needsVendorCategory && $vendorData && !empty($vendorData['vendorNo'])) {
+                    $vendorCategoryAllowed = $this->vendorHasGrupOrLokalCategory(
+                        $branch,
+                        (string) $vendorData['vendorNo'],
+                        $apiToken,
+                        $signature,
+                        $timestamp
+                    );
 
-                    if ($vendorDetailResponse->successful()) {
-                        $vendorResData = $vendorDetailResponse->json();
-                        $categoryName = strtoupper(trim($vendorResData['d']['category']['name'] ?? ''));
-                        $allowedCategories = ['GRUP', 'LOKAL'];
-                        $vendorCategoryAllowed = in_array($categoryName, $allowedCategories);
-
-                        Log::info('Vendor category check for Non PL', [
-                            'vendorNo' => $vendorData['vendorNo'],
-                            'category_name' => $categoryName,
-                            'allowed' => $vendorCategoryAllowed,
-                        ]);
-                    }
+                    Log::info('Vendor category check for Non PL', [
+                        'vendorNo' => $vendorData['vendorNo'],
+                        'allowed' => $vendorCategoryAllowed,
+                    ]);
                 }
 
-                // Filter item: charField1 match ATAU vendor category match (semua item)
+                // Item: charField1 SARUNG/JARIK, atau (bukan sarung/jarik) + vendor GRUP/LOKAL
                 $barangList = [];
                 foreach ($rawDetails as $detail) {
                     $itemNo = $detail['item']['no'] ?? null;
@@ -1059,7 +1238,8 @@ class PenerimaanBarangController extends Controller
                     if (!$itemNo)
                         continue;
 
-                    $itemAllowed = in_array($cf1, $allowedCharField1) || $vendorCategoryAllowed;
+                    $itemAllowed = in_array($cf1, self::NON_PL_CHARFIELD_SARUNG_JARIK, true)
+                        || $vendorCategoryAllowed;
                     if (!$itemAllowed)
                         continue;
 
@@ -1086,7 +1266,7 @@ class PenerimaanBarangController extends Controller
                 }
 
                 if (empty($barangList)) {
-                    throw new \Exception('Tidak ada item yang memenuhi syarat (charField1 atau vendor category GRUP/LOKAL).');
+                    throw new \Exception('Tidak ada item yang memenuhi syarat (divisi SARUNG/JARIK, atau vendor kategori GRUP/LOKAL untuk barang di luar sarung/jarik).');
                 }
 
                 return response()->json([
@@ -2088,6 +2268,25 @@ class PenerimaanBarangController extends Controller
                     'total_barcodes' => \App\Models\BarcodeNonPL::where('npb', $penerimaan->npb)->count(),
                 ]);
             } elseif ($mode === 'antar_toko') {
+                $credAntarPo = UserAccurateAPI::getCredentialsForAuthUser(session('active_branch'));
+                if (!empty($credAntarPo['accurate_api_token']) && !empty($credAntarPo['accurate_signature_secret'])) {
+                    $tsAntarPo = Carbon::now()->toIso8601String();
+                    $sigAntarPo = hash_hmac('sha256', $tsAntarPo, $credAntarPo['accurate_signature_secret']);
+                    $poCheckResp = Http::timeout(30)->withoutVerifying()->withHeaders([
+                        'Authorization' => 'Bearer ' . $credAntarPo['accurate_api_token'],
+                        'X-Api-Signature' => $sigAntarPo,
+                        'X-Api-Timestamp' => $tsAntarPo,
+                    ])->get($this->buildApiUrl($branch, 'purchase-order/detail.do'), [
+                        'number' => $validatedData['no_po'],
+                    ]);
+                    if ($poCheckResp->successful()) {
+                        $poDetailCheck = $poCheckResp->json()['d'] ?? [];
+                        if ($this->purchaseOrderDetailHasAnySarungJarikLine($poDetailCheck)) {
+                            throw new \Exception('PO dengan divisi sarung/jarik tidak dapat dipakai untuk mode antar toko.');
+                        }
+                    }
+                }
+
                 $doNumber = (string) ($validatedData['no_do'] ?? '');
                 $doResult = $this->fetchDeliveryOrderDetailWithFallback($branch, $doNumber);
                 $doData = $doResult['data']['d'] ?? [];

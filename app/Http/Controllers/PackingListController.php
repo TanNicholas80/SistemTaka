@@ -309,6 +309,7 @@ class PackingListController extends Controller
                         'sample' => $row['SAMPLE'] ?? null,
                         'kodisi_kain' => $row['KONDISI_KAIN'] ?? null,
                         'special_treatment' => $row['SPECIAL_TREATMENT'] ?? null,
+                        'material_type' => $row['MATERIAL_TYPE'] ?? null,
                     ]
                 );
                 $insertedCount++;
