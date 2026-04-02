@@ -382,6 +382,23 @@
         let totalTargetQuantity = 0;
         let totalScannedQuantity = 0;
 
+        /**
+         * Selaras dengan server: bagian sebelum ';', trim, maks. 10 karakter pertama.
+         * Contoh: YB00315819;32,222;9,3 → YB00315819
+         */
+        function normalizeScannedBarcode(raw) {
+            let s = String(raw ?? '').trim();
+            if (!s) return '';
+            const semi = s.indexOf(';');
+            if (semi !== -1) {
+                s = s.slice(0, semi).trim();
+            }
+            if (s.length > 10) {
+                s = s.slice(0, 10);
+            }
+            return s;
+        }
+
         // Function untuk show dropdown sales order
         function showDropdownSalesOrder(input) {
             const dropdownSalesOrder = document.getElementById('dropdown-sales');
@@ -630,13 +647,17 @@
             if (event.key === 'Enter') {
                 event.preventDefault();
                 const input = document.getElementById('scan_barcode_input');
-                const barcode = input.value.trim();
-                if (!barcode) return;
+                const raw = input.value;
+                const barcode = normalizeScannedBarcode(raw);
+                if (!barcode) {
+                    input.value = '';
+                    return;
+                }
+                input.value = '';
 
                 // Check in local cache first
                 const cachedEntry = serialNumberCache.find(sn => sn.barcode === barcode);
                 if (cachedEntry) {
-                    input.value = '';
                     input.focus();
                     handleCachedScan(barcode);
                 } else {

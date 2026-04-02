@@ -41,6 +41,27 @@ class PengirimanPesananController extends Controller
         return $baseUrl . $apiPath . '/' . ltrim($endpoint, '/');
     }
 
+    /**
+     * Normalisasi input scan: ambil bagian sebelum pemisah ';', trim, lalu maksimal 10 karakter pertama (kode material).
+     * Contoh: YB00315819;32,222;9,3 → YB00315819
+     */
+    private function normalizeScannedBarcodeForSubmit(string $raw): string
+    {
+        $s = trim($raw);
+        if ($s === '') {
+            return '';
+        }
+        $semi = strpos($s, ';');
+        if ($semi !== false) {
+            $s = trim(substr($s, 0, $semi));
+        }
+        if (strlen($s) > 10) {
+            $s = substr($s, 0, 10);
+        }
+
+        return $s;
+    }
+
     public function index(Request $request)
     {
         // Validasi active_branch session
@@ -711,7 +732,7 @@ class PengirimanPesananController extends Controller
 
                                     if ($snNumber && $snQty > 0) {
                                         $serialNumberCache[] = [
-                                            'barcode' => $snNumber,
+                                            'barcode' => $this->normalizeScannedBarcodeForSubmit((string) $snNumber),
                                             'quantity' => $snQty,
                                             'itemNo' => $itemNo,
                                             'itemName' => $itemName,
@@ -996,7 +1017,7 @@ class PengirimanPesananController extends Controller
                 if (is_array($serialsForItem) && !empty($serialsForItem)) {
                     $detailSerialNumber = [];
                     foreach ($serialsForItem as $snNo => $snQty) {
-                        $snNo = trim((string) $snNo);
+                        $snNo = $this->normalizeScannedBarcodeForSubmit((string) $snNo);
                         if ($snNo === '')
                             continue;
                         $detailSerialNumber[] = [
@@ -1147,7 +1168,7 @@ class PengirimanPesananController extends Controller
             foreach ($serialsMap as $itemNo => $serials) {
                 if (is_array($serials)) {
                     foreach (array_keys($serials) as $barcode) {
-                        $barcodeStr = trim((string) $barcode);
+                        $barcodeStr = $this->normalizeScannedBarcodeForSubmit((string) $barcode);
                         if ($barcodeStr === '') continue;
 
                         // Update Barcode table
@@ -1500,11 +1521,12 @@ class PengirimanPesananController extends Controller
      */
     public function scanBarcodeAccurate(Request $request)
     {
-        $barcode = $request->input('barcode');
+        $barcodeRaw = (string) $request->input('barcode', '');
+        $barcode = $this->normalizeScannedBarcodeForSubmit($barcodeRaw);
         $itemNos = $request->input('itemNos', []);
-        
-        if (!$barcode) {
-            return response()->json(['success' => false, 'message' => 'Barcode tidak boleh kosong.'], 400);
+
+        if ($barcode === '') {
+            return response()->json(['success' => false, 'message' => 'Barcode tidak boleh kosong (setelah normalisasi).'], 400);
         }
 
         $activeBranchId = session('active_branch');
@@ -1536,7 +1558,11 @@ class PengirimanPesananController extends Controller
                     $snData = $snResponse->json()['d'] ?? [];
                     foreach ($snData as $entry) {
                         $snNumber = $entry['serialNumber']['number'] ?? null;
-                        if ($snNumber === $barcode) {
+                        if ($snNumber === null || $snNumber === '') {
+                            continue;
+                        }
+                        $normalizedSn = $this->normalizeScannedBarcodeForSubmit((string) $snNumber);
+                        if ($normalizedSn === $barcode) {
                             $qty = (float)($entry['quantity'] ?? 0);
                             if ($qty > 0) {
                                 return response()->json([
