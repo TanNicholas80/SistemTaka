@@ -668,7 +668,7 @@
                 const qtyCell = document.createElement('td');
                 qtyCell.className = 'border border-gray-400 px-2 py-3 align-top font-semibold text-right';
                 const qty = parseFloat(item.kuantitas) || 0;
-                qtyCell.textContent = qty % 1 === 0 ? qty.toFixed(0) : qty.toFixed(2);
+                qtyCell.textContent = (Math.floor((qty + 0.000001) * 100) / 100).toFixed(2);
                 row.appendChild(qtyCell);
 
                 tableBody.appendChild(row);
@@ -724,7 +724,7 @@
                         ? '<span class="text-green-600 font-semibold"><i class="fas fa-check-circle mr-1"></i>' + scannedCount + '/' + expectedCount + ' SN</span>'
                         : '<span class="text-orange-500"><i class="fas fa-exclamation-circle mr-1"></i>' + scannedCount + '/' + expectedCount + ' SN</span>'}
                 </td>
-                <td class="border border-gray-400 px-2 py-3 align-top font-semibold text-right">${item.kuantitas}</td>
+                <td class="border border-gray-400 px-2 py-3 align-top font-semibold text-right">${(Math.floor((Number(item.kuantitas || 0) + 0.000001) * 100) / 100).toFixed(2)}</td>
             `;
             tableBody.appendChild(row);
         });
@@ -767,7 +767,7 @@
                         ? '<span class="text-green-600 font-semibold"><i class="fas fa-check-circle mr-1"></i>' + item.serial_numbers.length + ' SN</span>'
                         : '<span class="text-orange-500"><i class="fas fa-exclamation-circle mr-1"></i>Belum</span>'}
                 </td>
-                <td class="border border-gray-400 px-2 py-3 align-top font-semibold text-right">${item.kuantitas}</td>
+                <td class="border border-gray-400 px-2 py-3 align-top font-semibold text-right">${(Math.floor((Number(item.kuantitas || 0) + 0.000001) * 100) / 100).toFixed(2)}</td>
             `;
             tableBody.appendChild(row);
         });

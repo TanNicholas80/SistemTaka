@@ -941,7 +941,7 @@ class PenerimaanBarangController extends Controller
                         'nama_barang' => $itemName,
                         'kode_barang' => $itemNo,
                         'barcode' => $firstBarcode,
-                        'kuantitas' => $qty,
+                        'kuantitas' => bcdiv((string) $qty, '1', 2),
                         'uom' => $unitName,
                         'unit_price' => $unitPrice,
                         'expected_serial_numbers' => $expectedSerials,
@@ -1070,7 +1070,7 @@ class PenerimaanBarangController extends Controller
                         'nama_barang' => $itemName,
                         'name' => $itemName,
                         'kode_barang' => $itemNo,
-                        'kuantitas' => $qty,
+                        'kuantitas' => bcdiv((string) $qty, '1', 2),
                         'unit_price' => $unitPrice,
                         'uom' => $uomAcc,
                         // Data untuk format print label (berdasarkan charField1)
@@ -1193,7 +1193,7 @@ class PenerimaanBarangController extends Controller
                 if ($targetUom === 'YD' || $targetUom === 'M') {
                     $effectiveLength = $this->convertLengthByUom($length, $targetUom, $barcodeUom);
                 }
-                $kuantitas = round($effectiveLength, 2);
+                $kuantitas = bcdiv((string) $effectiveLength, '1', 2);
 
                 $barangList[] = [
                     'nama_barang' => $namaBarang,
@@ -1439,7 +1439,7 @@ class PenerimaanBarangController extends Controller
             if ($targetUom === 'YD' || $targetUom === 'M') {
                 $effectiveLength = $this->convertLengthByUom($length, $targetUom, $barcodeUom);
             }
-            $barcodeQty = round($effectiveLength, 2);
+            $barcodeQty = bcdiv((string) $effectiveLength, '1', 2);
 
             $kw = trim($barcode->kode_warna ?? '');
             $itemNoPl = ($mc12 && $kw) ? $mc12 . ' - ' . $kw : ($mc12 ?: $barcode->kode_barang);
@@ -1720,11 +1720,7 @@ class PenerimaanBarangController extends Controller
         $token = (string) Str::uuid();
 
         $formatQty = function ($qty): string {
-            $n = (float) $qty;
-            if (abs($n - round($n)) < 1e-9) {
-                return (string) (int) round($n);
-            }
-            return rtrim(rtrim(number_format($n, 3, '.', ''), '0'), '.');
+            return bcdiv((string) ($qty ?? 0), '1', 2);
         };
 
         $buildRightLines = function (array $itemData, array $sn) use ($type, $formatQty): array {
@@ -2468,13 +2464,13 @@ class PenerimaanBarangController extends Controller
 
                         $serialNumbers = $grp->map(fn($row) => [
                             'serialNumberNo' => $row->barcode,
-                            'quantity' => round((float) $row->quantity, 2),
+                            'quantity' => bcdiv((string) $row->quantity, '1', 2),
                         ])->values()->all();
 
                         return [
                             'nama_barang' => $itemName,
                             'kode_barang' => $itemNo,
-                            'panjang_total' => round((float) $sumQty, 2),
+                            'panjang_total' => bcdiv((string) $sumQty, '1', 2),
                             'uom_acc' => $uomAcc,
                             'unit' => $uomAcc === 'YD' ? 'YD' : 'METER',
                             'serial_numbers' => $serialNumbers,

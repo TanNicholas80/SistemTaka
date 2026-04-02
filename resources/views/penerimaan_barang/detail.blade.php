@@ -136,7 +136,7 @@
                                                         onclick="openItemDetailModal({{ $index }})">{{ $pb['nama_barang'] ?? '-' }}</span>
                                                 </td>
                                                 <td>{{ $pb['kode_barang'] ?? '-' }}</td>
-                                                <td>{{ number_format($pb['panjang_total'], 2) }}</td>
+                                                <td>{{ number_format(bcdiv($pb['panjang_total'] ?? 0, 1, 2), 2) }}</td>
                                                 <td>{{ $pb['unit'] ?? '-' }}</td>
                                             </tr>
                                         @endforeach
@@ -182,76 +182,76 @@
                 confirmButtonText: 'Tutup',
                 buttonsStyling: false,
                 html: `
-                    <div>
-                        <div class="d-flex align-items-center justify-content-between px-4 pt-4" style="padding-left: 1.5rem; padding-right: 1.5rem; border-bottom: 2px solid #e5e7eb; margin-bottom: 1rem; position: relative;">
-                            <div class="d-flex m-0" id="modal-tabs" style="border-bottom: none; margin-bottom: -2px;">
-                                <div class="modal-tab active" data-tab="rincian">Rincian Barang</div>
-                                <div class="modal-tab" data-tab="seri">No Seri/Produksi</div>
-                            </div>
-                            <button type="button" id="close-modal-btn" style="background: transparent; border: none; cursor: pointer; color: #9ca3af; padding: 0.5rem; margin-bottom: 0.25rem;">
-                                <svg xmlns="http://www.w3.org/2000/svg" style="width: 24px; height: 24px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-
-                        <div class="px-4 pb-2 text-left" style="padding-left: 1.5rem; padding-right: 1.5rem; text-align: left;">
-                            <!-- Rincian Tab -->
-                            <div id="tab-content-rincian" class="tab-content">
-                                <table class="table table-borderless table-sm m-0" style="width: 100%;">
-                                    <tr>
-                                        <td style="width: 150px; color: #4b5563; padding-bottom: 0.5rem; vertical-align: middle;">Kode #</td>
-                                        <td style="font-weight: 600; color: #1d4ed8; padding-bottom: 0.5rem; vertical-align: middle;">${itemNo}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="color: #4b5563; padding-bottom: 0.5rem; vertical-align: middle;">Nama Barang</td>
-                                        <td style="font-weight: 600; padding-bottom: 0.5rem; vertical-align: middle;">${itemName}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="color: #4b5563; padding-bottom: 1rem; vertical-align: middle;">Kuantitas</td>
-                                        <td style="padding-bottom: 1rem; vertical-align: middle;">
-                                            <span style="font-weight: 600;">${qty}</span> <span style="color: #6b7280;">${item.unit || '-'}</span>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td colspan="2" style="border-top: 1px solid #e5e7eb; padding-top: 1rem;"></td>
-                                    </tr>
-                                    <tr>
-                                        <td style="color: #4b5563; padding-bottom: 0.5rem; vertical-align: middle;">Keterangan</td>
-                                        <td style="font-weight: 600; color: #1f2937; padding-bottom: 0.5rem; vertical-align: middle;">${keterangan}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="color: #4b5563; padding-bottom: 0.5rem; vertical-align: middle;">No. Pesanan</td>
-                                        <td style="padding-bottom: 0.5rem; vertical-align: middle;">
-                                            <div style="font-family: monospace; color: #15803d; font-weight: bold; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 2px 8px; border-radius: 4px; display: inline-block;">${noPesanan}</div>
-                                        </td>
-                                    </tr>
-                                </table>
+                        <div>
+                            <div class="d-flex align-items-center justify-content-between px-4 pt-4" style="padding-left: 1.5rem; padding-right: 1.5rem; border-bottom: 2px solid #e5e7eb; margin-bottom: 1rem; position: relative;">
+                                <div class="d-flex m-0" id="modal-tabs" style="border-bottom: none; margin-bottom: -2px;">
+                                    <div class="modal-tab active" data-tab="rincian">Rincian Barang</div>
+                                    <div class="modal-tab" data-tab="seri">No Seri/Produksi</div>
+                                </div>
+                                <button type="button" id="close-modal-btn" style="background: transparent; border: none; cursor: pointer; color: #9ca3af; padding: 0.5rem; margin-bottom: 0.25rem;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" style="width: 24px; height: 24px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
                             </div>
 
-                            <!-- Seri Tab -->
-                            <div id="tab-content-seri" class="tab-content" style="display: none;">
-                                <div style="max-height: 240px; overflow-y: auto; border: 1px solid #e5e7eb;">
-                                    <table class="table table-sm m-0" style="width: 100%; border-collapse: collapse;">
-                                        <thead style="background-color: #166534; color: white;">
-                                            <tr>
-                                                <th style="padding: 8px; border: 1px solid #d1d5db; text-align: center; width: 60px; position: sticky; top: 0; background-color: #166534;">No</th>
-                                                <th style="padding: 8px; border: 1px solid #d1d5db; text-align: left; position: sticky; top: 0; background-color: #166534;">Nomor #</th>
-                                                <th style="padding: 8px; border: 1px solid #d1d5db; text-align: center; width: 100px; position: sticky; top: 0; background-color: #166534;">Kuantitas</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="modal-serial-table-body">
-                                            <!-- render serials here -->
-                                        </tbody>
+                            <div class="px-4 pb-2 text-left" style="padding-left: 1.5rem; padding-right: 1.5rem; text-align: left;">
+                                <!-- Rincian Tab -->
+                                <div id="tab-content-rincian" class="tab-content">
+                                    <table class="table table-borderless table-sm m-0" style="width: 100%;">
+                                        <tr>
+                                            <td style="width: 150px; color: #4b5563; padding-bottom: 0.5rem; vertical-align: middle;">Kode #</td>
+                                            <td style="font-weight: 600; color: #1d4ed8; padding-bottom: 0.5rem; vertical-align: middle;">${itemNo}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="color: #4b5563; padding-bottom: 0.5rem; vertical-align: middle;">Nama Barang</td>
+                                            <td style="font-weight: 600; padding-bottom: 0.5rem; vertical-align: middle;">${itemName}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="color: #4b5563; padding-bottom: 1rem; vertical-align: middle;">Kuantitas</td>
+                                            <td style="padding-bottom: 1rem; vertical-align: middle;">
+                                                <span style="font-weight: 600;">${(Math.floor((Number(qty) + 0.000001) * 100) / 100).toFixed(2)}</span> <span style="color: #6b7280;">${item.unit || '-'}</span>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="2" style="border-top: 1px solid #e5e7eb; padding-top: 1rem;"></td>
+                                        </tr>
+                                        <tr>
+                                            <td style="color: #4b5563; padding-bottom: 0.5rem; vertical-align: middle;">Keterangan</td>
+                                            <td style="font-weight: 600; color: #1f2937; padding-bottom: 0.5rem; vertical-align: middle;">${keterangan}</td>
+                                        </tr>
+                                        <tr>
+                                            <td style="color: #4b5563; padding-bottom: 0.5rem; vertical-align: middle;">No. Pesanan</td>
+                                            <td style="padding-bottom: 0.5rem; vertical-align: middle;">
+                                                <div style="font-family: monospace; color: #15803d; font-weight: bold; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 2px 8px; border-radius: 4px; display: inline-block;">${noPesanan}</div>
+                                            </td>
+                                        </tr>
                                     </table>
                                 </div>
-                                <div id="modal-serial-summary" style="font-size: 0.75rem; font-weight: 600; color: #374151; margin-top: 0.5rem;">
-                                    0 No Seri/Produksi, Jumlah 0
+
+                                <!-- Seri Tab -->
+                                <div id="tab-content-seri" class="tab-content" style="display: none;">
+                                    <div style="max-height: 240px; overflow-y: auto; border: 1px solid #e5e7eb;">
+                                        <table class="table table-sm m-0" style="width: 100%; border-collapse: collapse;">
+                                            <thead style="background-color: #166534; color: white;">
+                                                <tr>
+                                                    <th style="padding: 8px; border: 1px solid #d1d5db; text-align: center; width: 60px; position: sticky; top: 0; background-color: #166534;">No</th>
+                                                    <th style="padding: 8px; border: 1px solid #d1d5db; text-align: left; position: sticky; top: 0; background-color: #166534;">Nomor #</th>
+                                                    <th style="padding: 8px; border: 1px solid #d1d5db; text-align: center; width: 100px; position: sticky; top: 0; background-color: #166534;">Kuantitas</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="modal-serial-table-body">
+                                                <!-- render serials here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div id="modal-serial-summary" style="font-size: 0.75rem; font-weight: 600; color: #374151; margin-top: 0.5rem;">
+                                        0 No Seri/Produksi, Jumlah 0
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
-                `,
+                    `,
                 didOpen: () => {
                     const btnX = document.getElementById('close-modal-btn');
                     if (btnX) {
@@ -304,16 +304,16 @@
                         serials.forEach((sn, idx) => {
                             totalQty += parseFloat(sn.quantity || 0);
                             html += `
-                            <tr style="transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f9fafb'" onmouseout="this.style.backgroundColor='transparent'">
-                                <td style="padding: 8px; border: 1px solid #d1d5db; text-align: center; color: #6b7280;">${idx + 1}</td>
-                                <td style="padding: 8px; border: 1px solid #d1d5db; font-weight: 500;">${sn.serialNumberNo || '-'}</td>
-                                <td style="padding: 8px; border: 1px solid #d1d5db; text-align: center; font-weight: 600; color: #0f766e;">${sn.quantity || 0}</td>
-                            </tr>`;
+                                <tr style="transition: background-color 0.2s;" onmouseover="this.style.backgroundColor='#f9fafb'" onmouseout="this.style.backgroundColor='transparent'">
+                                    <td style="padding: 8px; border: 1px solid #d1d5db; text-align: center; color: #6b7280;">${idx + 1}</td>
+                                    <td style="padding: 8px; border: 1px solid #d1d5db; font-weight: 500;">${sn.serialNumberNo || '-'}</td>
+                                    <td style="padding: 8px; border: 1px solid #d1d5db; text-align: center; font-weight: 600; color: #0f766e;">${(Math.floor((Number(sn.quantity || 0) + 0.000001) * 100) / 100).toFixed(2)}</td>
+                                </tr>`;
                         });
                         tbody.innerHTML = html;
                     }
 
-                    document.getElementById('modal-serial-summary').innerHTML = `${serials.length} No Seri/Produksi, Jumlah ${totalQty.toFixed(2)}`;
+                    document.getElementById('modal-serial-summary').innerHTML = `${serials.length} No Seri/Produksi, Jumlah ${(Math.floor((Number(totalQty) + 0.000001) * 100) / 100).toFixed(2)}`;
                 }
             });
         }
