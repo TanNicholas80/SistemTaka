@@ -1357,6 +1357,18 @@ class ReturPenjualanController extends Controller
             $serialNo = $sn['serialNumber']['number'];
         }
         $serialNo = isset($serialNo) ? trim((string) $serialNo) : '';
+        if ($serialNo === '') return '';
+
+        // Ambil barcode 10 karakter alfanumerik pertama yang muncul.
+        if (preg_match('/([A-Za-z0-9]{10})/', $serialNo, $m)) {
+            return $m[1];
+        }
+
+        // Fallback: ambil bagian pertama sebelum ';' lalu potong max 10.
+        if (strpos($serialNo, ';') !== false) {
+            $serialNo = trim(explode(';', $serialNo)[0]);
+        }
+        if (strlen($serialNo) > 10) $serialNo = substr($serialNo, 0, 10);
         return $serialNo;
     }
 
@@ -1395,11 +1407,13 @@ class ReturPenjualanController extends Controller
             'return_type' => 'required|in:invoice',
             'return_status_type' => 'required|in:not_returned,partially_returned,returned',
             'diskon_keseluruhan' => 'nullable|numeric|min:0',
+            'diskon_keseluruhan_mode' => 'nullable|in:percent,nominal',
             'detailItems' => 'required|array|min:1',
             'detailItems.*.kode' => 'required|string',
             'detailItems.*.kuantitas' => 'required|numeric|min:0',
             'detailItems.*.harga' => 'required|numeric|min:0',
             'detailItems.*.diskon' => 'nullable|numeric|min:0',
+            'detailItems.*.diskon_mode' => 'nullable|in:percent,nominal',
             // Optional (kompatibilitas bila frontend sudah mengirim serial)
             'detailItems.*.detailSerialNumber' => 'nullable|array',
             'detailItems.*.detailSerialNumber.*.serialNumberNo' => 'nullable|string',
@@ -1692,6 +1706,15 @@ class ReturPenjualanController extends Controller
 
                 $invoiceNumber = $validatedData['faktur_penjualan_id'];
             }
+            // Override diskon keseluruhan bila user mengirim nilai > 0
+            $diskonKeseluruhanInput = $validatedData['diskon_keseluruhan'] ?? null;
+            $diskonKeseluruhanModeInput = $validatedData['diskon_keseluruhan_mode'] ?? null;
+            if ($diskonKeseluruhanInput !== null
+                && (float) $diskonKeseluruhanInput > 0
+                && in_array($diskonKeseluruhanModeInput, ['percent', 'nominal'], true)
+            ) {
+                $diskonKeseluruhan = (float) $diskonKeseluruhanInput;
+            }
             // no_invoice: gunakan default (C.O.D, tanpa alamat/keterangan dari referensi)
 
             // === Build detail items untuk Accurate API ===
@@ -1699,20 +1722,18 @@ class ReturPenjualanController extends Controller
 
             $detailItemsForAccurate = [];
             foreach ($validatedData['detailItems'] as $item) {
+                $itemQty = round((float)($item['kuantitas'] ?? 0), 2);
                 $accurateItem = [
                     'itemNo' => (string) ($item['kode'] ?? ''),
-                    'quantity' => (float) ($item['kuantitas'] ?? 0),
+                    'quantity' => $itemQty,
                     'unitPrice' => (float) ($item['harga'] ?? 0),
                     'warehouseName' => 'GUDANG RETUR', // Default statis sesuai requirement
                 ];
 
-                // Form mengirim `diskon` sebagai angka input user.
-                // Aturan mapping untuk Accurate:
-                // - 0-100 => itemDiscPercent
-                // - >100  => itemCashDiscount
                 if (isset($item['diskon']) && (float) $item['diskon'] > 0) {
                     $diskonInput = (float) $item['diskon'];
-                    if ($diskonInput > 0 && $diskonInput <= 100) {
+                    $diskonMode = (($item['diskon_mode'] ?? 'percent') === 'nominal') ? 'nominal' : 'percent';
+                    if ($diskonMode === 'percent') {
                         $accurateItem['itemDiscPercent'] = $diskonInput;
                     } else {
                         $accurateItem['itemCashDiscount'] = $diskonInput;
@@ -1732,13 +1753,8 @@ class ReturPenjualanController extends Controller
                         if (!is_array($sn)) {
                             continue;
                         }
-                        $serialNumberNo = trim((string) ($sn['serialNumberNo'] ?? ''));
-                        // Scanner kadang mengirim format: "10digits;berat;panjang" -> ambil bagian pertama saja
-                        if (strpos($serialNumberNo, ';') !== false) {
-                            $serialNumberNo = trim(explode(';', $serialNumberNo)[0]);
-                        }
-                        if (strlen($serialNumberNo) > 10) $serialNumberNo = substr($serialNumberNo, 0, 10);
-                        $qty = (float) ($sn['quantity'] ?? 0);
+                        $serialNumberNo = $this->normalizeSerialNumberNo($sn);
+                        $qty = round((float)($sn['quantity'] ?? 0), 2);
                         if ($serialNumberNo === '' || $qty <= 0) {
                             continue;
                         }
@@ -1784,10 +1800,11 @@ class ReturPenjualanController extends Controller
 
             if (!empty($diskonKeseluruhan) && $diskonKeseluruhan > 0) {
                 $diskonKeseluruhanFloat = (float) $diskonKeseluruhan;
-                if ($diskonKeseluruhanFloat > 0 && $diskonKeseluruhanFloat <= 100) {
-                    $postDataForAccurate['cashDiscPercent'] = $diskonKeseluruhanFloat;
-                } else {
+                $globalDiskonMode = (($validatedData['diskon_keseluruhan_mode'] ?? 'percent') === 'nominal') ? 'nominal' : 'percent';
+                if ($globalDiskonMode === 'nominal') {
                     $postDataForAccurate['cashDiscount'] = $diskonKeseluruhanFloat;
+                } else {
+                    $postDataForAccurate['cashDiscPercent'] = $diskonKeseluruhanFloat;
                 }
             }
 
@@ -1864,11 +1881,7 @@ class ReturPenjualanController extends Controller
                 $detailSerials = $item['detailSerialNumber'] ?? null;
                 if (is_array($detailSerials)) {
                     foreach ($detailSerials as $sn) {
-                        $barcodeStr = trim((string) ($sn['serialNumberNo'] ?? ''));
-                        if (strpos($barcodeStr, ';') !== false) {
-                            $barcodeStr = trim(explode(';', $barcodeStr)[0]);
-                        }
-                        if (strlen($barcodeStr) > 10) $barcodeStr = substr($barcodeStr, 0, 10);
+                        $barcodeStr = $this->normalizeSerialNumberNo($sn);
                         if ($barcodeStr === '') continue;
 
                         // Update Barcode table

@@ -150,9 +150,25 @@
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div class="border border-gray-200 rounded px-3 py-2 bg-[#f9fafb]">
                                 <div class="text-gray-600 text-xs font-semibold">Diskon</div>
+                                <!-- Diskon Global: 2 mode (persentase / nominal) -->
+                                <input type="hidden" id="diskon_keseluruhan" name="diskon_keseluruhan" value="0" />
+                                <div class="mt-1 flex items-center gap-3 text-xs">
+                                    <label class="flex items-center gap-1 cursor-pointer">
+                                        <input type="radio" name="diskon_keseluruhan_mode" value="percent" checked>
+                                        Persentase (%)
+                                    </label>
+                                    <label class="flex items-center gap-1 cursor-pointer">
+                                        <input type="radio" name="diskon_keseluruhan_mode" value="nominal">
+                                        Nominal (Rp)
+                                    </label>
+                                </div>
                                 <div class="mt-1 flex items-center gap-2">
-                                    <input id="diskon_keseluruhan" name="diskon_keseluruhan" type="number" min="0" step="0.01" value="0"
-                                        class="border border-gray-200 rounded px-2 py-1 w-full bg-gray-100 text-gray-700 font-semibold text-right outline-none" />
+                                    <input id="diskon_keseluruhan_percent" type="number" min="0" max="100" step="0.01" value="0"
+                                        class="border border-gray-200 rounded px-2 py-1 w-1/2 bg-gray-100 text-gray-700 font-semibold text-right outline-none"
+                                    >
+                                    <input id="diskon_keseluruhan_nominal" type="number" min="0" step="0.01" value="0"
+                                        class="border border-gray-200 rounded px-2 py-1 w-1/2 bg-gray-100 text-gray-700 font-semibold text-right outline-none hidden"
+                                    >
                                 </div>
                             </div>
                             <div class="border border-gray-200 rounded px-3 py-2 bg-[#f9fafb]">
@@ -205,6 +221,16 @@
                             <input id="modal_item_harga" type="number" min="0" step="0.01" class="border border-gray-300 rounded px-2 py-1 w-full max-w-xs">
                             <label class="text-gray-600">Diskon</label>
                             <input id="modal_item_diskon" type="number" min="0" step="0.01" class="border border-gray-300 rounded px-2 py-1 w-full max-w-xs">
+                            <div class="col-span-2 -mt-2 mb-2 text-xs flex gap-3 items-center">
+                                <label class="flex items-center gap-1 cursor-pointer">
+                                    <input type="radio" name="modal_item_diskon_mode" value="percent" checked>
+                                    Persentase (%)
+                                </label>
+                                <label class="flex items-center gap-1 cursor-pointer">
+                                    <input type="radio" name="modal_item_diskon_mode" value="nominal">
+                                    Nominal (Rp)
+                                </label>
+                            </div>
                             <label class="text-gray-600">Gudang</label>
                             <input id="modal_item_gudang" type="text" readonly class="border border-gray-200 rounded px-2 py-1 w-full max-w-md bg-gray-100 text-gray-700">
                             <label class="text-gray-600">Total Harga</label>
@@ -271,6 +297,14 @@
     function formatCurrency(num) {
         const n = parseFloat(num); if (isNaN(n)) return '0';
         return n.toLocaleString('id-ID', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    }
+    function roundQty2(v) {
+        const n = Number(v);
+        if (!isFinite(n)) return 0;
+        return Math.round(n * 100) / 100;
+    }
+    function formatQty2(v) {
+        return roundQty2(v).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     function getReferensiDisplayName(row) {
         const num = row.number || row.no || '';
@@ -372,7 +406,7 @@
                             it._originalSerials = it.detailSerialNumber.map(function(sn) {
                                 return {
                                     serialNumberNo: String(sn.serialNumberNo || '').trim(),
-                                    quantity: safeNumber(sn.quantity, 0),
+                                    quantity: roundQty2(safeNumber(sn.quantity, 0)),
                                     serialNumber: sn.serialNumber || null
                                 };
                             });
@@ -415,7 +449,7 @@
             row.innerHTML = `<td class="border border-gray-400 px-2 py-3 text-left">≡</td>
                 <td class="border border-gray-400 px-2 py-3 text-left">${it.item?.name || '—'}</td>
                 <td class="border border-gray-400 px-2 py-3">${it.item?.no || '—'}</td>
-                <td class="border border-gray-400 px-2 py-3">${it.quantity || 0}</td>
+                <td class="border border-gray-400 px-2 py-3">${formatQty2(it.quantity || 0)}</td>
                 <td class="border border-gray-400 px-2 py-3">${it.itemUnit?.name || '—'}</td>
                 <td class="border border-gray-400 px-2 py-3">${formatCurrency(it.unitPrice || 0)}</td>
                 <td class="border border-gray-400 px-2 py-3">${formatCurrency(getItemDiskon(it))}</td>
@@ -440,21 +474,55 @@
     }
 
     function getItemDiskon(it) { return it.itemDiscPercent != null ? safeNumber(it.itemDiscPercent) : safeNumber(it.itemCashDiscount); }
+    function getItemDiskonMode(it) {
+        if (!it) return 'percent';
+        if (it.itemDiscMode) return it.itemDiscMode;
+        if (it.itemDiscPercent != null) return 'percent';
+        if (it.itemCashDiscount != null) return 'nominal';
+        return 'percent';
+    }
     function computeTotal(it) {
         const q = safeNumber(it.quantity), h = safeNumber(it.unitPrice), d = getItemDiskon(it), gross = q * h;
-        return d <= 100 ? gross - (gross * d / 100) : Math.max(0, gross - d);
+        const mode = getItemDiskonMode(it);
+        if (!d || d <= 0) return gross;
+        if (mode === 'percent') return Math.max(0, gross - (gross * d / 100));
+        return Math.max(0, gross - d);
     }
 
     function updateSummary() {
         const base = detailItems.reduce((s, it) => s + computeTotal(it), 0);
-        const overallDisc = safeNumber(document.getElementById('diskon_keseluruhan')?.value, 0);
+        const modeEl = document.querySelector('input[name="diskon_keseluruhan_mode"]:checked');
+        const mode = modeEl ? modeEl.value : 'percent';
+        const overallDisc = mode === 'percent'
+            ? safeNumber(document.getElementById('diskon_keseluruhan_percent')?.value, 0)
+            : safeNumber(document.getElementById('diskon_keseluruhan_nominal')?.value, 0);
+        const overallDiscHidden = document.getElementById('diskon_keseluruhan');
+        if (overallDiscHidden) overallDiscHidden.value = overallDisc;
         let total = base;
-        if (overallDisc > 0) total = overallDisc <= 100 ? base - (base * overallDisc / 100) : Math.max(0, base - overallDisc);
+        if (overallDisc > 0) {
+            if (mode === 'percent') total = base - (base * overallDisc / 100);
+            else total = Math.max(0, base - overallDisc);
+        }
         const el = document.getElementById('total_keseluruhan_display');
         if (el) el.textContent = 'Rp ' + formatCurrency(total);
     }
-    const oDisc = document.getElementById('diskon_keseluruhan');
-    if (oDisc) oDisc.oninput = updateSummary;
+    // Hook perubahan diskon global: percent/nominal + mode radio
+    const oDiscPercent = document.getElementById('diskon_keseluruhan_percent');
+    const oDiscNominal = document.getElementById('diskon_keseluruhan_nominal');
+    const oDiscRadio = document.querySelectorAll('input[name="diskon_keseluruhan_mode"]');
+    function syncGlobalDiscountUI() {
+        const modeEl = document.querySelector('input[name="diskon_keseluruhan_mode"]:checked');
+        const mode = modeEl ? modeEl.value : 'percent';
+        if (oDiscPercent && oDiscNominal) {
+            oDiscPercent.hidden = mode !== 'percent';
+            oDiscNominal.hidden = mode !== 'nominal';
+        }
+        updateSummary();
+    }
+    if (oDiscPercent) oDiscPercent.oninput = syncGlobalDiscountUI;
+    if (oDiscNominal) oDiscNominal.oninput = syncGlobalDiscountUI;
+    oDiscRadio.forEach(r => { r.addEventListener('change', syncGlobalDiscountUI); });
+    syncGlobalDiscountUI();
 
     // ── Modal Item ────────────────────────────────────────────────────────
     function openItemDetailModal(idx) {
@@ -467,12 +535,15 @@
         document.getElementById('modal_item_kode').textContent = it.item?.no || '—';
         document.getElementById('modal_item_nama').textContent = it.item?.name || '—';
         var qtyEl = document.getElementById('modal_item_qty');
-        qtyEl.value = it.quantity || 0;
+        qtyEl.value = roundQty2(it.quantity || 0);
         var hasSerial = Array.isArray(it._originalSerials) && it._originalSerials.length > 0;
         qtyEl.readOnly = hasSerial;
         if (hasSerial) qtyEl.classList.add('bg-gray-200', 'text-gray-500');
         else qtyEl.classList.remove('bg-gray-200', 'text-gray-500');
         document.getElementById('modal_item_harga').value = it.unitPrice || 0;
+        const modalDiskonMode = getItemDiskonMode(it);
+        const diskonModeRadio = document.querySelector('input[name="modal_item_diskon_mode"][value="' + modalDiskonMode + '"]');
+        if (diskonModeRadio) diskonModeRadio.checked = true;
         document.getElementById('modal_item_diskon').value = getItemDiskon(it);
         document.getElementById('modal_item_gudang').value = it.warehouse?.name || it.warehouseName || '';
         document.getElementById('modal_item_total').value = formatCurrency(computeTotal(it));
@@ -512,13 +583,14 @@
         } else {
             rows.forEach(function(r) {
                 var sn = r.sn, idx = r.idx;
-                var maxQty = safeNumber(sn._availableQty, safeNumber(sn.quantity, 0));
+                var maxQty = roundQty2(safeNumber(sn._availableQty, safeNumber(sn.quantity, 0)));
+                var qty = roundQty2(safeNumber(sn.quantity, 0));
                 var tr = document.createElement('tr');
                 tr.className = 'border-b hover:bg-gray-50';
                 tr.innerHTML =
                     '<td class="p-2 border border-gray-200">' + (sn.serialNumberNo || '—') + '</td>' +
                     '<td class="p-1 border border-gray-200 text-center">' +
-                    '<input type="number" step="any" min="0" max="' + maxQty + '" value="' + (sn.quantity || 0) + '" class="modal-sn-qty-input w-full border border-gray-300 rounded px-2 py-0.5 text-center text-xs" data-serial-index="' + idx + '">' +
+                    '<input type="number" step="any" min="0" max="' + maxQty + '" value="' + qty + '" class="modal-sn-qty-input w-full border border-gray-300 rounded px-2 py-0.5 text-center text-xs" data-serial-index="' + idx + '">' +
                     '</td>' +
                     '<td class="p-1 border border-gray-200 text-center w-10">' +
                     '<button type="button" class="btn-hapus-serial text-red-600 font-bold" data-serial-index="' + idx + '" title="Hapus serial">X</button>' +
@@ -532,10 +604,11 @@
                 var idx = parseInt(this.getAttribute('data-serial-index'));
                 if (isNaN(idx) || !it.detailSerialNumber[idx]) return;
                 var sn = it.detailSerialNumber[idx];
-                var newQty = safeNumber(this.value, 0);
-                var maxQty = safeNumber(sn._availableQty, newQty);
+                var newQty = roundQty2(safeNumber(this.value, 0));
+                var maxQty = roundQty2(safeNumber(sn._availableQty, newQty));
                 if (newQty > maxQty) newQty = maxQty;
                 if (newQty < 0) newQty = 0;
+                newQty = roundQty2(newQty);
                 sn.quantity = newQty;
                 updateSerialSummary();
                 renderSerialTable();
@@ -569,9 +642,18 @@
         scanInputEl.dataset._returPembelianScanBound = '1';
         var scanAutoInProgress = false;
         function extractBarcode10(raw) {
-            var part = String(raw || '').split(';')[0].trim();
+            var s = String(raw || '').trim();
+            if (!s) return '';
+
+            // Kasus normal: "10digits;berat;panjang" -> ambil sebelum ';'
+            var part = s.split(';')[0].trim();
             if (part.length > 10) part = part.substring(0, 10);
-            return part;
+            if (part.length === 10) return part;
+
+            // Kasus kotor: bisa diawali ';' atau ada sisa dari scan sebelumnya.
+            // Cari barcode 10 karakter alfanumerik pertama yang muncul.
+            var m = s.match(/[A-Za-z0-9]{10}/);
+            return m ? m[0] : '';
         }
         // Auto-submit saat scanner mengirim format: "10digits;berat;panjang"
         scanInputEl.addEventListener('input', function() {
@@ -587,9 +669,13 @@
         scanInputEl.addEventListener('keydown', function(e) {
             if (e.key !== 'Enter') return;
             e.preventDefault();
-            var barcode = extractBarcode10(scanInputEl.value);
-            if (barcode.length !== 10) return;
-            if (!barcode) return;
+            var rawVal = (scanInputEl.value || '').trim();
+            // Bersihkan input dulu supaya scan berikutnya tidak nempel jadi satu string panjang.
+            scanInputEl.value = '';
+            if (!rawVal) return;
+
+            var barcode = extractBarcode10(rawVal);
+            if (!barcode || barcode.length !== 10) return;
 
             var currentItem = detailItems[editingIndex];
             if (!currentItem) return;
@@ -602,7 +688,6 @@
 
             if (!origMatch) {
                 Swal.fire({ icon: 'error', title: 'Barcode tidak ditemukan', text: 'Barcode "' + barcode + '" tidak ada di faktur ini.', timer: 2500, showConfirmButton: false, toast: true, position: 'top-end' });
-                scanInputEl.value = '';
                 return;
             }
 
@@ -612,14 +697,13 @@
             });
             if (alreadyAdded) {
                 Swal.fire({ icon: 'warning', title: 'Barcode sudah discan', text: 'No seri/produksi "' + barcode + '" sudah ada di daftar.', timer: 2000, showConfirmButton: false, toast: true, position: 'top-end' });
-                scanInputEl.value = '';
                 return;
             }
 
             currentItem.detailSerialNumber.push({
                 serialNumberNo: origMatch.serialNumberNo,
-                quantity: origMatch.quantity,
-                _availableQty: origMatch.quantity,
+                quantity: roundQty2(origMatch.quantity),
+                _availableQty: roundQty2(origMatch.quantity),
                 serialNumber: origMatch.serialNumber || null
             });
 
@@ -627,7 +711,6 @@
 
             updateSerialSummary();
             renderSerialTable();
-            scanInputEl.value = '';
         });
     }
 
@@ -635,9 +718,10 @@
         const it = detailItems[editingIndex]; if (!it) return;
         const serials = Array.isArray(it.detailSerialNumber) ? it.detailSerialNumber : [];
         const count = serials.length;
-        const qSum = serials.reduce(function(s, x) { return s + safeNumber(x.quantity, 0); }, 0);
+        const qSumRaw = serials.reduce(function(s, x) { return s + safeNumber(x.quantity, 0); }, 0);
+        const qSum = roundQty2(qSumRaw);
         const sm = document.getElementById('modal_serial_summary');
-        if (sm) sm.textContent = count + ' No Seri/Produksi, Jumlah ' + formatCurrency(qSum);
+        if (sm) sm.textContent = count + ' No Seri/Produksi, Jumlah ' + formatQty2(qSum);
 
         const modalQtyEl = document.getElementById('modal_item_qty');
         if (modalQtyEl) modalQtyEl.value = qSum;
@@ -648,18 +732,27 @@
         const modalTotalEl = document.getElementById('modal_item_total');
         const harga = safeNumber(modalHargaEl?.value, it.unitPrice || 0);
         const diskonInput = safeNumber(modalDiskonEl?.value, 0);
+        const diskonMode = (document.querySelector('input[name="modal_item_diskon_mode"]:checked')?.value) || 'percent';
         let gross = qSum * harga;
         let total = gross;
         if (diskonInput > 0) {
-            total = diskonInput <= 100 ? gross - (gross * (diskonInput / 100)) : gross - diskonInput;
+            total = diskonMode === 'percent'
+                ? Math.max(0, gross - (gross * (diskonInput / 100)))
+                : Math.max(0, gross - diskonInput);
         }
         if (total < 0) total = 0;
         if (modalTotalEl) modalTotalEl.value = formatCurrency(total);
 
         // Ikat diskon ke struktur item agar saat Save total konsisten
         it.unitPrice = harga;
-        if (diskonInput <= 100) { it.itemDiscPercent = diskonInput; it.itemCashDiscount = null; }
-        else { it.itemCashDiscount = diskonInput; it.itemDiscPercent = null; }
+        it.itemDiscMode = diskonMode;
+        if (diskonMode === 'percent') {
+            it.itemDiscPercent = diskonInput;
+            it.itemCashDiscount = null;
+        } else {
+            it.itemCashDiscount = diskonInput;
+            it.itemDiscPercent = null;
+        }
     }
     const sFilt = document.getElementById('modal_serial_filter_input');
     if (sFilt) sFilt.oninput = renderSerialTable;
@@ -668,14 +761,17 @@
         const it = detailItems[editingIndex]; if (!it) return;
         it.unitPrice = safeNumber(document.getElementById('modal_item_harga').value);
         const d = safeNumber(document.getElementById('modal_item_diskon').value);
-        if (d <= 100) { it.itemDiscPercent = d; it.itemCashDiscount = null; } else { it.itemCashDiscount = d; it.itemDiscPercent = null; }
+        const dMode = (document.querySelector('input[name="modal_item_diskon_mode"]:checked')?.value) || 'percent';
+        it.itemDiscMode = dMode;
+        if (dMode === 'percent') { it.itemDiscPercent = d; it.itemCashDiscount = null; }
+        else { it.itemCashDiscount = d; it.itemDiscPercent = null; }
         // Qty diambil dari serial yang sudah discan
         if (Array.isArray(it.detailSerialNumber) && it.detailSerialNumber.length > 0) {
-            it.quantity = it.detailSerialNumber.reduce(function(sum, sn) { return sum + safeNumber(sn.quantity, 0); }, 0);
+            it.quantity = roundQty2(it.detailSerialNumber.reduce(function(sum, sn) { return sum + safeNumber(sn.quantity, 0); }, 0));
         } else if (Array.isArray(it._originalSerials) && it._originalSerials.length > 0) {
-            it.quantity = safeNumber(document.getElementById('modal_item_qty').value, 0);
+            it.quantity = roundQty2(safeNumber(document.getElementById('modal_item_qty').value, 0));
         } else {
-            it.quantity = safeNumber(document.getElementById('modal_item_qty').value, it.quantity);
+            it.quantity = roundQty2(safeNumber(document.getElementById('modal_item_qty').value, it.quantity));
         }
         renderItemsTable(); updateSummary();
         if (typeof $ !== 'undefined') $('#modalItemDetail').modal('hide');
@@ -693,7 +789,11 @@
         f.querySelectorAll('input[name^="detailItems"]').forEach(i => i.remove());
         detailItems.forEach((it, idx) => {
             const data = {
-                kode: it.item?.no || '', kuantitas: it.quantity, harga: it.unitPrice, diskon: getItemDiskon(it)
+                kode: it.item?.no || '',
+                kuantitas: roundQty2(it.quantity),
+                harga: it.unitPrice,
+                diskon: getItemDiskon(it),
+                diskon_mode: getItemDiskonMode(it)
             };
             Object.entries(data).forEach(([k, v]) => {
                 const i = document.createElement('input'); i.type = 'hidden'; 
@@ -707,11 +807,25 @@
                     sn_no.value = sn.serialNumberNo || ''; f.appendChild(sn_no);
                     const sn_qty = document.createElement('input'); sn_qty.type = 'hidden';
                     sn_qty.name = `detailItems[${idx}][detailSerialNumber][${sidx}][quantity]`;
-                    sn_qty.value = sn.quantity || 0; f.appendChild(sn_qty);
+                    sn_qty.value = roundQty2(sn.quantity || 0); f.appendChild(sn_qty);
                 });
             }
         });
-        document.getElementById('form_submitted').value = '1'; f.submit();
+        Swal.fire({
+            title: 'Konfirmasi Simpan',
+            text: 'Apakah Anda yakin ingin menyimpan retur pembelian ini ke Accurate?',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Ya, Simpan!',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                document.getElementById('form_submitted').value = '1';
+                f.submit();
+            }
+        });
     };
 
     document.addEventListener('DOMContentLoaded', () => {

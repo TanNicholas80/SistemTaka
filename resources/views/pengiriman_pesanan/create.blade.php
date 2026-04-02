@@ -400,6 +400,21 @@
             return s;
         }
 
+        function roundQty2(v) {
+            const n = Number(v);
+            if (!isFinite(n)) return 0;
+            return Math.round(n * 100) / 100;
+        }
+
+        function formatQty2(v) {
+            const n = Number(v);
+            if (!isFinite(n)) return '0,00';
+            return new Intl.NumberFormat('id-ID', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+            }).format(n);
+        }
+
         // Function untuk show dropdown sales order
         function showDropdownSalesOrder(input) {
             const dropdownSalesOrder = document.getElementById('dropdown-sales');
@@ -660,6 +675,8 @@
                     input.value = '';
                     return;
                 }
+                // Supaya input tidak sempat menyisakan format panjang seperti ";32,222;9,3"
+                input.value = barcode;
                 input.value = '';
 
                 // Immediate clear for fast scanners
@@ -778,8 +795,8 @@
             }
 
             let newQty = currentScanned + addedQty;
-            newQty = Math.round(newQty * 1000) / 1000;
-            requiredQty = Math.round(requiredQty * 1000) / 1000;
+            newQty = Math.round(newQty * 100) / 100;
+            requiredQty = Math.round(requiredQty * 100) / 100;
 
             if (newQty > requiredQty) {
                 // Set maksimal sesuai sisa yang bisa dikirim
@@ -795,6 +812,16 @@
                         position: 'top-end',
                         showConfirmButton: false
                     });
+                    // Revert perubahan ke scannedSerialMap karena entry barcode sempat diset penuh
+                    // tapi seharusnya tidak masuk (total sudah mencapai limit).
+                    if (existingQty > 0) {
+                        scannedSerialMap[kodeUnik][barcode] = existingQty;
+                    } else {
+                        delete scannedSerialMap[kodeUnik][barcode];
+                        if (Object.keys(scannedSerialMap[kodeUnik]).length === 0) {
+                            delete scannedSerialMap[kodeUnik];
+                        }
+                    }
                     return;
                 }
 
@@ -806,7 +833,7 @@
 
             scannedItemsQuantities[kodeUnik] = newQty;
             totalScannedQuantity = Object.values(scannedItemsQuantities).reduce((a, b) => a + b, 0);
-            totalScannedQuantity = Math.round(totalScannedQuantity * 1000) / 1000;
+            totalScannedQuantity = Math.round(totalScannedQuantity * 100) / 100;
 
             updateScanProgress();
 
@@ -830,7 +857,7 @@
 
         function updateScanProgress() {
             totalTargetQuantity = detailItems.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
-            totalTargetQuantity = Math.round(totalTargetQuantity * 1000) / 1000;
+            totalTargetQuantity = Math.round(totalTargetQuantity * 100) / 100;
 
             let perc = 0;
             if (totalTargetQuantity > 0) {
@@ -838,7 +865,7 @@
                 if (perc > 100) perc = 100;
             }
 
-            document.getElementById('scan-status-text').innerText = `${totalScannedQuantity} / ${totalTargetQuantity} Kuantitas`;
+            document.getElementById('scan-status-text').innerText = `${formatQty2(totalScannedQuantity)} / ${formatQty2(totalTargetQuantity)} Kuantitas`;
             document.getElementById('scan-progress-bar').style.width = perc + '%';
 
             const btnAll = document.getElementById('btn-save-pengiriman-pesanan');
@@ -895,7 +922,7 @@
 
                 if (scanCell) {
                     const scanSpan = scanCell.querySelector('.scan-text');
-                    const text = `${scanned} / ${total}`;
+                    const text = `${formatQty2(scanned)} / ${formatQty2(total)}`;
                     if (scanSpan) {
                         scanSpan.textContent = text;
                     } else {
@@ -1270,11 +1297,11 @@
                                                                     ${item.item?.no || 'N/A'}
                                                                 </td>
                                                                 <td class="border border-gray-400 px-2 py-3 align-top">
-                                                                    ${item.quantity || 0}
+                                                                    ${formatQty2(item.quantity || 0)}
                                                                 </td>
                                                                 <td class="border border-gray-400 px-2 py-3 align-top text-gray-400" data-scan-qty id="scan-qty-${index}">
                                                                     <div class="flex items-center justify-center">
-                                                                        <span class="scan-text">0 / ${item.quantity || 0}</span>
+                                                                        <span class="scan-text">0,00 / ${formatQty2(item.quantity || 0)}</span>
                                                                     </div>
                                                                 </td>
                                                                 <td class="border border-gray-400 px-2 py-3 align-top">
@@ -1556,7 +1583,7 @@
                                                                     <td class="p-2 border border-gray-200">${barcode}</td>
                                                                     <td class="p-1 border border-gray-200 text-center">
                                                                         <input type="number" class="w-16 text-center border-none bg-transparent focus:bg-white focus:ring-1 focus:ring-blue-500 qty-edit-input" 
-                                                                            data-barcode="${barcode}" value="${qty}" step="any" min="1">
+                                                                            data-barcode="${barcode}" value="${roundQty2(qty).toFixed(2)}" step="any" min="1">
                                                                     </td>
                                                                 `;
                     tbody.appendChild(row);
@@ -1589,7 +1616,7 @@
             tbody.querySelectorAll('.qty-edit-input').forEach(input => {
                 input.onchange = (e) => {
                     const bc = input.getAttribute('data-barcode');
-                    const newQty = parseFloat(input.value) || 0;
+                    const newQty = parseFloat(String(input.value).replace(',', '.')) || 0;
 
                     if (newQty < 1) {
                         input.value = 1;
@@ -1615,7 +1642,7 @@
 
             const actualTotalQty = Object.values(map).reduce((a, b) => a + b, 0);
             const actualCount = Object.keys(map).length;
-            summary.textContent = `${actualCount} No Seri/Produksi, Jumlah ${actualTotalQty.toFixed(2)}`;
+            summary.textContent = `${actualCount} No Seri/Produksi, Jumlah ${formatQty2(actualTotalQty)}`;
         }
 
         // Helper sinkronisasi total qty per item
@@ -1783,7 +1810,21 @@
 
         // Handle tombol Kirim Semua (100%)
         function handleSubmitForm() {
-            doSubmitForm(false, document.getElementById('btn-save-pengiriman-pesanan'));
+            const btnAll = document.getElementById('btn-save-pengiriman-pesanan');
+            Swal.fire({
+                title: 'Konfirmasi Simpan',
+                text: 'Apakah Anda yakin ingin menyimpan data pengiriman pesanan ini ke Accurate?',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#3085d6',
+                cancelButtonColor: '#d33',
+                confirmButtonText: 'Ya, Simpan!',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    doSubmitForm(false, btnAll);
+                }
+            });
         }
 
         // Handle tombol Kirim Sebagian

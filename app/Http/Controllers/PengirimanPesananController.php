@@ -689,7 +689,7 @@ class PengirimanPesananController extends Controller
                                 'remaining' => $remainingQty
                             ]);
 
-                            $detail['quantity'] = $remainingQty;
+                            $detail['quantity'] = round($remainingQty, 2);
                         }
                     }
                     unset($detail); // break reference
@@ -728,7 +728,7 @@ class PengirimanPesananController extends Controller
                                         continue;
 
                                     $snNumber = $entry['serialNumber']['number'] ?? null;
-                                    $snQty = (float) ($entry['quantity'] ?? 0);
+                                    $snQty = round((float) ($entry['quantity'] ?? 0), 2);
 
                                     if ($snNumber && $snQty > 0) {
                                         $serialNumberCache[] = [
@@ -964,6 +964,21 @@ class PengirimanPesananController extends Controller
                 }
             }
 
+            // Allowed qty per item dari payload frontend (ini yang harus diikuti Accurate).
+            // Kalau `serials_json` berisi barcode ekstra (bug/scan berulang), kita akan trim agar
+            // `detailSerialNumber` dan `quantity` selalu konsisten.
+            $allowedQtyByItemNo = [];
+            foreach (($validatedData['detailItems'] ?? []) as $sentItem) {
+                $code = $sentItem['kode'] ?? null;
+                if (!$code) {
+                    continue;
+                }
+                $allowedQtyByItemNo[$code] = (float) ($sentItem['kuantitas'] ?? 0);
+            }
+
+            // Copy agar kita bisa ubah hanya untuk item yang manageSN (trim serial yang lewat limit).
+            $serialsMapFiltered = $serialsMap;
+
             // --- VALIDASI TANGGAL (SERVER SIDE) ---
             // Ambil info detail SO jika belum ada (dari fallback alamat di atas mungkin sudah ada, tapi mari pastikan)
             $soTransDate = null;
@@ -999,7 +1014,7 @@ class PengirimanPesananController extends Controller
                 $soMeta = $soDetailItemLookup[$itemNo] ?? [];
                 $accurateItem = [
                     "itemNo" => $itemNo,
-                    "quantity" => (float) $item['kuantitas'],
+                    "quantity" => round((float) $item['kuantitas'], 2),
                     "unitPrice" => (float) $item['harga'],
                     "salesOrderNumber" => $validatedData['penjualan_id'],
                 ];
@@ -1012,21 +1027,53 @@ class PengirimanPesananController extends Controller
                     $accurateItem['warehouseName'] = $soMeta['warehouseName'];
                 }
 
-                // Jika item manageSN (BATCH/SERIAL), sertakan detailSerialNumber dari hasil scan
-                $serialsForItem = $serialsMap[$itemNo] ?? null;
-                if (is_array($serialsForItem) && !empty($serialsForItem)) {
+                // Jika item manageSN (BATCH/SERIAL), sertakan detailSerialNumber dari hasil scan,
+                // tapi TRIM agar jumlah quantity serial tidak pernah melebihi `allowedQtyByItemNo`.
+                $manageSN = (bool) ($soMeta['manageSN'] ?? false);
+                $allowedQty = (float) ($allowedQtyByItemNo[$itemNo] ?? ($item['kuantitas'] ?? 0));
+
+                $serialsForItem = $serialsMapFiltered[$itemNo] ?? null;
+                if ($manageSN && is_array($serialsForItem) && !empty($serialsForItem)) {
                     $detailSerialNumber = [];
+                    $trimmedSerialsAssoc = [];
+                    $sumQty = 0.0;
+                    $remaining = max(0.0, $allowedQty);
+
                     foreach ($serialsForItem as $snNo => $snQty) {
-                        $snNo = $this->normalizeScannedBarcodeForSubmit((string) $snNo);
-                        if ($snNo === '')
+                        $snNoNorm = $this->normalizeScannedBarcodeForSubmit((string) $snNo);
+                        $snQtyFloat = (float) $snQty;
+
+                        if ($snNoNorm === '' || $snQtyFloat <= 0) {
                             continue;
+                        }
+                        if ($remaining <= 1e-9) {
+                            break;
+                        }
+
+                        $qtyToSend = min($snQtyFloat, $remaining);
+                        $qtyToSend = round($qtyToSend, 2);
+                        if ($qtyToSend <= 1e-9) {
+                            break;
+                        }
+
                         $detailSerialNumber[] = [
-                            'serialNumberNo' => $snNo,
-                            'quantity' => (float) $snQty,
+                            'serialNumberNo' => $snNoNorm,
+                            'quantity' => $qtyToSend,
                         ];
+                        $trimmedSerialsAssoc[$snNoNorm] = $qtyToSend;
+
+                        $sumQty = round($sumQty + $qtyToSend, 2);
+                        $remaining = round($remaining - $qtyToSend, 2);
                     }
+
                     if (!empty($detailSerialNumber)) {
                         $accurateItem['detailSerialNumber'] = $detailSerialNumber;
+                        // Koreksi quantity total supaya sesuai jumlah serial yang benar-benar dikirim.
+                        $accurateItem['quantity'] = round((float) $sumQty, 2);
+                        $serialsMapFiltered[$itemNo] = $trimmedSerialsAssoc;
+                    } else {
+                        // Jika setelah trim tidak ada serial yang tersisa, hapus agar tidak ikut terkirim.
+                        $serialsMapFiltered[$itemNo] = [];
                     }
                 }
 
@@ -1165,7 +1212,7 @@ class PengirimanPesananController extends Controller
             ]);
 
             // Update item flags to 'penjualan' for all scanned barcodes
-            foreach ($serialsMap as $itemNo => $serials) {
+            foreach ($serialsMapFiltered as $itemNo => $serials) {
                 if (is_array($serials)) {
                     foreach (array_keys($serials) as $barcode) {
                         $barcodeStr = $this->normalizeScannedBarcodeForSubmit((string) $barcode);
@@ -1563,7 +1610,7 @@ class PengirimanPesananController extends Controller
                         }
                         $normalizedSn = $this->normalizeScannedBarcodeForSubmit((string) $snNumber);
                         if ($normalizedSn === $barcode) {
-                            $qty = (float)($entry['quantity'] ?? 0);
+                            $qty = round((float)($entry['quantity'] ?? 0), 2);
                             if ($qty > 0) {
                                 return response()->json([
                                     'success' => true,

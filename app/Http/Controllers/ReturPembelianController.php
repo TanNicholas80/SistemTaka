@@ -813,6 +813,9 @@ class ReturPembelianController extends Controller
             'detailItems.*.kuantitas' => 'required|numeric|min:0',
             'detailItems.*.harga' => 'required|numeric|min:0',
             'detailItems.*.diskon' => 'nullable|numeric|min:0',
+            'diskon_keseluruhan' => 'nullable|numeric|min:0',
+            'diskon_keseluruhan_mode' => 'nullable|in:percent,nominal',
+            'detailItems.*.diskon_mode' => 'nullable|in:percent,nominal',
         ];
 
         if (in_array($returnType, ['invoice', 'invoice_dp'])) {
@@ -910,6 +913,7 @@ class ReturPembelianController extends Controller
             $kenaPajak = null;
             $totalTermasukPajak = null;
             $diskonKeseluruhan = null;
+            $diskonKeseluruhanMode = 'percent';
             $receiveItemNumber = null;
             $invoiceNumber = null;
 
@@ -934,7 +938,18 @@ class ReturPembelianController extends Controller
                         $syaratBayar = !empty($riDetail['paymentTermName']) ? $riDetail['paymentTermName'] : 'C.O.D';
                         $kenaPajak = $riDetail['taxable'] ?? null;
                         $totalTermasukPajak = $riDetail['inclusiveTax'] ?? null;
-                        $diskonKeseluruhan = $riDetail['cashDiscPercent'] ?? $riDetail['cashDiscount'] ?? null;
+                        $cashDiscPercent = $riDetail['cashDiscPercent'] ?? null;
+                        $cashDiscount = $riDetail['cashDiscount'] ?? null;
+                        if ($cashDiscPercent !== null && (float) $cashDiscPercent > 0) {
+                            $diskonKeseluruhan = (float) $cashDiscPercent;
+                            $diskonKeseluruhanMode = 'percent';
+                        } elseif ($cashDiscount !== null && (float) $cashDiscount > 0) {
+                            $diskonKeseluruhan = (float) $cashDiscount;
+                            $diskonKeseluruhanMode = 'nominal';
+                        } else {
+                            $diskonKeseluruhan = null;
+                            $diskonKeseluruhanMode = 'percent';
+                        }
                     }
                 } catch (\Exception $e) {
                     Log::warning('Fallback receive-item detail: ' . $e->getMessage());
@@ -958,7 +973,18 @@ class ReturPembelianController extends Controller
                         $syaratBayar = !empty($invDetail['paymentTermName']) ? $invDetail['paymentTermName'] : 'C.O.D';
                         $kenaPajak = $invDetail['taxable'] ?? null;
                         $totalTermasukPajak = $invDetail['inclusiveTax'] ?? null;
-                        $diskonKeseluruhan = $invDetail['cashDiscPercent'] ?? $invDetail['cashDiscount'] ?? null;
+                        $cashDiscPercent = $invDetail['cashDiscPercent'] ?? null;
+                        $cashDiscount = $invDetail['cashDiscount'] ?? null;
+                        if ($cashDiscPercent !== null && (float) $cashDiscPercent > 0) {
+                            $diskonKeseluruhan = (float) $cashDiscPercent;
+                            $diskonKeseluruhanMode = 'percent';
+                        } elseif ($cashDiscount !== null && (float) $cashDiscount > 0) {
+                            $diskonKeseluruhan = (float) $cashDiscount;
+                            $diskonKeseluruhanMode = 'nominal';
+                        } else {
+                            $diskonKeseluruhan = null;
+                            $diskonKeseluruhanMode = 'percent';
+                        }
                     }
                 } catch (\Exception $e) {
                     Log::error('Exception purchase-invoice/detail.do: ' . $e->getMessage());
@@ -981,7 +1007,18 @@ class ReturPembelianController extends Controller
                         $syaratBayar = !empty($poDetail['paymentTermName']) ? $poDetail['paymentTermName'] : 'C.O.D';
                         $kenaPajak = $poDetail['taxable'] ?? null;
                         $totalTermasukPajak = $poDetail['inclusiveTax'] ?? null;
-                        $diskonKeseluruhan = $poDetail['cashDiscPercent'] ?? $poDetail['cashDiscount'] ?? null;
+                        $cashDiscPercent = $poDetail['cashDiscPercent'] ?? null;
+                        $cashDiscount = $poDetail['cashDiscount'] ?? null;
+                        if ($cashDiscPercent !== null && (float) $cashDiscPercent > 0) {
+                            $diskonKeseluruhan = (float) $cashDiscPercent;
+                            $diskonKeseluruhanMode = 'percent';
+                        } elseif ($cashDiscount !== null && (float) $cashDiscount > 0) {
+                            $diskonKeseluruhan = (float) $cashDiscount;
+                            $diskonKeseluruhanMode = 'nominal';
+                        } else {
+                            $diskonKeseluruhan = null;
+                            $diskonKeseluruhanMode = 'percent';
+                        }
                     }
                 } catch (\Exception $e) {
                     Log::error('Exception purchase-order/detail.do: ' . $e->getMessage());
@@ -989,11 +1026,20 @@ class ReturPembelianController extends Controller
                 $purchaseOrderNumber = $validatedData['faktur_pembelian_id'];
             }
 
+            // Override diskon keseluruhan bila user mengirim nilai > 0
+            $diskonKeseluruhanInput = $validatedData['diskon_keseluruhan'] ?? null;
+            $diskonKeseluruhanModeInput = $validatedData['diskon_keseluruhan_mode'] ?? null;
+            if ($diskonKeseluruhanInput !== null && (float) $diskonKeseluruhanInput > 0 && in_array($diskonKeseluruhanModeInput, ['percent', 'nominal'], true)) {
+                $diskonKeseluruhan = (float) $diskonKeseluruhanInput;
+                $diskonKeseluruhanMode = $diskonKeseluruhanModeInput;
+            }
+
             $detailItemsForAccurate = [];
             foreach ($validatedData['detailItems'] as $item) {
+                $itemQty = round((float)($item['kuantitas'] ?? 0), 2);
                 $accurateItem = [
                     'itemNo' => $item['kode'],
-                    'quantity' => $item['kuantitas'],
+                    'quantity' => $itemQty,
                     'unitPrice' => $item['harga'],
                 ];
 
@@ -1001,13 +1047,8 @@ class ReturPembelianController extends Controller
                 if (!empty($item['detailSerialNumber']) && is_array($item['detailSerialNumber'])) {
                     $accurateItem['detailSerialNumber'] = [];
                     foreach ($item['detailSerialNumber'] as $sn) {
-                        $serialNumberNo = trim((string)($sn['serialNumberNo'] ?? ''));
-                        // Scanner kadang mengirim format: "10digits;berat;panjang" -> ambil bagian pertama saja
-                        if (strpos($serialNumberNo, ';') !== false) {
-                            $serialNumberNo = trim(explode(';', $serialNumberNo)[0]);
-                        }
-                        if (strlen($serialNumberNo) > 10) $serialNumberNo = substr($serialNumberNo, 0, 10);
-                        $qty = (float)($sn['quantity'] ?? 0);
+                        $serialNumberNo = $this->normalizeSerialNumberNoForSubmit((string)($sn['serialNumberNo'] ?? ''));
+                        $qty = round((float)($sn['quantity'] ?? 0), 2);
                         if ($serialNumberNo !== '' && $qty > 0) {
                             $accurateItem['detailSerialNumber'][] = [
                                 'serialNumberNo' => $serialNumberNo,
@@ -1017,9 +1058,10 @@ class ReturPembelianController extends Controller
                     }
                 }
 
-                if (isset($item['diskon']) && $item['diskon'] > 0) {
+                if (isset($item['diskon']) && (float) $item['diskon'] > 0) {
+                    $diskonMode = (($item['diskon_mode'] ?? 'percent') === 'nominal') ? 'nominal' : 'percent';
                     $diskon = (float) $item['diskon'];
-                    if ($diskon > 0 && $diskon <= 100) {
+                    if ($diskonMode === 'percent') {
                         $accurateItem['itemDiscPercent'] = $diskon;
                     } else {
                         $accurateItem['itemCashDiscount'] = $diskon;
@@ -1051,10 +1093,10 @@ class ReturPembelianController extends Controller
             }
             if (!empty($diskonKeseluruhan) && $diskonKeseluruhan > 0) {
                 $diskonFloat = (float) $diskonKeseluruhan;
-                if ($diskonFloat > 0 && $diskonFloat <= 100) {
-                    $postDataForAccurate['cashDiscPercent'] = $diskonFloat;
-                } else {
+                if ($diskonKeseluruhanMode === 'nominal') {
                     $postDataForAccurate['cashDiscount'] = $diskonFloat;
+                } else {
+                    $postDataForAccurate['cashDiscPercent'] = $diskonFloat;
                 }
             }
             if (isset($kenaPajak)) {
@@ -1109,11 +1151,7 @@ class ReturPembelianController extends Controller
             foreach ($validatedData['detailItems'] as $item) {
                 if (!empty($item['detailSerialNumber']) && is_array($item['detailSerialNumber'])) {
                     foreach ($item['detailSerialNumber'] as $sn) {
-                        $barcodeStr = trim((string) ($sn['serialNumberNo'] ?? ''));
-                        if (strpos($barcodeStr, ';') !== false) {
-                            $barcodeStr = trim(explode(';', $barcodeStr)[0]);
-                        }
-                        if (strlen($barcodeStr) > 10) $barcodeStr = substr($barcodeStr, 0, 10);
+                        $barcodeStr = $this->normalizeSerialNumberNoForSubmit((string)($sn['serialNumberNo'] ?? ''));
                         if ($barcodeStr === '') continue;
 
                         // Update Barcode table
@@ -1140,6 +1178,28 @@ class ReturPembelianController extends Controller
             Log::error('ReturPembelian store exception: ' . $e->getMessage());
             return back()->withInput()->with('error', 'Terjadi kesalahan sistem: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Normalisasi serial/barkode 10 digit/karakter dari scan.
+     * Scanner kadang mengirim format: "10digits;berat;panjang" atau menyisakan sisa scan sebelumnya.
+     */
+    private function normalizeSerialNumberNoForSubmit(string $raw): string
+    {
+        $s = trim($raw);
+        if ($s === '') return '';
+
+        // Cari barcode 10 karakter alfanumerik pertama (contoh: YB########).
+        if (preg_match('/([A-Za-z0-9]{10})/', $s, $m)) {
+            return $m[1];
+        }
+
+        // Fallback: ambil bagian pertama sebelum ';' lalu potong max 10.
+        if (strpos($s, ';') !== false) {
+            $s = trim(explode(';', $s)[0]);
+        }
+        if (strlen($s) > 10) $s = substr($s, 0, 10);
+        return $s;
     }
 
     /**
