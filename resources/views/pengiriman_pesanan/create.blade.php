@@ -381,6 +381,7 @@
         let scannedSerialMap = {};
         let totalTargetQuantity = 0;
         let totalScannedQuantity = 0;
+        let isScanning = false;
 
         // Function untuk show dropdown sales order
         function showDropdownSalesOrder(input) {
@@ -629,18 +630,27 @@
         function handleOutboundScan(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
+                
+                if (isScanning) {
+                    console.warn('Scan ignored: processing previous scan...');
+                    return;
+                }
+
                 const input = document.getElementById('scan_barcode_input');
                 const barcode = input.value.trim();
                 if (!barcode) return;
 
+                // Immediate clear for fast scanners
+                input.value = '';
+                input.focus();
+
                 // Check in local cache first
                 const cachedEntry = serialNumberCache.find(sn => sn.barcode === barcode);
                 if (cachedEntry) {
-                    input.value = '';
-                    input.focus();
                     handleCachedScan(barcode);
                 } else {
                     // Fallback: scan via Accurate API in real-time
+                    isScanning = true;
                     input.disabled = true;
                     handleAccurateScan(barcode, input);
                 }
@@ -683,8 +693,8 @@
             })
                 .then(res => res.json())
                 .then(data => {
+                    isScanning = false;
                     input.disabled = false;
-                    input.value = '';
                     input.focus();
 
                     if (data.success) {
@@ -702,6 +712,7 @@
                     }
                 })
                 .catch(err => {
+                    isScanning = false;
                     input.disabled = false;
                     input.focus();
                     Swal.fire({ icon: 'error', title: 'System Error', text: err.toString() });
@@ -1128,6 +1139,12 @@
 
                         // Set form inputs to readonly
                         setFormReadonly(true);
+
+                        // Reset Scan State to fresh start
+                        scannedItemsQuantities = {};
+                        scannedSerialMap = {};
+                        totalScannedQuantity = 0;
+                        isScanning = false;
 
                         // Hide button Lanjut
                         btnLanjut.style.display = 'none';
