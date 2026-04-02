@@ -64,13 +64,13 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/pesanan-pembelian', [PesananPembelianController::class, 'index'])->name('pesanan_pembelian.index');
         Route::get('/pesanan-pembelian/detail/{number}', [PesananPembelianController::class, 'show'])->name('pesanan_pembelian.detail');
         Route::get('/penerimaan-barang', [PenerimaanBarangController::class, 'index'])->name('penerimaan-barang.index');
-        Route::get('/penerimaan-barang/{npb}', [PenerimaanBarangController::class, 'show'])->name('penerimaan-barang.show');
+        Route::get('/penerimaan-barang/detail/{npb}', [PenerimaanBarangController::class, 'show'])->name('penerimaan-barang.show');
         Route::get('/retur-pembelian', [ReturPembelianController::class, 'index'])->name('retur_pembelian.index');
         Route::get('/retur-pembelian/detail/{no_retur}', [ReturPembelianController::class, 'show'])->name('retur_pembelian.detail');
         Route::get('/barcode', [BarcodeController::class, 'index'])->name('barcode.index');
         Route::get('/barang-masuk', [BarangMasukController::class, 'index'])->name('barang-masuk.index');
         Route::get('/packing-list', [PackingListController::class, 'index'])->name('packing-list.index');
-        Route::get('/packing-list/{id}', [PackingListController::class, 'show'])->name('packing-list.show');
+        Route::get('/packing-list/detail/{id}', [PackingListController::class, 'show'])->name('packing-list.show');
 
         // Profile Detail
         Route::get('/profile', [UserController::class, 'editProfile'])->name('user.profile');

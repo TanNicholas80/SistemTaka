@@ -61,6 +61,7 @@ class Barcode extends Model
         'id_pb',
         'item_flag',
         'special_treatment',
+        'material_type',
     ];
 
     protected $casts = [
