@@ -53,7 +53,7 @@ class BarangMasukController extends Controller
 
         $packingLists = PackingList::query()
             ->where('kode_customer', $branch->customer_id)
-            ->where('status', '!=', PackingList::STATUS_CLOSED)
+            ->whereNotIn('status', [PackingList::STATUS_CLOSED, PackingList::STATUS_APPROVED])
             ->orderByDesc('tanggal')
             ->orderByDesc('id')
             ->get(['id', 'npl', 'tanggal', 'status']);
